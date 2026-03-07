@@ -1,0 +1,1151 @@
+import { useEffect, useMemo, useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Search, Plus, ChevronDown, RefreshCw, Settings, MoreHorizontal, Trash2, Eye, EyeOff, Shield, User as UserIcon, Lock, Check } from "lucide-react";
+import { API_BASE } from "@/lib/api/base";
+import { getAuthHeaders } from "@/lib/api/auth";
+import { toast } from "@/components/ui/sonner";
+import { Label } from "@/components/ui/label";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { PermissionMatrix } from "./PermissionMatrix";
+
+type UserRow = {
+  _id: string;
+  name?: string;
+  email: string;
+  username?: string;
+  role: "admin" | "staff" | "client" | "marketer" | "marketing_manager" | "sales" | "sales_manager" | "finance" | "finance_manager" | "developer" | "project_manager";
+  status: "active" | "inactive";
+  permissions?: string[];
+  access?: {
+    canView: boolean;
+    canEdit: boolean;
+    canDelete: boolean;
+    dataScope: "assigned" | "all" | "team";
+    canSeePrices: boolean;
+    canSeeFinance: boolean;
+  };
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+const USER_ROLES: Array<UserRow["role"]> = [
+  "admin",
+  "staff",
+  "client",
+  "marketer",
+  "marketing_manager",
+  "sales",
+  "sales_manager",
+  "finance",
+  "finance_manager",
+  "developer",
+  "project_manager",
+];
+
+const roleLabel = (r: UserRow["role"]) => {
+  if (r === "project_manager") return "Project Manager";
+  if (r === "marketing_manager") return "Marketing Manager";
+  if (r === "sales") return "Sales Person";
+  if (r === "sales_manager") return "Sales Manager";
+  if (r === "finance_manager") return "Finance Manager";
+  return r.replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
+};
+
+export default function ManageUsers() {
+  const [query, setQuery] = useState("");
+  const [role, setRole] = useState("-");
+  const [status, setStatus] = useState("-");
+  const [openAdd, setOpenAdd] = useState(false);
+  const [openSettings, setOpenSettings] = useState(false);
+  const [openColumns, setOpenColumns] = useState(false);
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [visibleColumns, setVisibleColumns] = useState<Set<string>>(
+    new Set(["phone", "email", "username", "role", "createdAt", "updatedAt", "status"])
+  );
+
+  const [loading, setLoading] = useState(false);
+  const [items, setItems] = useState<UserRow[]>([]);
+
+  const [openEdit, setOpenEdit] = useState(false);
+  const [editing, setEditing] = useState<UserRow | null>(null);
+  const [editRole, setEditRole] = useState<UserRow["role"]>("staff");
+  const [editStatus, setEditStatus] = useState<UserRow["status"]>("active");
+  const [editUsername, setEditUsername] = useState("");
+  const [editPerms, setEditPerms] = useState<Set<string>>(new Set());
+  const [editPassword, setEditPassword] = useState("");
+  const [editPin, setEditPin] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const [openDelete, setOpenDelete] = useState(false);
+  const [deleting, setDeleting] = useState<UserRow | null>(null);
+  const [openBulkDelete, setOpenBulkDelete] = useState(false);
+
+  const [addName, setAddName] = useState("");
+  const [addEmail, setAddEmail] = useState("");
+  const [addUsername, setAddUsername] = useState("");
+  const [addPassword, setAddPassword] = useState("");
+  const [addPin, setAddPin] = useState("");
+  const [addRole, setAddRole] = useState<UserRow["role"]>("staff");
+  const [addStatus, setAddStatus] = useState<UserRow["status"]>("active");
+  const [showPwd, setShowPwd] = useState(false);
+  const [showPin, setShowPin] = useState(false);
+  const [showEditPwd, setShowEditPwd] = useState(false);
+  const [showEditPin, setShowEditPin] = useState(false);
+
+  const [addAccess, setAddAccess] = useState<Required<UserRow>["access"]>({
+    canView: true,
+    canEdit: false,
+    canDelete: false,
+    dataScope: "assigned",
+    canSeePrices: false,
+    canSeeFinance: false,
+  });
+  const [editAccess, setEditAccess] = useState<Required<UserRow>["access"]>({
+    canView: true,
+    canEdit: false,
+    canDelete: false,
+    dataScope: "assigned",
+    canSeePrices: false,
+    canSeeFinance: false,
+  });
+
+  const selectableRoles = useMemo(() => {
+    const roleSet = new Set<UserRow["role"]>(USER_ROLES);
+    if (editing?.role && !roleSet.has(editing.role)) roleSet.add(editing.role);
+    return Array.from(roleSet);
+  }, [editing?.role]);
+
+  const handleUnauthorized = () => {
+    try {
+      localStorage.removeItem("auth_token");
+      localStorage.removeItem("auth_user");
+      sessionStorage.removeItem("auth_token");
+      sessionStorage.removeItem("auth_user");
+    } catch {
+      // ignore
+    }
+    window.location.assign("/auth");
+  };
+
+  const load = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_BASE}/api/users/admin/list`, { headers: getAuthHeaders() });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Failed to load users");
+      setItems(Array.isArray(json) ? json : []);
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to load users");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return items.filter((u) => {
+      if (role !== "-" && u.role !== role) return false;
+      if (status !== "-" && u.status !== status) return false;
+      if (!q) return true;
+      return (u.email || "").toLowerCase().includes(q) || (u.name || "").toLowerCase().includes(q);
+    });
+  }, [items, query, role, status]);
+
+  const visibleIds = useMemo(() => filtered.map((u) => u._id).filter((x): x is string => Boolean(x)), [filtered]);
+  const selectedVisibleCount = useMemo(() => {
+    let c = 0;
+    visibleIds.forEach((id) => {
+      if (selectedIds.has(id)) c += 1;
+    });
+    return c;
+  }, [selectedIds, visibleIds]);
+
+  const selectAllState: boolean | "indeterminate" = useMemo(() => {
+    if (visibleIds.length === 0) return false;
+    if (selectedVisibleCount === 0) return false;
+    if (selectedVisibleCount === visibleIds.length) return true;
+    return "indeterminate";
+  }, [selectedVisibleCount, visibleIds.length]);
+
+  const toggleSelectAllVisible = (next: boolean) => {
+    if (!next) {
+      setSelectedIds((prev) => {
+        const s = new Set(prev);
+        visibleIds.forEach((id) => s.delete(id));
+        return s;
+      });
+      return;
+    }
+    setSelectedIds((prev) => {
+      const s = new Set(prev);
+      visibleIds.forEach((id) => s.add(id));
+      return s;
+    });
+  };
+
+  const toggleRowSelected = (id: string, next: boolean) => {
+    setSelectedIds((prev) => {
+      const s = new Set(prev);
+      if (next) s.add(id);
+      else s.delete(id);
+      return s;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const exportSelectedCsv = () => {
+    const rows = filtered.filter((u) => selectedIds.has(u._id));
+    if (rows.length === 0) {
+      toast.error("No users selected");
+      return;
+    }
+    const header = ["Name", "Email", "Role", "Status", "Created At"].map(toCsvCell).join(",");
+    const lines = rows.map((u) =>
+      [u.name || "", u.email || "", roleLabel(u.role), u.status || "", u.createdAt || ""]
+        .map(toCsvCell)
+        .join(",")
+    );
+    const csv = [header, ...lines].join("\n");
+    downloadTextFile(`users-selected-${new Date().toISOString().slice(0, 10)}.csv`, csv, "text/csv;charset=utf-8");
+    toast.success("Exported selected users");
+  };
+
+  const doBulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) {
+      toast.error("No users selected");
+      return;
+    }
+    setSaving(true);
+    try {
+      for (const id of ids) {
+        const res = await fetch(`${API_BASE}/api/users/admin/${id}`, {
+          method: "DELETE",
+          headers: getAuthHeaders(),
+        });
+        if (res.status === 401) {
+          handleUnauthorized();
+          throw new Error("Session expired. Please log in again.");
+        }
+        const json = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(json?.error || "Failed to delete one or more users");
+      }
+
+      toast.success("Deleted selected users");
+      clearSelection();
+      setOpenBulkDelete(false);
+      if (editing && selectedIds.has(editing._id)) {
+        setOpenEdit(false);
+        setEditing(null);
+      }
+      await load();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to delete selected users");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleColumn = (k: string) => {
+    setVisibleColumns((prev) => {
+      const s = new Set(prev);
+      if (s.has(k)) s.delete(k);
+      else s.add(k);
+      return s;
+    });
+  };
+
+  const downloadTextFile = (filename: string, content: string, mime: string) => {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const toCsvCell = (value: unknown) => {
+    const s = String(value ?? "");
+    if (/[\n\r",]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+  };
+
+  const exportCsv = () => {
+    const rows = filtered;
+    const header = ["Name", "Email", "Role", "Status", "Created At"].map(toCsvCell).join(",");
+    const lines = rows.map((u) =>
+      [u.name || "", u.email || "", roleLabel(u.role), u.status || "", u.createdAt || ""]
+        .map(toCsvCell)
+        .join(",")
+    );
+    const csv = [header, ...lines].join("\n");
+    downloadTextFile(`users-${new Date().toISOString().slice(0, 10)}.csv`, csv, "text/csv;charset=utf-8");
+    toast.success("Exported CSV");
+  };
+
+  const exportExcel = () => {
+    const rows = filtered;
+    const tableRows = rows
+      .map(
+        (u) =>
+          `<tr><td>${String(u.name || "").replace(/</g, "&lt;")}</td><td>${String(u.email || "").replace(/</g, "&lt;")}</td><td>${String(roleLabel(u.role)).replace(/</g, "&lt;")}</td><td>${String(u.status || "").replace(/</g, "&lt;")}</td><td>${String(u.createdAt || "").replace(/</g, "&lt;")}</td></tr>`
+      )
+      .join("");
+
+    const html =
+      `<html><head><meta charset="utf-8" /></head><body>` +
+      `<table border="1"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Created At</th></tr></thead><tbody>${tableRows}</tbody></table>` +
+      `</body></html>`;
+
+    downloadTextFile(
+      `users-${new Date().toISOString().slice(0, 10)}.xls`,
+      html,
+      "application/vnd.ms-excel;charset=utf-8"
+    );
+    toast.success("Exported Excel");
+  };
+
+  const exportPdf = () => {
+    const rows = filtered;
+    const tableRows = rows
+      .map(
+        (u) =>
+          `<tr><td>${String(u.name || "").replace(/</g, "&lt;")}</td><td>${String(u.email || "").replace(/</g, "&lt;")}</td><td>${String(roleLabel(u.role)).replace(/</g, "&lt;")}</td><td>${String(u.status || "").replace(/</g, "&lt;")}</td></tr>`
+      )
+      .join("");
+
+    const filename = `users-${new Date().toISOString().slice(0, 10)}.pdf`;
+    const html =
+      `<html><head><meta charset="utf-8" /><title>Users</title>` +
+      `<style>` +
+      `body{font-family:Arial, sans-serif; padding:16px;}` +
+      `.toolbar{display:flex; gap:8px; justify-content:flex-end; margin-bottom:12px;}` +
+      `.btn{appearance:none; border:1px solid #d1d5db; background:#ffffff; padding:8px 10px; border-radius:8px; font-size:12px; cursor:pointer;}` +
+      `.btn.primary{border-color:#2563eb; background:#2563eb; color:#fff;}` +
+      `.note{font-size:12px; color:#6b7280; margin:0 0 12px;}` +
+      `table{width:100%; border-collapse:collapse;}` +
+      `th,td{border:1px solid #e5e7eb; padding:8px; font-size:12px;}` +
+      `th{background:#f3f4f6; text-align:left;}` +
+      `@media print {.toolbar,.note{display:none !important;} body{padding:0;}}` +
+      `</style>` +
+      `</head><body>` +
+      `<div class="toolbar">` +
+      `<button class="btn" onclick="window.print()">Print</button>` +
+      `<button class="btn primary" id="downloadBtn">Download PDF</button>` +
+      `</div>` +
+      `<p class="note">Tip: if download is blocked, allow popups and try again.</p>` +
+      `<div id="pdf-root">` +
+      `<h2 style="margin:0 0 12px">Users</h2>` +
+      `<table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th></tr></thead><tbody>${tableRows}</tbody></table>` +
+      `</div>` +
+      `<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>` +
+      `<script>` +
+      `document.getElementById('downloadBtn').addEventListener('click', function(){` +
+      `  try {` +
+      `    var el = document.getElementById('pdf-root');` +
+      `    if (!window.html2pdf) { alert('PDF generator failed to load.'); return; }` +
+      `    window.html2pdf().set({ margin: 0.3, filename: ${JSON.stringify(filename)}, html2canvas: { scale: 2 }, jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' } }).from(el).save();` +
+      `  } catch (e) { alert('Failed to generate PDF.'); }` +
+      `});` +
+      `</script>` +
+      `</body></html>`;
+
+    const w = window.open("", "_blank");
+    if (!w) {
+      toast.error("Popup blocked. Allow popups to export PDF.");
+      return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+  };
+
+  const openEditUser = (u: UserRow) => {
+    setEditing(u);
+    setEditRole(u.role);
+    setEditStatus(u.status);
+    setEditUsername(u.username || u.email || "");
+    setEditPerms(new Set(Array.isArray(u.permissions) ? u.permissions : []));
+    setEditAccess(u.access || {
+      canView: true,
+      canEdit: false,
+      canDelete: false,
+      dataScope: "assigned",
+      canSeePrices: false,
+      canSeeFinance: false,
+    });
+    setEditPassword("");
+    setEditPin("");
+    setOpenEdit(true);
+  };
+
+  const confirmDeleteUser = (u: UserRow) => {
+    setDeleting(u);
+    setOpenDelete(true);
+  };
+
+  const saveEdit = async () => {
+    if (!editing?._id) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/users/admin/${editing._id}`, {
+        method: "PUT",
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ 
+          role: editRole, 
+          status: editStatus, 
+          username: editUsername.trim(), 
+          permissions: Array.from(editPerms),
+          access: editAccess
+        }),
+      });
+      if (res.status === 401) {
+        handleUnauthorized();
+        throw new Error("Session expired. Please log in again.");
+      }
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Failed to update user");
+
+      const nextPassword = editPassword.trim();
+      const nextPin = editPin.trim();
+      if (nextPassword || nextPin) {
+        const res2 = await fetch(`${API_BASE}/api/users/admin/${editing._id}/credentials`, {
+          method: "PUT",
+          headers: getAuthHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({
+            password: nextPassword || undefined,
+            pin: nextPin || undefined,
+          }),
+        });
+        if (res2.status === 401) {
+          handleUnauthorized();
+          throw new Error("Session expired. Please log in again.");
+        }
+        const json2 = await res2.json().catch(() => null);
+        if (!res2.ok) throw new Error(json2?.error || "Failed to update credentials");
+      }
+
+      toast.success("User updated");
+      setOpenEdit(false);
+      setEditing(null);
+      await load();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to update user");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveAdd = async () => {
+    const email = addEmail.trim();
+    if (!email) {
+      toast.error("Email is required");
+      return;
+    }
+    const password = addPassword.trim();
+    if (!password) {
+      toast.error("Password is required");
+      return;
+    }
+    if (password.length < 4) {
+      toast.error("Password must be at least 4 characters");
+      return;
+    }
+    setSaving(true);
+    try {
+      const headers = getAuthHeaders({ "Content-Type": "application/json" });
+      const res = await fetch(`${API_BASE}/api/users/admin/create`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          name: addName.trim(),
+          email,
+          username: addUsername.trim(),
+          role: addRole,
+          status: addStatus,
+          password: password,
+          pin: addPin.trim() || undefined,
+          permissions: Array.from(editPerms), // Reusing editPerms state for add as well
+          access: addAccess
+        }),
+      });
+      if (res.status === 401) {
+        handleUnauthorized();
+        throw new Error("Session expired. Please log in again.");
+      }
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((json as any)?.error || "Failed to create user");
+      toast.success("User created");
+      setOpenAdd(false);
+      setAddName("");
+      setAddEmail("");
+      setAddUsername("");
+      setAddPassword("");
+      setAddPin("");
+      setAddRole("staff");
+      setAddStatus("active");
+      await load();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to create user");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const doDeleteUser = async () => {
+    if (!deleting?._id) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/users/admin/${deleting._id}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
+      if (res.status === 401) {
+        handleUnauthorized();
+        throw new Error("Session expired. Please log in again.");
+      }
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Failed to delete user");
+      toast.success("User deleted");
+      setOpenDelete(false);
+      setDeleting(null);
+      if (editing?._id === deleting._id) {
+        setOpenEdit(false);
+        setEditing(null);
+      }
+      await load();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to delete user");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4 animate-fade-in">
+      <div className="flex items-center justify-between">
+        <h1 className="text-sm text-muted-foreground">Manage Users</h1>
+        <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">Export <ChevronDown className="w-4 h-4 ml-2" /></Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); exportCsv(); }}>CSV</DropdownMenuItem>
+              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); exportExcel(); }}>Excel</DropdownMenuItem>
+              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); exportPdf(); }}>PDF</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button type="button" variant="outline" size="icon" onClick={load} disabled={loading}><RefreshCw className="w-4 h-4" /></Button>
+          <Button type="button" variant="outline" size="icon" onClick={() => setOpenSettings(true)}><Settings className="w-4 h-4" /></Button>
+
+          <Dialog open={openSettings} onOpenChange={setOpenSettings}>
+            <DialogContent className="bg-card sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Settings</DialogTitle>
+                <DialogDescription>Quick actions for this page.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => {
+                      setQuery("");
+                      setRole("-");
+                      setStatus("-");
+                      toast.success("Filters reset");
+                    }}
+                  >
+                    Reset filters
+                  </Button>
+                  <Button variant="outline" type="button" onClick={load} disabled={loading}>Refresh list</Button>
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => {
+                      setVisibleColumns(new Set(["phone", "email", "username", "role", "createdAt", "updatedAt", "status"]));
+                      toast.success("Columns reset");
+                    }}
+                  >
+                    Reset columns
+                  </Button>
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => {
+                      setOpenSettings(false);
+                      setOpenColumns(true);
+                    }}
+                  >
+                    Manage columns
+                  </Button>
+                  {selectedIds.size ? (
+                    <>
+                      <Button variant="outline" type="button" onClick={clearSelection}>Clear selection</Button>
+                      <Button variant="outline" type="button" onClick={exportSelectedCsv}>Export selected</Button>
+                    </>
+                  ) : (
+                    <div className="text-xs text-muted-foreground">Select rows to enable selection actions.</div>
+                  )}
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" type="button" onClick={() => setOpenSettings(false)}>Close</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={openAdd} onOpenChange={setOpenAdd}>
+            <DialogTrigger asChild><Button className="bg-red-500 hover:bg-red-500/90" size="sm"><Plus className="w-4 h-4 mr-2" />Add User</Button></DialogTrigger>
+            <DialogContent className="bg-card max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader><DialogTitle>Add User</DialogTitle></DialogHeader>
+              <Tabs defaultValue="general" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="general" className="flex items-center gap-2">
+                    <UserIcon className="w-4 h-4" /> General Info
+                  </TabsTrigger>
+                  <TabsTrigger value="permissions" className="flex items-center gap-2">
+                    <Shield className="w-4 h-4" /> Permissions
+                  </TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="general" className="space-y-4 py-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label>Full Name</Label>
+                      <Input placeholder="Full name" value={addName} onChange={(e) => setAddName(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Email</Label>
+                      <Input placeholder="Email" value={addEmail} onChange={(e) => setAddEmail(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Username (optional)</Label>
+                      <Input placeholder="Username (no spaces)" value={addUsername} onChange={(e) => setAddUsername(e.target.value.replace(/\s+/g, ''))} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Password</Label>
+                      <div className="relative">
+                        <Input 
+                          placeholder="Password" 
+                          type={showPwd ? "text" : "password"} 
+                          value={addPassword} 
+                          onChange={(e) => setAddPassword(e.target.value)} 
+                          className="pr-10"
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          onClick={() => setShowPwd((s) => !s)}
+                        >
+                          {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>PIN (4-8 digits, optional)</Label>
+                      <div className="relative">
+                        <Input 
+                          placeholder="PIN" 
+                          type={showPin ? "text" : "password"} 
+                          value={addPin} 
+                          onChange={(e) => setAddPin(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                          className="pr-10"
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          onClick={() => setShowPin((s) => !s)}
+                        >
+                          {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Role</Label>
+                      <Select value={addRole} onValueChange={(v) => setAddRole(v as any)}>
+                        <SelectTrigger><SelectValue placeholder="Role" /></SelectTrigger>
+                        <SelectContent>
+                          {selectableRoles.map((r) => (
+                            <SelectItem key={r} value={r}>{roleLabel(r)}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Status</Label>
+                      <Select value={addStatus} onValueChange={(v) => setAddStatus(v as any)}>
+                        <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="inactive">Inactive</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Data Scope</Label>
+                      <Select 
+                        value={addAccess.dataScope} 
+                        onValueChange={(v) => setAddAccess(prev => ({ ...prev, dataScope: v as any }))}
+                      >
+                        <SelectTrigger><SelectValue placeholder="Data Scope" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="assigned">Assigned Only</SelectItem>
+                          <SelectItem value="team">Team Data</SelectItem>
+                          <SelectItem value="all">All Data</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <Checkbox 
+                        checked={addAccess.canSeePrices} 
+                        onCheckedChange={(v) => setAddAccess(prev => ({ ...prev, canSeePrices: !!v }))} 
+                      />
+                      <span>Can see Prices</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <Checkbox 
+                        checked={addAccess.canSeeFinance} 
+                        onCheckedChange={(v) => setAddAccess(prev => ({ ...prev, canSeeFinance: !!v }))} 
+                      />
+                      <span>Can see Finance</span>
+                    </label>
+                  </div>
+                </TabsContent>
+                
+                <TabsContent value="permissions" className="py-4">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-muted-foreground">
+                        Configure granular access for each module.
+                      </div>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => setEditPerms(new Set())}
+                      >
+                        Clear All
+                      </Button>
+                    </div>
+                    <PermissionMatrix 
+                      permissions={editPerms} 
+                      onChange={setEditPerms} 
+                    />
+                  </div>
+                </TabsContent>
+              </Tabs>
+              <DialogFooter className="mt-6 border-t pt-4">
+                <Button variant="outline" onClick={() => setOpenAdd(false)}>Close</Button>
+                <Button onClick={saveAdd} disabled={saving}>Create User</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={openEdit} onOpenChange={setOpenEdit}>
+            <DialogContent className="bg-card max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader><DialogTitle>Edit User Access & Credentials</DialogTitle></DialogHeader>
+              <Tabs defaultValue="general" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="general" className="flex items-center gap-2">
+                    <UserIcon className="w-4 h-4" /> General & Security
+                  </TabsTrigger>
+                  <TabsTrigger value="permissions" className="flex items-center gap-2">
+                    <Shield className="w-4 h-4" /> Permissions
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="general" className="space-y-4 py-4">
+                  <div className="text-sm font-medium mb-4 p-2 bg-muted/50 rounded">{editing?.email}</div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label>Username</Label>
+                      <Input placeholder="Username" value={editUsername} onChange={(e) => setEditUsername(e.target.value.replace(/\s+/g, ''))} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Role</Label>
+                      <Select value={editRole} onValueChange={(v) => setEditRole(v as any)}>
+                        <SelectTrigger><SelectValue placeholder="Role" /></SelectTrigger>
+                        <SelectContent>
+                          {selectableRoles.map((r) => (
+                            <SelectItem key={r} value={r}>{roleLabel(r)}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Status</Label>
+                      <Select value={editStatus} onValueChange={(v) => setEditStatus(v as any)}>
+                        <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="inactive">Inactive</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Data Scope</Label>
+                      <Select 
+                        value={editAccess.dataScope} 
+                        onValueChange={(v) => setEditAccess(prev => ({ ...prev, dataScope: v as any }))}
+                      >
+                        <SelectTrigger><SelectValue placeholder="Data Scope" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="assigned">Assigned Only</SelectItem>
+                          <SelectItem value="team">Team Data</SelectItem>
+                          <SelectItem value="all">All Data</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                    <div className="space-y-1">
+                      <Label className="flex items-center gap-2"><Lock className="w-3 h-3" /> New Password</Label>
+                      <div className="relative">
+                        <Input
+                          type={showEditPwd ? "text" : "password"}
+                          value={editPassword}
+                          onChange={(e) => setEditPassword(e.target.value)}
+                          placeholder="Leave blank to keep"
+                          className="pr-10"
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          onClick={() => setShowEditPwd((s) => !s)}
+                        >
+                          {showEditPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="flex items-center gap-2"><Lock className="w-3 h-3" /> New PIN</Label>
+                      <div className="relative">
+                        <Input
+                          type={showEditPin ? "text" : "password"}
+                          value={editPin}
+                          onChange={(e) => setEditPin(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                          placeholder="4-8 digits"
+                          className="pr-10"
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          onClick={() => setShowEditPin((s) => !s)}
+                        >
+                          {showEditPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <Checkbox 
+                        checked={editAccess.canSeePrices} 
+                        onCheckedChange={(v) => setEditAccess(prev => ({ ...prev, canSeePrices: !!v }))} 
+                      />
+                      <span>Can see Prices</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <Checkbox 
+                        checked={editAccess.canSeeFinance} 
+                        onCheckedChange={(v) => setEditAccess(prev => ({ ...prev, canSeeFinance: !!v }))} 
+                      />
+                      <span>Can see Finance</span>
+                    </label>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="permissions" className="py-4">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-muted-foreground">
+                        Modify granular module access.
+                      </div>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => setEditPerms(new Set())}
+                      >
+                        Clear All
+                      </Button>
+                    </div>
+                    <PermissionMatrix 
+                      permissions={editPerms} 
+                      onChange={setEditPerms} 
+                    />
+                  </div>
+                </TabsContent>
+              </Tabs>
+
+              <DialogFooter className="mt-6 border-t pt-4">
+                <div className="flex items-center gap-2 mr-auto">
+                  {editing && (
+                    <Button variant="destructive" type="button" onClick={() => confirmDeleteUser(editing)} disabled={saving}>
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete User
+                    </Button>
+                  )}
+                </div>
+                <Button variant="outline" onClick={() => setOpenEdit(false)}>Close</Button>
+                <Button onClick={saveEdit} disabled={saving}>Save Changes</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="relative w-full max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input placeholder="Search" value={query} onChange={(e) => setQuery(e.target.value)} className="pl-9" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline">Filter</Button>
+              <Button variant="outline">11 Nov 25 - 10 Dec 25</Button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                checked={selectAllState}
+                onCheckedChange={(v) => toggleSelectAllVisible(Boolean(v))}
+              />
+              <div className="text-xs text-muted-foreground">
+                {selectedIds.size ? `${selectedIds.size} selected` : ""}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Select value={role} onValueChange={setRole}>
+                <SelectTrigger className="w-36"><SelectValue placeholder="Sort By" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="-">All roles</SelectItem>
+                  {selectableRoles.map((r) => (
+                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger className="w-36"><SelectValue placeholder="Status" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="-">All</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button type="button" variant="outline" onClick={() => setOpenColumns(true)}>Manage Columns</Button>
+            </div>
+          </div>
+
+          {selectedIds.size ? (
+            <div className="mb-3 rounded-lg border bg-muted/20 px-3 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div className="text-sm">
+                <span className="font-medium">{selectedIds.size}</span> selected
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={exportSelectedCsv}>Export selected (CSV)</Button>
+                <Button type="button" variant="destructive" size="sm" onClick={() => setOpenBulkDelete(true)} disabled={saving}>Delete selected</Button>
+                <Button type="button" variant="outline" size="sm" onClick={clearSelection}>Clear selection</Button>
+              </div>
+            </div>
+          ) : null}
+
+          <AlertDialog open={openBulkDelete} onOpenChange={setOpenBulkDelete}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete selected users</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete {selectedIds.size} selected user(s)? This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={saving}>Cancel</AlertDialogCancel>
+                <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={doBulkDelete} disabled={saving}>
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40">
+                <TableHead className="w-8">
+                  <Checkbox
+                    checked={selectAllState}
+                    onCheckedChange={(v) => toggleSelectAllVisible(Boolean(v))}
+                  />
+                </TableHead>
+                <TableHead>Name</TableHead>
+                {visibleColumns.has("phone") ? <TableHead>Phone</TableHead> : null}
+                {visibleColumns.has("email") ? <TableHead>Email</TableHead> : null}
+                {visibleColumns.has("username") ? <TableHead>Username</TableHead> : null}
+                {visibleColumns.has("role") ? <TableHead>Role</TableHead> : null}
+                {visibleColumns.has("createdAt") ? <TableHead>Created</TableHead> : null}
+                {visibleColumns.has("updatedAt") ? <TableHead>Last Activity</TableHead> : null}
+                {visibleColumns.has("status") ? <TableHead>Status</TableHead> : null}
+                <TableHead className="w-8"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((r) => (
+                <TableRow key={r._id}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedIds.has(r._id)}
+                      onCheckedChange={(v) => toggleRowSelected(r._id, Boolean(v))}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <div className="relative">
+                        <Avatar className="h-9 w-9 border-2 border-background shadow-sm">
+                          <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+                            {String(r.name || r.email || "U").split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-background ${r.status === 'active' ? 'bg-green-500' : 'bg-gray-400'}`} />
+                      </div>
+                      <div className="flex flex-col">
+                        <div className="font-semibold text-sm leading-tight">{r.name || r.email}</div>
+                        <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                          <Badge variant="outline" className="h-4 px-1 text-[10px] uppercase font-bold tracking-wider">
+                            {r.role}
+                          </Badge>
+                          {r.username && <span className="opacity-70">@{r.username}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  </TableCell>
+                  {visibleColumns.has("phone") ? <TableCell className="text-muted-foreground">-</TableCell> : null}
+                  {visibleColumns.has("email") ? <TableCell className="text-muted-foreground">{r.email}</TableCell> : null}
+                  {visibleColumns.has("username") ? <TableCell className="text-muted-foreground">{(r as any).username || r.email}</TableCell> : null}
+                  {visibleColumns.has("role") ? <TableCell>{roleLabel(r.role)}</TableCell> : null}
+                  {visibleColumns.has("createdAt") ? <TableCell>{r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 10) : "-"}</TableCell> : null}
+                  {visibleColumns.has("updatedAt") ? <TableCell>{r.updatedAt ? new Date(r.updatedAt).toISOString().slice(0, 10) : "-"}</TableCell> : null}
+                  {visibleColumns.has("status") ? (
+                    <TableCell>
+                      <Badge 
+                        variant={r.status === 'active' ? 'success' : 'secondary'}
+                        className="rounded-md px-2 py-0.5 text-[11px] font-medium"
+                      >
+                        {r.status === 'active' ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </TableCell>
+                  ) : null}
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="icon-sm" onClick={() => openEditUser(r)}><MoreHorizontal className="w-4 h-4" /></Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+
+          <Dialog open={openColumns} onOpenChange={setOpenColumns}>
+            <DialogContent className="bg-card sm:max-w-md">
+              <DialogHeader><DialogTitle>Manage columns</DialogTitle></DialogHeader>
+              <div className="grid gap-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox checked={visibleColumns.has("phone")} onCheckedChange={() => toggleColumn("phone")} />
+                  <span>Phone</span>
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox checked={visibleColumns.has("email")} onCheckedChange={() => toggleColumn("email")} />
+                  <span>Email</span>
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox checked={visibleColumns.has("username")} onCheckedChange={() => toggleColumn("username")} />
+                  <span>Username</span>
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox checked={visibleColumns.has("role")} onCheckedChange={() => toggleColumn("role")} />
+                  <span>Role</span>
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox checked={visibleColumns.has("createdAt")} onCheckedChange={() => toggleColumn("createdAt")} />
+                  <span>Created</span>
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox checked={visibleColumns.has("updatedAt")} onCheckedChange={() => toggleColumn("updatedAt")} />
+                  <span>Last activity</span>
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox checked={visibleColumns.has("status")} onCheckedChange={() => toggleColumn("status")} />
+                  <span>Status</span>
+                </label>
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setVisibleColumns(new Set(["phone", "email", "username", "role", "createdAt", "updatedAt", "status"]));
+                  }}
+                >
+                  Reset
+                </Button>
+                <Button type="button" onClick={() => setOpenColumns(false)}>Done</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <AlertDialog open={openDelete} onOpenChange={setOpenDelete}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete user</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete {deleting?.email || "this user"}? This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={saving}>Cancel</AlertDialogCancel>
+                <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={doDeleteUser} disabled={saving}>
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

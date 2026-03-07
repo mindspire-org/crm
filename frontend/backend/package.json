@@ -1,0 +1,34 @@
+{
+  "name": "mindspire-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "kill-port 5050 && nodemon --delay 1000 src/server.js",
+    "start": "node src/server.js",
+    "create-users": "tsx create_users.ts",
+    "verify-users": "tsx verify_users.ts"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^7.2.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^8.3.1",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^6.9.15",
+    "xlsx": "^0.18.5",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.16.5",
+    "kill-port": "^2.0.1",
+    "nodemon": "^3.0.1",
+    "tsx": "^4.19.2"
+  }
+}

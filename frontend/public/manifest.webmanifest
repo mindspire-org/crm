@@ -1,0 +1,24 @@
+{
+  "name": "HealthSpire CRM",
+  "short_name": "HealthSpire",
+  "description": "HealthSpire is a comprehensive enterprise management platform featuring CRM, HRM, Project Management, and Communication tools.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#3B82F6",
+  "icons": [
+    {
+      "src": "/HealthSpire%20logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/HealthSpire%20logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
