@@ -405,6 +405,7 @@ const App = () => (
             <Route path="/reports/tickets/statistics" element={<TicketsStatistics />} />
             {/* Accounting */}
             <Route path="/accounting" element={<AccountingDashboard />} />
+            <Route path="/accounting/expenses" element={<Expenses />} />
             <Route path="/accounting/accounts" element={<Accounts />} />
             <Route path="/accounting/vouchers" element={<Vouchers />} />
             <Route path="/accounting/journal" element={<Journal />} />

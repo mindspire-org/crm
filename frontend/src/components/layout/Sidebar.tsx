@@ -147,6 +147,7 @@ const navigation: NavItem[] = [
     icon: BarChart3,
     children: [
       { title: "Dashboard", href: "/accounting" },
+      { title: "Expenses", href: "/accounting/expenses" },
       { title: "Vouchers", href: "/accounting/vouchers" },
       { title: "Recovery", href: "/accounting/recovery" },
       { title: "Journal", href: "/accounting/journal" },

@@ -55,6 +55,7 @@ import {
   FileSignature,
   ChevronsUpDown,
   MessageSquare,
+  AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getAuthHeaders } from "@/lib/api/auth";
@@ -843,12 +844,35 @@ export default function Leads() {
     });
   };
 
-  const saveLead = async () => {
-    if (isSaving) return; // Prevent duplicate submissions
+  const [openDuplicateWarning, setOpenDuplicateWarning] = useState(false);
+  const [duplicateLeadData, setDuplicateLeadData] = useState<any>(null);
+
+  const saveLead = async (bypassDuplicateCheck = false) => {
+    if (isSaving) return;
+    
+    if (!bypassDuplicateCheck && !editingId) {
+      try {
+        const checkRes = await fetch(`${API_BASE}/api/leads/check-duplicate`, {
+          method: "POST",
+          headers: getAuthHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ email: leadForm.email, phone: leadForm.phone }),
+        });
+        const checkJson = await checkRes.json();
+        if (checkJson.exists) {
+          setDuplicateLeadData(checkJson.lead);
+          setOpenDuplicateWarning(true);
+          return;
+        }
+      } catch (err) {
+        console.error("Duplicate check failed:", err);
+      }
+    }
+
     setIsSaving(true);
     try {
       if (!leadForm.name.trim()) {
         toast.error("Name is required");
+        setIsSaving(false);
         return;
       }
 
@@ -903,8 +927,7 @@ export default function Leads() {
       setIsSaving(false);
     }
   };
-
-  const deleteLead = async (id: string) => {
+    const deleteLead = async (id: string) => {
     try {
       const res = await fetch(`${API_BASE}/api/leads/${id}`, { method: "DELETE", headers: getAuthHeaders() });
       const json = await res.json().catch(() => null);
@@ -1269,6 +1292,48 @@ export default function Leads() {
 
   return (
     <div className="space-y-4 animate-fade-in">
+      {/* Duplicate Warning Dialog */}
+      <Dialog open={openDuplicateWarning} onOpenChange={setOpenDuplicateWarning}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600">
+              <AlertCircle className="h-5 w-5" />
+              Lead Already Exists
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-3">
+            <p className="text-sm text-gray-600">
+              A lead with this email or phone number already exists in the system:
+            </p>
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-100 space-y-1">
+              <p className="text-sm font-bold text-gray-900">{duplicateLeadData?.name}</p>
+              <p className="text-xs text-gray-500">{duplicateLeadData?.email || "No email"}</p>
+              <p className="text-xs text-gray-500">{duplicateLeadData?.phone || "No phone"}</p>
+              <Badge variant="outline" className="mt-2 capitalize bg-white">
+                Status: {duplicateLeadData?.status}
+              </Badge>
+            </div>
+            <p className="text-sm text-gray-600 font-medium">
+              Do you still want to create this duplicate lead?
+            </p>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setOpenDuplicateWarning(false)}>
+              Cancel
+            </Button>
+            <Button 
+              className="bg-indigo-600 hover:bg-indigo-700 text-white" 
+              onClick={() => {
+                setOpenDuplicateWarning(false);
+                saveLead(true);
+              }}
+            >
+              Yes, create duplicate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Header actions */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-6 text-sm">
@@ -1774,8 +1839,8 @@ export default function Leads() {
                 </div>
               </div>
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={()=>setOpenAdd(false)} disabled={isSaving}>Close</Button>
-                <Button type="button" onClick={saveLead} disabled={isSaving}>
+                <Button type="button" variant="outline" onClick={() => setOpenAdd(false)} disabled={isSaving}>Close</Button>
+                <Button type="button" onClick={() => saveLead()} disabled={isSaving}>
                   {isSaving ? "Saving..." : "Save"}
                 </Button>
               </DialogFooter>

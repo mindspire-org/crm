@@ -14,21 +14,22 @@ export default function AuthLayout() {
   // Client portal can switch between Login and Signup without leaving the /auth page.
   const [clientMode, setClientMode] = useState<"login" | "signup">("login");
   return (
-    <div className="min-h-screen relative overflow-y-auto bg-[radial-gradient(1000px_circle_at_15%_20%,rgba(99,102,241,0.18),transparent_55%),radial-gradient(900px_circle_at_85%_25%,rgba(14,165,233,0.16),transparent_55%),radial-gradient(900px_circle_at_50%_90%,rgba(34,197,94,0.10),transparent_60%)] flex items-start sm:items-center justify-center p-4 sm:p-6">
-      <div className="pointer-events-none absolute inset-0 opacity-40 mix-blend-screen [background-image:linear-gradient(to_right,rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.08)_1px,transparent_1px)] [background-size:56px_56px]" />
+    <div className="min-h-screen relative overflow-y-auto bg-slate-950 flex items-start sm:items-center justify-center p-4 sm:p-6">
+      <div className="absolute inset-0 bg-[radial-gradient(1000px_circle_at_15%_20%,rgba(99,102,241,0.15),transparent_55%),radial-gradient(900px_circle_at_85%_25%,rgba(14,165,233,0.12),transparent_55%)]" />
+      <div className="pointer-events-none absolute inset-0 opacity-20 [background-image:linear-gradient(to_right,rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.05)_1px,transparent_1px)] [background-size:56px_56px]" />
       <div className="w-full max-w-5xl relative">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10 items-stretch">
-          <div className="hidden lg:flex relative rounded-3xl overflow-hidden border border-white/10 bg-white/5 backdrop-blur-xl shadow-2xl">
-            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/20 via-sky-400/10 to-emerald-400/10" />
+          <div className="hidden lg:flex relative rounded-3xl overflow-hidden border border-white/10 bg-slate-900/50 backdrop-blur-xl shadow-2xl">
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-transparent to-emerald-500/10" />
             <div className="relative z-10 flex flex-col justify-between w-full p-10">
               <div className="space-y-4">
-                <div className="inline-flex items-center gap-3 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-white/90">
-                  <span className="text-sm font-medium">HealthSpire CRM</span>
-                  <span className="text-xs text-white/70">Secure access portal</span>
+                <div className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-white">
+                  <span className="text-sm font-semibold">HealthSpire CRM</span>
+                  <span className="text-xs text-white/60">Secure access portal</span>
                 </div>
                 <div className="space-y-2">
-                  <div className="text-4xl font-semibold tracking-tight text-white">Welcome back</div>
-                  <div className="text-sm leading-relaxed text-white/70 max-w-md">
+                  <div className="text-4xl font-bold tracking-tight text-white">Welcome back</div>
+                  <div className="text-base leading-relaxed text-white/80 max-w-md font-medium">
                     Manage clients, leads, projects, and communications from one place with a fast, modern workflow.
                   </div>
                 </div>
@@ -62,10 +63,10 @@ export default function AuthLayout() {
               </div>
 
               {/* Login Card */}
-              <Card className="shadow-2xl border border-white/10 bg-white/10 backdrop-blur-xl">
+              <Card className="shadow-2xl border border-white/10 bg-slate-900/80 backdrop-blur-2xl">
                 <CardHeader className="pb-4">
-                  <CardTitle className="text-xl text-center text-white">Sign in</CardTitle>
-                  <div className="text-center text-sm text-white/70">
+                  <CardTitle className="text-2xl font-bold text-center text-white">Sign in</CardTitle>
+                  <div className="text-center text-sm font-medium text-white/60">
                     Choose your portal to continue.
                   </div>
                 </CardHeader>
@@ -77,14 +78,14 @@ export default function AuthLayout() {
                     - Client -> /api/auth/client/login
                   */}
                   <Tabs defaultValue="team" className="w-full">
-                    <TabsList className="w-full grid grid-cols-2 mb-6 bg-white/5 h-auto gap-1 p-1">
-                      <TabsTrigger value="team" className="flex items-center gap-2 text-white">
+                    <TabsList className="w-full grid grid-cols-2 mb-6 bg-white/5 h-auto gap-1 p-1 border border-white/5">
+                      <TabsTrigger value="team" className="flex items-center gap-2 text-white/70 data-[state=active]:text-white data-[state=active]:bg-white/10 py-2.5 transition-all">
                         <Users className="w-4 h-4" />
-                        Team Login
+                        <span className="font-semibold">Team Login</span>
                       </TabsTrigger>
-                      <TabsTrigger value="client" className="flex items-center gap-2 text-white">
+                      <TabsTrigger value="client" className="flex items-center gap-2 text-white/70 data-[state=active]:text-white data-[state=active]:bg-white/10 py-2.5 transition-all">
                         <Building className="w-4 h-4" />
-                        Client Login
+                        <span className="font-semibold">Client Login</span>
                       </TabsTrigger>
                     </TabsList>
 

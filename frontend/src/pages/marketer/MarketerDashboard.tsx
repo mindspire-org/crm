@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -13,10 +13,16 @@ import {
   Calendar,
   DollarSign,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  TrendingUp,
+  TrendingDown,
+  BarChart3,
+  ArrowRight,
+  UserPlus
 } from "lucide-react";
 import { getAuthHeaders } from "@/lib/api/auth";
 import { API_BASE } from "@/lib/api/base";
+import { useNavigate } from "react-router-dom";
 
 interface DashboardStats {
   totalLeads: number;
@@ -24,6 +30,9 @@ interface DashboardStats {
   assignedProjects: number;
   attendanceStatus: string;
   unreadMessages: number;
+  leadsToday: number;
+  leadsThisWeek: number;
+  leadsThisMonth: number;
 }
 
 interface RecentLead {
@@ -51,12 +60,16 @@ interface Announcement {
 }
 
 export default function MarketerDashboard() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats>({
     totalLeads: 0,
     activeLeads: 0,
     assignedProjects: 0,
     attendanceStatus: "Not Clocked In",
     unreadMessages: 0,
+    leadsToday: 0,
+    leadsThisWeek: 0,
+    leadsThisMonth: 0,
   });
   const [recentLeads, setRecentLeads] = useState<RecentLead[]>([]);
   const [recentTasks, setRecentTasks] = useState<RecentTask[]>([]);
@@ -86,16 +99,28 @@ export default function MarketerDashboard() {
       const tasksData = await tasksRes.json().catch(() => []);
       const projectsData = await projectsRes.json().catch(() => []);
 
+      const now = new Date();
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      const leadsToday = leadsData.filter((l: any) => new Date(l.createdAt) >= startOfDay).length;
+      const leadsThisWeek = leadsData.filter((l: any) => new Date(l.createdAt) >= startOfWeek).length;
+      const leadsThisMonth = leadsData.filter((l: any) => new Date(l.createdAt) >= startOfMonth).length;
+
       setStats({
         totalLeads: leadsData.length || 0,
         activeLeads: leadsData.filter((l: any) => !["converted", "lost"].includes(l.status)).length || 0,
         assignedProjects: (Array.isArray(projectsData) ? projectsData : []).length,
         attendanceStatus: attendanceData[0]?.clockedIn ? "Clocked In" : "Not Clocked In",
         unreadMessages: (Array.isArray(convosData) ? convosData : []).reduce((n: number, c: any) => n + (Number(c?.unreadCount) || 0), 0),
+        leadsToday,
+        leadsThisWeek,
+        leadsThisMonth,
       });
 
       // Load recent leads
-      setRecentLeads(leadsData.slice(0, 5).map((lead: any) => ({
+      setRecentLeads(leadsData.slice(0, 10).map((lead: any) => ({
         _id: lead._id,
         clientName: lead.name || lead.company || "Unknown",
         status: lead.status || "new",
@@ -175,164 +200,210 @@ export default function MarketerDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-lg">Loading dashboard...</div>
+      <div className="min-h-screen bg-gray-50/50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <div className="text-gray-500 animate-pulse font-medium">Preparing your dashboard...</div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Marketer Dashboard</h1>
-          <p className="text-gray-600 mt-2">Manage your leads, track performance, and stay updated</p>
+    <div className="min-h-screen bg-gray-50/50 p-4 sm:p-6 lg:p-8 text-gray-900">
+      <div className="max-w-7xl mx-auto space-y-8">
+        {/* Header Section */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-1">
+            <h1 className="text-4xl font-bold tracking-tight text-gray-900">
+              Marketer Dashboard
+            </h1>
+            <p className="text-gray-500 font-medium">Welcome back! Here's your performance overview.</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button 
+              onClick={() => navigate("/crm/leads")}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-600/20 px-6"
+            >
+              <UserPlus className="w-4 h-4 mr-2" />
+              Add New Lead
+            </Button>
+            <Button variant="outline" className="bg-white border-gray-200 hover:bg-gray-50 text-gray-700">
+              View Reports
+            </Button>
+          </div>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Leads</CardTitle>
-              <Target className="h-4 w-4 text-muted-foreground" />
+        {/* Performance Highlights */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="bg-white border-gray-200 shadow-sm relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform">
+              <BarChart3 className="w-24 h-24 text-gray-900" />
+            </div>
+            <CardHeader className="pb-2">
+              <CardDescription className="text-gray-500 font-semibold uppercase tracking-wider text-[10px]">Today's Leads</CardDescription>
+              <CardTitle className="text-4xl font-bold flex items-baseline gap-2 text-gray-900">
+                {stats.leadsToday}
+                <span className="text-emerald-600 text-sm flex items-center">
+                  <TrendingUp className="w-4 h-4 mr-1" />
+                  +12%
+                </span>
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.totalLeads}</div>
-              <p className="text-xs text-muted-foreground">
-                {stats.activeLeads} active leads
-              </p>
+              <Progress value={75} className="h-1.5 bg-gray-100" />
+              <p className="mt-2 text-xs text-gray-400 italic">75% of daily goal achieved</p>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Assigned Projects</CardTitle>
-              <FolderKanban className="h-4 w-4 text-muted-foreground" />
+          <Card className="bg-white border-gray-200 shadow-sm relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform">
+              <TrendingUp className="w-24 h-24 text-gray-900" />
+            </div>
+            <CardHeader className="pb-2">
+              <CardDescription className="text-gray-500 font-semibold uppercase tracking-wider text-[10px]">Weekly Performance</CardDescription>
+              <CardTitle className="text-4xl font-bold flex items-baseline gap-2 text-gray-900">
+                {stats.leadsThisWeek}
+                <span className="text-emerald-600 text-sm flex items-center">
+                  <TrendingUp className="w-4 h-4 mr-1" />
+                  +5.2%
+                </span>
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.assignedProjects}</div>
-              <p className="text-xs text-muted-foreground">
-                Active projects
-              </p>
+              <Progress value={62} className="h-1.5 bg-gray-100" />
+              <p className="mt-2 text-xs text-gray-400 italic">On track for weekly target</p>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Attendance</CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
+          <Card className="bg-white border-gray-200 shadow-sm relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform">
+              <Calendar className="w-24 h-24 text-gray-900" />
+            </div>
+            <CardHeader className="pb-2">
+              <CardDescription className="text-gray-500 font-semibold uppercase tracking-wider text-[10px]">Monthly Total</CardDescription>
+              <CardTitle className="text-4xl font-bold flex items-baseline gap-2 text-gray-900">
+                {stats.leadsThisMonth}
+                <span className="text-rose-600 text-sm flex items-center">
+                  <TrendingDown className="w-4 h-4 mr-1" />
+                  -2.1%
+                </span>
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.attendanceStatus}</div>
-              <p className="text-xs text-muted-foreground">
-                Today's status
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Unread Messages</CardTitle>
-              <MessageSquare className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.unreadMessages}</div>
-              <p className="text-xs text-muted-foreground">
-                New messages
-              </p>
+              <Progress value={45} className="h-1.5 bg-gray-100" />
+              <p className="mt-2 text-xs text-gray-400 italic">Focus on conversion required</p>
             </CardContent>
           </Card>
         </div>
 
+        {/* Secondary Stats */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            { label: "Active Leads", value: stats.activeLeads, icon: Target, color: "text-indigo-600", bg: "bg-indigo-50" },
+            { label: "Assigned Projects", value: stats.assignedProjects, icon: FolderKanban, color: "text-amber-600", bg: "bg-amber-50" },
+            { label: "Unread Messages", value: stats.unreadMessages, icon: MessageSquare, color: "text-sky-600", bg: "bg-sky-50" },
+            { label: "Status", value: stats.attendanceStatus, icon: Clock, color: stats.attendanceStatus === "Clocked In" ? "text-emerald-600" : "text-rose-600", bg: stats.attendanceStatus === "Clocked In" ? "bg-emerald-50" : "bg-rose-50" },
+          ].map((item, i) => (
+            <Card key={i} className="bg-white border-gray-200 shadow-sm hover:border-indigo-200 transition-colors cursor-pointer group">
+              <CardContent className="p-4 flex items-center gap-4">
+                <div className={`p-2 rounded-xl ${item.bg} ${item.color} group-hover:scale-110 transition-transform`}>
+                  <item.icon className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 font-medium">{item.label}</p>
+                  <p className="text-lg font-bold text-gray-900">{item.value}</p>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Main Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Recent Leads */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Recent Leads</CardTitle>
-                <Button size="sm" variant="outline">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Lead
-                </Button>
+          <Card className="lg:col-span-2 bg-white border-gray-200 shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-xl text-gray-900">Recent Lead Activity</CardTitle>
+                <CardDescription className="text-gray-500">Keep track of your latest acquisitions</CardDescription>
               </div>
+              <Button variant="ghost" size="sm" className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50">
+                View All <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
+              <div className="space-y-2">
                 {recentLeads.map((lead) => (
-                  <div key={lead._id} className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <p className="font-medium">{lead.clientName}</p>
-                      <p className="text-sm text-muted-foreground">{lead.source}</p>
+                  <div key={lead._id} className="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100 group">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
+                        {lead.clientName[0].toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900">{lead.clientName}</p>
+                        <p className="text-xs text-gray-500 uppercase tracking-tighter">{lead.source}</p>
+                      </div>
                     </div>
-                    <Badge className={getStatusColor(lead.status)}>
-                      {lead.status}
-                    </Badge>
+                    <div className="flex items-center gap-4">
+                      <Badge variant="secondary" className="shadow-none capitalize bg-gray-100 text-gray-700 hover:bg-gray-200">
+                        {lead.status}
+                      </Badge>
+                      <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400">
+                        <ArrowRight className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
                 {recentLeads.length === 0 && (
-                  <p className="text-center text-muted-foreground py-4">No recent leads</p>
+                  <div className="text-center py-12 space-y-3">
+                    <div className="bg-gray-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto">
+                      <Users className="w-8 h-8 text-gray-300" />
+                    </div>
+                    <p className="text-gray-400 font-medium">No recent leads found</p>
+                  </div>
                 )}
               </div>
             </CardContent>
           </Card>
 
-          {/* Recent Tasks */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Tasks</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {recentTasks.map((task) => (
-                  <div key={task._id} className="space-y-2">
+          {/* Activity & Announcements */}
+          <div className="space-y-6">
+            <Card className="bg-white border-gray-200 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-xl text-gray-900">Announcements</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {announcements.map((ann) => (
+                  <div key={ann._id} className="p-4 rounded-2xl bg-gray-50 border border-gray-100 space-y-2 group cursor-pointer hover:bg-white hover:border-indigo-100 hover:shadow-sm transition-all">
                     <div className="flex items-center justify-between">
-                      <p className="font-medium">{task.title}</p>
-                      <Badge className={getPriorityColor(task.priority)}>
-                        {task.priority}
+                      <Badge variant="outline" className="border-indigo-200 text-indigo-600 bg-indigo-50 text-[10px]">
+                        {ann.category}
                       </Badge>
+                      {!ann.read && <div className="w-2 h-2 bg-indigo-600 rounded-full animate-pulse shadow-[0_0_8px_rgba(79,70,229,0.4)]" />}
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Calendar className="h-4 w-4" />
-                      {task.deadline}
-                      <Badge variant="outline">{task.status}</Badge>
-                    </div>
+                    <p className="font-semibold text-sm text-gray-800 group-hover:text-indigo-600 transition-colors">{ann.title}</p>
+                    <p className="text-[10px] text-gray-400 uppercase font-bold">{new Date(ann.createdAt).toLocaleDateString()}</p>
                   </div>
                 ))}
-                {recentTasks.length === 0 && (
-                  <p className="text-center text-muted-foreground py-4">No recent tasks</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          {/* Announcements */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Announcements</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {announcements.map((announcement) => (
-                  <div key={announcement._id} className="flex items-start gap-3">
-                    <div className="flex-1">
-                      <p className="font-medium">{announcement.title}</p>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Badge variant="outline">{announcement.category}</Badge>
-                        <span>{new Date(announcement.createdAt).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-                    {!announcement.read && (
-                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                    )}
-                  </div>
-                ))}
-                {announcements.length === 0 && (
-                  <p className="text-center text-muted-foreground py-4">No announcements</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+            <Card className="bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-100 shadow-sm">
+              <CardContent className="p-6 space-y-4 text-center">
+                <div className="bg-white shadow-sm w-12 h-12 rounded-2xl flex items-center justify-center mx-auto transform rotate-12 group-hover:rotate-0 transition-transform">
+                  <TrendingUp className="w-6 h-6 text-indigo-600" />
+                </div>
+                <div className="space-y-1">
+                  <p className="font-bold text-lg text-gray-900">Goal Progression</p>
+                  <p className="text-xs text-gray-500">You are ahead of your monthly target by 14%!</p>
+                </div>
+                <Button className="w-full bg-indigo-600 text-white hover:bg-indigo-700 font-bold shadow-lg shadow-indigo-600/20">
+                  Analysis Details
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     </div>

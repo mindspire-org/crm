@@ -316,18 +316,31 @@ router.post("/team/login", validateBody(loginBodySchema), async (req, res) => {
 
     // If user exists already, reconcile marketer/staff role from Employee.department
     try {
-      if (user && (user.role === "staff" || user.role === "marketer")) {
+      if (user && (user.role === "marketer" || user.role === "marketing_manager" || user.role === "marketing manager" || user.role === "staff")) {
         const email = String(user.email || "").toLowerCase().trim();
         const empRoleSrc = email ? await Employee.findOne({ email: new RegExp(`^${escapeRegExp(email)}$`, "i") }).lean() : null;
         if (empRoleSrc) {
-          const inferredRole = String(empRoleSrc.department || "").trim().toLowerCase() === "marketing" ? "marketer" : "staff";
-          if (user.role !== inferredRole) {
+          const dept = String(empRoleSrc.department || "").trim().toLowerCase();
+          const inferredRole = (dept === "marketing") ? "marketer" : user.role; 
+          // Only sync if it's clearly marketing and they are currently staff or similar
+          if (user.role === "staff" && inferredRole === "marketer") {
             await User.updateOne({ _id: user._id }, { $set: { role: inferredRole } });
             user.role = inferredRole;
           }
         }
       }
     } catch {}
+
+    // Auto-migrate passwordHash from Employee if it's missing in User
+    if (user && !user.passwordHash && !pin) {
+      const email = String(user.email || "").toLowerCase().trim();
+      const emp = email ? await Employee.findOne({ email: new RegExp(`^${escapeRegExp(email)}$`, "i") }).lean() : null;
+      if (emp && (emp.passwordHash || emp.password)) {
+        const hash = emp.passwordHash || (await bcrypt.hash(String(emp.password), 10));
+        await User.updateOne({ _id: user._id }, { $set: { passwordHash: hash } });
+        user.passwordHash = hash;
+      }
+    }
 
     if (
       user.role !== "admin" &&
@@ -360,7 +373,18 @@ router.post("/team/login", validateBody(loginBodySchema), async (req, res) => {
     }
 
     // Fallback for legacy staff/marketers who only exist in Employee model
-    if (!ok && !pin && (user.role === "staff" || user.role === "marketer" || user.role === "marketing_manager" || user.role === "team_member")) {
+    if (!ok && !pin && (
+      user.role === "staff" || 
+      user.role === "marketer" || 
+      user.role === "marketing_manager" || 
+      user.role === "sales" || 
+      user.role === "sales_manager" || 
+      user.role === "finance" || 
+      user.role === "finance_manager" || 
+      user.role === "developer" || 
+      user.role === "project_manager" || 
+      user.role === "team_member"
+    )) {
       const email = String(user.email || "").toLowerCase().trim();
       const emp = email ? await Employee.findOne({ email: new RegExp(`^${escapeRegExp(email)}$`, "i") }).lean(false) : null;
       if (emp && !emp.disableLogin && !emp.markAsInactive) {

@@ -129,34 +129,34 @@ export default function RoleTeamLogin({
         />
       </div>
 
-      {allowPin && (
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant={mode === "password" ? "secondary" : "outline"}
-            onClick={() => setMode("password")}
-            className={
-              mode === "password"
-                ? "bg-white/15 text-white border-white/20 hover:bg-white/20"
-                : "bg-transparent text-white/80 border-white/20 hover:bg-white/10"
-            }
-          >
-            Password
-          </Button>
-          <Button
-            type="button"
-            variant={mode === "pin" ? "secondary" : "outline"}
-            onClick={() => setMode("pin")}
-            className={
-              mode === "pin"
-                ? "bg-white/15 text-white border-white/20 hover:bg-white/20"
-                : "bg-transparent text-white/80 border-white/20 hover:bg-white/10"
-            }
-          >
-            PIN
-          </Button>
-        </div>
-      )}
+      <div className="flex items-center gap-2 p-1 bg-white/5 rounded-lg w-fit">
+        <Button
+          type="button"
+          size="sm"
+          variant={mode === "password" ? "secondary" : "ghost"}
+          onClick={() => setMode("password")}
+          className={
+            mode === "password"
+              ? "bg-white/15 text-white border-white/10 hover:bg-white/20 shadow-sm"
+              : "text-white/60 hover:text-white hover:bg-white/5"
+          }
+        >
+          Password
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={mode === "pin" ? "secondary" : "ghost"}
+          onClick={() => setMode("pin")}
+          className={
+            mode === "pin"
+              ? "bg-white/15 text-white border-white/10 hover:bg-white/20 shadow-sm"
+              : "text-white/60 hover:text-white hover:bg-white/5"
+          }
+        >
+          PIN
+        </Button>
+      </div>
 
       <div className="space-y-2">
         <Label className="text-white/80">{mode === "pin" ? "PIN" : "Password"}</Label>

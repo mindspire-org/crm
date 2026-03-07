@@ -318,19 +318,16 @@ router.post("/admin/create", authenticate, isAdmin, async (req, res) => {
     if (!passwordRaw) return res.status(400).json({ error: "Password is required" });
     if (passwordRaw.length < 4) return res.status(400).json({ error: "Weak password" });
 
-    const exists = await User.findOne({ email: emailLc }).lean();
-    if (exists) return res.status(409).json({ error: "Email already in use" });
-
-    const nextUsername = String(username || "").trim() || emailLc;
-    const nextUsernameLc = String(nextUsername).toLowerCase().trim();
-    const usernameExists = await User.findOne({ username: nextUsernameLc }).lean();
-    if (usernameExists) return res.status(409).json({ error: "Username already in use" });
     const nextRole = String(role || "staff").trim().toLowerCase();
     const nextStatus = String(status || "active");
 
     const accessDefaults = (() => {
-      if (String(nextRole).toLowerCase() === "admin") {
+      const roleStr = String(nextRole).toLowerCase();
+      if (roleStr === "admin") {
         return { canView: true, canEdit: true, canDelete: true, dataScope: "all", canSeePrices: true, canSeeFinance: true };
+      }
+      if (roleStr === "marketer" || roleStr === "marketing_manager") {
+        return { canView: true, canEdit: true, canDelete: false, dataScope: "team", canSeePrices: true, canSeeFinance: false };
       }
       return { canView: true, canEdit: false, canDelete: false, dataScope: "assigned", canSeePrices: false, canSeeFinance: false };
     })();
@@ -347,30 +344,62 @@ router.post("/admin/create", authenticate, isAdmin, async (req, res) => {
       canSeeFinance: nextAccessRaw.canSeeFinance !== undefined ? Boolean(nextAccessRaw.canSeeFinance) : accessDefaults.canSeeFinance,
     };
 
-    const doc = {
-      name: String(name || "").trim(),
-      email: emailLc,
-      username: nextUsernameLc,
-      role: nextRole,
-      status: nextStatus,
-      permissions: Array.isArray(permissions) ? permissions.map((x) => String(x)) : [],
-      access: nextAccess,
-      createdBy: "admin",
-    };
-
+    const nextUsername = String(username || "").trim() || emailLc;
+    const nextUsernameLc = String(nextUsername).toLowerCase().trim();
+    
+    // Check if user already exists
+    let existingUser = await User.findOne({ email: emailLc }).lean(false);
+    if (existingUser) {
+      // Update existing user instead of failing
+      existingUser.name = String(name || "").trim();
+      existingUser.username = nextUsernameLc;
+      existingUser.role = nextRole;
+      existingUser.status = nextStatus;
+      existingUser.permissions = Array.isArray(permissions) ? permissions.map((x) => String(x)) : [];
+      existingUser.access = nextAccess;
+      
     if (password) {
       const np = String(password);
       if (np.length < 4) return res.status(400).json({ error: "Weak password" });
-      doc.passwordHash = await bcrypt.hash(np, 10);
+      existingUser.passwordHash = await bcrypt.hash(np, 10);
     }
-
     if (pin) {
       const p = String(pin).trim();
       if (!/^\d{4,8}$/.test(p)) return res.status(400).json({ error: "PIN must be 4-8 digits" });
-      doc.pinHash = await bcrypt.hash(p, 10);
+      existingUser.pinHash = await bcrypt.hash(p, 10);
     }
+      
+      await existingUser.save();
+      var created = existingUser;
+    } else {
+      // Create new user
+      const usernameExists = await User.findOne({ username: nextUsernameLc }).lean();
+      if (usernameExists) return res.status(409).json({ error: "Username already in use" });
 
-    const created = await User.create(doc);
+      const doc = {
+        name: String(name || "").trim(),
+        email: emailLc,
+        username: nextUsernameLc,
+        role: nextRole,
+        status: nextStatus,
+        permissions: Array.isArray(permissions) ? permissions.map((x) => String(x)) : [],
+        access: nextAccess,
+        createdBy: "admin",
+      };
+
+      if (password) {
+        const np = String(password);
+        if (np.length < 4) return res.status(400).json({ error: "Weak password" });
+        doc.passwordHash = await bcrypt.hash(np, 10);
+      }
+      if (pin) {
+        const p = String(pin).trim();
+        if (!/^\d{4,8}$/.test(p)) return res.status(400).json({ error: "PIN must be 4-8 digits" });
+        doc.pinHash = await bcrypt.hash(p, 10);
+      }
+
+      var created = await User.create(doc);
+    }
 
     // Ensure a corresponding Employee record exists for staff/marketer/developer/sales/finance (+ managers)
     if (

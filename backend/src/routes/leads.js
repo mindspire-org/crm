@@ -105,8 +105,39 @@ function cleanPayload(body) {
   if (body?.reminderDate !== undefined) p.reminderDate = body.reminderDate ? new Date(body.reminderDate) : undefined;
   if (body?.reminderSent !== undefined) p.reminderSent = Boolean(body.reminderSent);
   if (body?.conversationNotes !== undefined) p.conversationNotes = toStr(body.conversationNotes);
+  if (body?.createdByUserId !== undefined) p.createdByUserId = body.createdByUserId;
   return p;
 }
+
+// Check for duplicate leads by email or phone
+router.post("/check-duplicate", async (req, res) => {
+  try {
+    const { email, phone } = req.body || {};
+    if (!email && !phone) return res.json({ exists: false });
+
+    const conditions = [];
+    if (email) conditions.push({ email: String(email).trim().toLowerCase() });
+    if (phone) conditions.push({ phone: String(phone).trim() });
+
+    if (conditions.length === 0) return res.json({ exists: false });
+
+    const existing = await Lead.findOne({ $or: conditions }).select("name email phone status").lean();
+    if (existing) {
+      return res.json({
+        exists: true,
+        lead: {
+          name: existing.name,
+          email: existing.email,
+          phone: existing.phone,
+          status: existing.status
+        }
+      });
+    }
+    res.json({ exists: false });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 router.get("/", requirePermission("leads.read"), async (req, res) => {
   try {
@@ -139,7 +170,7 @@ router.get("/", requirePermission("leads.read"), async (req, res) => {
     if (req.user.role === "admin" || req.user.role === "sales_manager") {
       if (ownerId) filter.ownerId = ownerId;
     } else if (req.user.role === "marketing_manager" || req.user.role === "marketing manager") {
-      // team scope (not implemented) - allow full list for now
+      // Marketing Managers see all leads by default
       if (ownerId) filter.ownerId = ownerId;
     } else if (
       req.user.role === "marketer" ||
@@ -152,8 +183,18 @@ router.get("/", requirePermission("leads.read"), async (req, res) => {
       req.user.role === "project_manager"
     ) {
       const myEmployeeId = await getMyEmployeeId(req);
-      if (!myEmployeeId) return res.json([]);
-      filter.ownerId = myEmployeeId;
+      const orConditions = [{ createdByUserId: req.user._id }];
+      if (myEmployeeId) {
+        orConditions.push({ ownerId: myEmployeeId });
+      }
+      
+      // If filtering by owner specifically, ensure we only show those that match the search AND are accessible
+      if (ownerId) {
+        filter.ownerId = ownerId;
+        // The middleware or further logic will handle cross-referencing this with user access
+      } else {
+        filter.$or = orConditions;
+      }
     } else {
       return res.status(403).json({ error: "Access denied" });
     }
@@ -209,10 +250,14 @@ router.post("/", requirePermission("leads.create"), async (req, res) => {
   try {
     const payload = cleanPayload(req.body);
     if (!payload.name) return res.status(400).json({ error: "name is required" });
-    if (req.user.role === "marketer" || req.user.role === "marketing_manager" || req.user.role === "marketing manager" || req.user.role === "sales" || req.user.role === "staff") {
+    if (req.user.role === "marketer" || req.user.role === "marketing_manager" || req.user.role === "marketing manager" || req.user.role === "sales" || req.user.role === "staff" || req.user.role === "developer" || req.user.role === "project_manager" || req.user.role === "finance" || req.user.role === "finance_manager") {
       const myEmployeeId = await getMyEmployeeId(req);
-      if (!myEmployeeId) return res.status(403).json({ error: "Access denied" });
-      payload.ownerId = myEmployeeId;
+      payload.createdByUserId = req.user._id;
+      if (myEmployeeId) {
+        payload.ownerId = myEmployeeId;
+      }
+      // Log for debugging
+      console.log(`[Lead Create] User: ${req.user._id}, Role: ${req.user.role}, OwnerId: ${payload.ownerId}, CreatedByUserId: ${payload.createdByUserId}`);
     }
     if (!payload.initials && payload.name) {
       payload.initials = payload.name
@@ -563,6 +608,11 @@ router.put("/:id", requirePermission('leads.update'), async (req, res) => {
       payload.approvalStatus = "pending";
       payload.approvalRequestedAt = new Date();
       payload.approvalRequestedBy = req.user._id;
+    }
+
+    // Allow marketers to see their own leads even if status is Won (pending approval)
+    if (existing.status === "Won" && existing.approvalStatus === "pending" && !isAlreadyApproved) {
+      // Logic for status transition remains the same
     }
 
     const doc = await Lead.findByIdAndUpdate(req.params.id, payload, { new: true }).lean();

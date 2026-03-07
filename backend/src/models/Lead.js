@@ -35,6 +35,7 @@ const LeadSchema = new mongoose.Schema(
     clientId: { type: mongoose.Schema.Types.ObjectId, ref: "Client" },
     orderId: { type: mongoose.Schema.Types.ObjectId, ref: "Order" },
     invoiceId: { type: mongoose.Schema.Types.ObjectId, ref: "Invoice" },
+    createdByUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     // Reminder fields
     reminderDate: { type: Date },
     reminderSent: { type: Boolean, default: false },
@@ -52,7 +53,7 @@ LeadSchema.index({ ownerId: 1 });
 LeadSchema.index({ status: 1 });
 LeadSchema.index({ approvalStatus: 1 });
 LeadSchema.index({ source: 1 });
-
+LeadSchema.index({ createdByUserId: 1 });
 LeadSchema.index({ reminderDate: 1 });
 LeadSchema.index({ reminderSent: 1 });
 
