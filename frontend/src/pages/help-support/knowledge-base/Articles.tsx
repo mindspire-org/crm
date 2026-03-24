@@ -1,3 +1,4 @@
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -112,16 +113,13 @@ export default function KnowledgeBaseArticles() {
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-center">
                   <Label className="md:text-right text-muted-foreground">Category</Label>
                   <div className="md:col-span-4">
-                    <Select value={form.categoryId||""} onValueChange={(v)=>setForm(f=>({...f, categoryId: v||""}))}>
-                      <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
-                      <SelectContent position="popper" className="z-[1000]">
-                        {categories.length ? (
-                          categories.map(c => <SelectItem key={String(c._id)} value={String(c._id)}>{c.name}</SelectItem>)
-                        ) : (
-                          <SelectItem value="__none__" disabled>No categories found</SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      value={form.categoryId}
+                      onValueChange={(v) => setForm(f => ({ ...f, categoryId: v || "" }))}
+                      options={categories.length ? categories.map(c => ({ value: String(c._id), label: c.name })) : [{ value: "__none__", label: "No categories found" }]}
+                      placeholder="Select category"
+                      className="w-full"
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-start">

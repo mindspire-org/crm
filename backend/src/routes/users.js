@@ -67,6 +67,10 @@ const uploadAvatar = multer({ storage: avatarStorage });
 router.get("/me", authenticate, async (req, res) => {
   try {
     const user = typeof req.user?.toObject === "function" ? req.user.toObject() : req.user;
+    
+    // Update lastActiveAt on every "me" check (standard heart-beat)
+    await User.updateOne({ _id: user._id }, { $set: { lastActiveAt: new Date() } });
+    
     const role = String(user?.role || "").toLowerCase();
 
     let client = null;

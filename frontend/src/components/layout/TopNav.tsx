@@ -1,4 +1,4 @@
-﻿import { Bell, Search, Menu, Plus, LayoutGrid, Briefcase, Globe, Mail, Settings, CheckCircle, Sun, Moon } from "lucide-react";
+﻿import { Bell, Search, Menu, Plus, LayoutGrid, Briefcase, Globe, Mail, Settings, CheckCircle, Sun, Moon, Eye, Check, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -68,6 +68,7 @@ type MeUser = {
   name?: string;
   avatar?: string;
   permissions?: string[];
+  updatedAt?: string;
 };
 
 const getStoredAuthUser = (): any | null => {
@@ -234,6 +235,36 @@ export function TopNav({ onMenuClick }: TopNavProps) {
         headers,
         body: JSON.stringify({ ids }),
       });
+    } catch {
+      // ignore
+    }
+  };
+
+  const markSingleRead = async (id: string) => {
+    try {
+      const headers = getAuthHeaders({ "Content-Type": "application/json" });
+      await fetch(`${API_BASE}/api/notifications/mark-read`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ ids: [id] }),
+      });
+      setNotifications((cur) => cur.map((n) => (n._id === id ? { ...n, readAt: new Date().toISOString() } : n)));
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+    } catch {
+      // ignore
+    }
+  };
+
+  const deleteNotification = async (id: string) => {
+    try {
+      const headers = getAuthHeaders();
+      await fetch(`${API_BASE}/api/notifications/${id}`, {
+        method: "DELETE",
+        headers,
+      });
+      setNotifications((cur) => cur.filter((n) => n._id !== id));
+      // Re-calculate unread count if necessary or just reload
+      void loadNotifications();
     } catch {
       // ignore
     }
@@ -610,39 +641,79 @@ export function TopNav({ onMenuClick }: TopNavProps) {
               <div className="mt-1 text-xs text-muted-foreground">Recent updates and alerts</div>
             </div>
 
-            <div className="max-h-[360px] overflow-auto">
-              {notifLoading ? (
+            <div className="max-h-[420px] overflow-auto custom-scrollbar">
+              {notifLoading && notifications.length === 0 ? (
                 <div className="px-3 py-10 text-center text-sm text-muted-foreground">Loading notifications…</div>
               ) : notifications.length ? (
                 notifications.map((notification) => {
                   const unread = !notification.readAt;
                   return (
-                    <DropdownMenuItem
+                    <div
                       key={notification._id}
-                      className={`px-3 py-3 cursor-pointer ${unread ? "bg-muted/30" : ""}`}
-                      onSelect={(e) => {
-                        e.preventDefault();
-                        const href = String(notification.href || "");
-                        if (href) navigate(href);
-                      }}
+                      className={`group relative flex items-start gap-4 px-4 py-4 transition-all hover:bg-slate-50 border-b border-slate-50 last:border-0 ${unread ? "bg-indigo-50/30" : ""}`}
                     >
-                      <div className="flex items-start gap-3 w-full">
-                        <div className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${unread ? "bg-primary" : "bg-transparent"}`} />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="text-sm font-medium truncate">{notification.title || "Notification"}</div>
-                              {notification.message ? (
-                                <div className="text-xs text-muted-foreground line-clamp-2">{notification.message}</div>
-                              ) : null}
-                            </div>
-                            <div className="text-[11px] text-muted-foreground whitespace-nowrap mt-0.5">
-                              {timeAgo(notification.createdAt)}
-                            </div>
+                      <div className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${unread ? "bg-indigo-600 shadow-[0_0_8px_rgba(79,70,229,0.6)]" : "bg-transparent"}`} />
+                      
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="text-sm font-bold text-slate-900 tracking-tight leading-tight">
+                            {notification.title || "System Update"}
                           </div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap bg-slate-100 px-2 py-0.5 rounded">
+                            {timeAgo(notification.createdAt)}
+                          </span>
+                        </div>
+                        
+                        <div className="text-xs text-slate-500 leading-relaxed line-clamp-2 pr-8">
+                          {notification.message}
+                        </div>
+
+                          <div className="flex items-center gap-3 pt-2">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-7 px-2 text-[10px] font-bold uppercase tracking-widest text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg gap-1.5"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const href = String(notification.href || "");
+                              if (href) navigate(href);
+                              setNotifOpen(false);
+                            }}
+                          >
+                            <Eye className="w-3 h-3" /> View Details
+                          </Button>
+                          {unread && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-7 px-2 text-[10px] font-bold uppercase tracking-widest text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg gap-1.5"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                markSingleRead(notification._id);
+                              }}
+                            >
+                              <Check className="w-3 h-3" /> Mark Read
+                            </Button>
+                          )}
                         </div>
                       </div>
-                    </DropdownMenuItem>
+
+                      {role === "admin" && (
+                        <div className="absolute right-2 top-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteNotification(notification._id);
+                            }}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   );
                 })
               ) : (

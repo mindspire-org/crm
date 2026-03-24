@@ -231,9 +231,16 @@ router.put("/:id", async (req, res) => {
     const pre = await Proposal.findById(req.params.id).lean();
     if (!pre) return res.status(404).json({ error: "Not found" });
 
+    const role = String(req.user?.role || "").toLowerCase().trim();
+    if (role === "marketer" || role === "sales") {
+      // Cannot edit if already pending or approved
+      if (pre.approvalStatus === "Approved" || pre.approvalStatus === "Pending") {
+        return res.status(403).json({ error: "Cannot edit a proposal that is pending or already approved. Please contact management." });
+      }
+    }
+
     const body = req.body || {};
     const update = {};
-
     if (body.clientId !== undefined) update.clientId = body.clientId || undefined;
     if (body.leadId !== undefined) update.leadId = body.leadId || undefined;
     if (body.client !== undefined) update.client = toStr(body.client);
@@ -244,8 +251,62 @@ router.put("/:id", async (req, res) => {
     if (body.status !== undefined) update.status = toStr(body.status).trim() || "draft";
     if (body.tax1 !== undefined) update.tax1 = Number(body.tax1 || 0);
     if (body.tax2 !== undefined) update.tax2 = Number(body.tax2 || 0);
+    if (body.discount !== undefined) update.discount = Number(body.discount || 0);
     if (body.note !== undefined) update.note = toStr(body.note);
     if (body.items !== undefined) update.items = normalizeItems(body.items);
+    if (body.timeframe !== undefined) update.timeframe = toStr(body.timeframe);
+    if (body.timeframeStartDate !== undefined) update.timeframeStartDate = body.timeframeStartDate ? new Date(body.timeframeStartDate) : undefined;
+    if (body.timeframeDays !== undefined) update.timeframeDays = Number(body.timeframeDays || 20);
+    if (body.fileIds !== undefined) update.fileIds = Array.isArray(body.fileIds) ? body.fileIds : [];
+
+    const next = await Proposal.findByIdAndUpdate(req.params.id, update, { new: true });
+    if (!next) return res.status(404).json({ error: "Not found" });
+
+    const becameAccepted = String(update?.status || "").toLowerCase() === "accepted" && String(pre?.status || "").toLowerCase() !== "accepted";
+    const isAccepted = String(next?.status || "").toLowerCase() === "accepted";
+
+    if (becameAccepted || (isAccepted && (!next.contractId || !next.acceptedAt))) {
+      const acceptedFrom = String(req.user?.role || "").toLowerCase() === "client" ? "client_portal" : "staff_portal";
+      const result = await ensureAcceptedConversion({ proposalId: next._id, userId: req.user?._id, acceptedFrom });
+      return res.json(result?.proposal || next);
+    }
+
+    res.json(next);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.patch("/:id", async (req, res) => {
+  try {
+    const pre = await Proposal.findById(req.params.id).lean();
+    if (!pre) return res.status(404).json({ error: "Not found" });
+
+    const role = String(req.user?.role || "").toLowerCase().trim();
+    if (role === "marketer" || role === "sales") {
+      if (pre.approvalStatus === "Approved" || pre.approvalStatus === "Pending") {
+        return res.status(403).json({ error: "Cannot edit a proposal that is pending or already approved." });
+      }
+    }
+
+    const body = req.body || {};
+    const update = {};
+    if (body.clientId !== undefined) update.clientId = body.clientId || undefined;
+    if (body.leadId !== undefined) update.leadId = body.leadId || undefined;
+    if (body.client !== undefined) update.client = toStr(body.client);
+    if (body.title !== undefined) update.title = toStr(body.title);
+    if (body.amount !== undefined) update.amount = Number(body.amount || 0);
+    if (body.proposalDate !== undefined) update.proposalDate = body.proposalDate ? new Date(body.proposalDate) : undefined;
+    if (body.validUntil !== undefined) update.validUntil = body.validUntil ? new Date(body.validUntil) : undefined;
+    if (body.status !== undefined) update.status = toStr(body.status).trim() || "draft";
+    if (body.tax1 !== undefined) update.tax1 = Number(body.tax1 || 0);
+    if (body.tax2 !== undefined) update.tax2 = Number(body.tax2 || 0);
+    if (body.discount !== undefined) update.discount = Number(body.discount || 0);
+    if (body.note !== undefined) update.note = toStr(body.note);
+    if (body.items !== undefined) update.items = normalizeItems(body.items);
+    if (body.timeframe !== undefined) update.timeframe = toStr(body.timeframe);
+    if (body.timeframeStartDate !== undefined) update.timeframeStartDate = body.timeframeStartDate ? new Date(body.timeframeStartDate) : undefined;
+    if (body.timeframeDays !== undefined) update.timeframeDays = Number(body.timeframeDays || 20);
     if (body.fileIds !== undefined) update.fileIds = Array.isArray(body.fileIds) ? body.fileIds : [];
 
     const next = await Proposal.findByIdAndUpdate(req.params.id, update, { new: true });

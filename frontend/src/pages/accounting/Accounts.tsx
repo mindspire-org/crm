@@ -40,7 +40,8 @@ import {
   TrendingUp,
   ArrowUpRight,
   Zap,
-  ShieldCheck
+  ShieldCheck,
+  Trash2
 } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
@@ -258,7 +259,7 @@ export default function Accounts() {
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-emerald-100 blur-[120px]" />
       </div>
 
-      {/* Institutional Command Header */}
+      {/* Corporate Command Header */}
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -276,7 +277,7 @@ export default function Accounts() {
                   Registry <span className="text-indigo-600">Architecture</span>
                 </h1>
                 <div className="flex items-center gap-2 mt-2">
-                  <Badge className="bg-indigo-100 text-indigo-700 border-indigo-200 text-[10px] font-bold uppercase tracking-widest px-3 py-1">Institutional Control</Badge>
+                  <Badge className="bg-indigo-100 text-indigo-700 border-indigo-200 text-[10px] font-bold uppercase tracking-widest px-3 py-1">Corporate Control</Badge>
                   <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px] font-bold uppercase tracking-widest px-3 py-1">Real-time Terminal</Badge>
                 </div>
               </div>
@@ -416,7 +417,7 @@ export default function Accounts() {
                   <thead>
                     <tr className="text-slate-400">
                       <th className="py-2 px-6 text-left text-[9px] font-bold uppercase tracking-[0.2em]">Code</th>
-                      <th className="py-2 px-6 text-left text-[9px] font-bold uppercase tracking-[0.2em]">Institutional Title</th>
+                      <th className="py-2 px-6 text-left text-[9px] font-bold uppercase tracking-[0.2em]">Corporate Title</th>
                       <th className="py-2 px-6 text-right text-[9px] font-bold uppercase tracking-[0.2em]">Opening Registry</th>
                       <th className="py-2 px-6 text-right text-[9px] font-bold uppercase tracking-[0.2em]">Current Volume</th>
                       <th className="py-2 px-6 text-right text-[9px] font-bold uppercase tracking-[0.2em]">Control</th>
@@ -491,20 +492,47 @@ export default function Accounts() {
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="h-10 w-10 rounded-xl text-emerald-600 hover:bg-emerald-50 border border-transparent hover:border-emerald-200"
+                                  className="h-10 w-10 rounded-xl text-emerald-600 hover:bg-emerald-50 border border-transparent hover:border-emerald-200 transition-all active:scale-95"
                                   onClick={() => handleOpenCreate(r.code, r.type)}
-                                  title="Expand Hierarchy"
+                                  title="Add Sub-Account"
                                 >
-                                  <FolderPlus className="w-5 h-5" />
+                                  <Plus className="w-5 h-5" />
                                 </Button>
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="h-10 w-10 rounded-xl text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-200"
+                                  className="h-10 w-10 rounded-xl text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-200 transition-all active:scale-95"
                                   onClick={() => handleOpenEdit(r)}
                                   title="Adjust Protocol"
                                 >
-                                  <Edit2 className="w-5 h-5" />
+                                  <Edit2 className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-10 w-10 rounded-xl text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-all active:scale-95"
+                                  onClick={async () => {
+                                    if (confirm(`Archive account ${r.code}?`)) {
+                                      try {
+                                        const res = await fetch(`${API_BASE}/api/accounts/${r._id}`, {
+                                          method: 'DELETE',
+                                          headers: getAuthHeaders()
+                                        });
+                                        if (res.ok) {
+                                          toast.success("Account archived");
+                                          load();
+                                        } else {
+                                          const err = await res.json();
+                                          toast.error(err.error || "Archive failed");
+                                        }
+                                      } catch (e) {
+                                        toast.error("Network error");
+                                      }
+                                    }
+                                  }}
+                                  title="Archive Account"
+                                >
+                                  <Trash2 className="w-4 h-4" />
                                 </Button>
                               </div>
                             </td>

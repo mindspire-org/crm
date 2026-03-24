@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Layout } from "lucide-react";
 import { getAuthHeaders } from "@/lib/api/auth";
 import { API_BASE } from "@/lib/api/base";
 
@@ -28,6 +29,7 @@ const toIsoDate = (d?: any) => {
 };
 
 export default function ClientAnnouncements() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [announcements, setAnnouncements] = useState<AnnouncementDoc[]>([]);
 
@@ -81,7 +83,18 @@ export default function ClientAnnouncements() {
                     {toIsoDate(a.createdAt || a.startDate)}
                   </div>
                 </div>
-                <Badge variant={a.isActive === false ? "secondary" : "default"}>{a.isActive === false ? "Inactive" : "Active"}</Badge>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => navigate(`/announcements/${a._id}/poster`)}
+                    className="rounded-lg border-indigo-200 bg-indigo-50 text-indigo-700 font-bold text-[10px] tracking-widest uppercase hover:bg-indigo-100"
+                  >
+                    <Layout className="w-3 h-3 mr-1.5" />
+                    Poster
+                  </Button>
+                  <Badge variant={a.isActive === false ? "secondary" : "default"}>{a.isActive === false ? "Inactive" : "Active"}</Badge>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="text-sm whitespace-pre-wrap">{a.message || ""}</div>

@@ -56,6 +56,7 @@ import announcementsRouter from "./routes/announcements.js";
 import clientPortalRouter from "./routes/client.js";
 import projectRequestsRouter from "./routes/projectRequests.js";
 import authRouter from "./routes/auth.js";
+import publicUploadRouter from "./routes/publicUpload.js";
 import estimateFormsRouter from "./routes/estimateForms.js";
 import leadsRouter from "./routes/leads.js";
 import leadLabelsRouter from "./routes/leadLabels.js";
@@ -84,7 +85,9 @@ import recoveryRouter from "./routes/recovery.js";
 import commissionsRouter from "./routes/commissions.js";
 import appointmentsRouter from "./routes/appointments.js";
 import vouchersRouter from "./routes/vouchers.js";
+import auditLogsRouter from "./routes/auditLogs.js";
 import metaAdsRouter from "./routes/metaAds.js";
+import targetsRouter from "./routes/targets.js";
 import backupsRouter, { performAutoBackup } from "./routes/backups.js";
 import nodeCron from "node-cron";
 import { startLeadReminderService } from "./services/leadReminders.js";
@@ -289,40 +292,34 @@ app.get(/^\/uploads\/emp_/, (req, res) => {
   res.sendFile(filePath);
 });
 
-app.use("/uploads", authenticate, async (req, res, next) => {
-  try {
-    const filename = path.basename(req.path);
-    const filePath = path.join(UPLOAD_DIR, filename);
-    
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: "File not found" });
-    }
-    
-    // Skip ownership check for avatars - they have their own endpoints
-    if (filename.startsWith("clientavatar_") || filename.startsWith("avatar_user_") || filename.startsWith("emp_")) {
-      return res.sendFile(filePath);
-    }
-    
-    // Check if user owns the file (admin can access any)
-    if (req.user?.role === "admin") {
-      return res.sendFile(filePath);
-    }
-    
-    // Find file record in database
-    const fileRecord = await File.findOne({ path: `/uploads/${filename}`, userId: req.user?._id });
-    if (!fileRecord) {
-      return res.status(403).json({ error: "Access denied" });
-    }
-    
-    res.sendFile(filePath);
-  } catch (err) {
-    console.error("File access error:", err.message);
-    res.status(500).json({ error: "File access failed" });
+// Handle missing logo files gracefully
+app.get(/^\/uploads\/logo_/, (req, res) => {
+  const filePath = path.join(UPLOAD_DIR, path.basename(req.path));
+  if (!fs.existsSync(filePath)) {
+    res.status(204).send();
+    return;
   }
+  res.sendFile(filePath);
 });
 
-app.get("/", (_req, res) => {
-  res.json({ ok: true, name: "Healthspire API", health: "/api/health" });
+// Explicitly serve legacy logo if it exists in root or public
+app.get("/HealthSpire%20logo.png", (req, res) => {
+  const publicPath = path.join(SERVER_ROOT, "..", "frontend", "public", "HealthSpire logo.png");
+  const rootPath = path.join(SERVER_ROOT, "HealthSpire logo.png");
+  
+  if (fs.existsSync(publicPath)) return res.sendFile(publicPath);
+  if (fs.existsSync(rootPath)) return res.sendFile(rootPath);
+  
+  res.status(404).send();
+});
+
+// Move public static serving BEFORE authentication middleware
+app.use("/uploads", (req, res, next) => {
+  const filename = path.basename(req.path);
+  if (filename.startsWith("logo_") || filename.startsWith("clientavatar_") || filename.startsWith("avatar_user_") || filename.startsWith("emp_") || filename.startsWith("pub_")) {
+    return express.static(UPLOAD_DIR)(req, res, next);
+  }
+  next();
 });
 
 app.get("/api/health", (_req, res) => {
@@ -357,6 +354,37 @@ app.get("/api/debug/routes", (_req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message || "debug failed" });
   }
+});
+
+app.use("/uploads", authenticate, async (req, res, next) => {
+  try {
+    const filename = path.basename(req.path);
+    const filePath = path.join(UPLOAD_DIR, filename);
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: "File not found" });
+    }
+    
+    // Check if user owns the file (admin can access any)
+    if (req.user?.role === "admin") {
+      return res.sendFile(filePath);
+    }
+    
+    // Find file record in database
+    const fileRecord = await File.findOne({ path: `/uploads/${filename}`, userId: req.user?._id });
+    if (!fileRecord) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    
+    res.sendFile(filePath);
+  } catch (err) {
+    console.error("File access error:", err.message);
+    res.status(500).json({ error: "File access failed" });
+  }
+});
+
+app.get("/", (_req, res) => {
+  res.json({ ok: true, name: "Healthspire API", health: "/api/health" });
 });
 
 app.use("/api/contacts", contactsRouter);
@@ -413,6 +441,7 @@ app.use("/api/roles", rolesRouter);
 app.use("/api/announcements", announcementsRouter);
 app.use("/api/client", clientPortalRouter);
 app.use("/api/project-requests", projectRequestsRouter);
+app.use("/api/upload-public", publicUploadRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/estimate-forms", estimateFormsRouter);
 app.use("/api/delete-account-requests", deleteAccountRequestsRouter);
@@ -432,7 +461,9 @@ app.use("/api/vendors", vendorsRouter);
 app.use("/api/statements", statementsRouter);
 app.use("/api/accounting/recovery", recoveryRouter);
 app.use("/api/accounting/recovery/cases", recoveryCasesRouter);
-app.use("/api/vouchers", vouchersRouter);
+app.use("/api/targets", targetsRouter);
+app.use("/api/meta", metaAdsRouter);
+app.use("/api/audit-logs", auditLogsRouter);
 app.use("/api/backups", backupsRouter);
 app.use("/api/commissions", commissionsRouter);
 app.use("/api/meta", metaAdsRouter);

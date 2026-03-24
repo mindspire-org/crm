@@ -12,9 +12,8 @@ router.get("/general", async (req, res) => {
     const to = req.query.to ? new Date(req.query.to) : null;
     if (!accountCode) return res.status(400).json({ error: "accountCode is required" });
 
-    const account = await Account.findOne({ code: accountCode }).lean();
-    if (!account) return res.status(404).json({ error: "Account not found" });
-
+    let account = null;
+    let opening = 0;
     const match = {};
     if (from || to) match.date = {};
     if (from) match.date.$gte = from;
@@ -23,7 +22,16 @@ router.get("/general", async (req, res) => {
     const pipeline = [
       { $match: match },
       { $unwind: "$lines" },
-      { $match: { "lines.accountCode": accountCode } },
+    ];
+
+    if (accountCode !== "all") {
+      account = await Account.findOne({ code: accountCode }).lean();
+      if (!account) return res.status(404).json({ error: "Account not found" });
+      pipeline.push({ $match: { "lines.accountCode": accountCode } });
+      opening = Number(account.openingDebit || 0) - Number(account.openingCredit || 0);
+    }
+
+    pipeline.push(
       {
         $project: {
           date: 1,
@@ -31,25 +39,24 @@ router.get("/general", async (req, res) => {
           memo: 1,
           debit: "$lines.debit",
           credit: "$lines.credit",
+          accountCode: "$lines.accountCode",
           entityType: "$lines.entityType",
           entityId: "$lines.entityId",
           createdAt: 1,
         },
       },
-      { $sort: { date: 1, createdAt: 1, _id: 1 } },
-    ];
+      { $sort: { date: 1, createdAt: 1, _id: 1 } }
+    );
 
     const rows = await JournalEntry.aggregate(pipeline);
 
-    // Compute running balance (debit - credit) convention; UI can adjust per account type if needed
-    const opening = Number(account.openingDebit || 0) - Number(account.openingCredit || 0);
     let balance = opening;
     const withBal = rows.map((r) => {
       balance += Number(r.debit || 0) - Number(r.credit || 0);
       return { ...r, balance };
     });
 
-    res.json({ account, openingBalance: opening, rows: withBal });
+    res.json({ account: account || { code: "all", name: "All Accounts Ledger" }, openingBalance: opening, rows: withBal });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }

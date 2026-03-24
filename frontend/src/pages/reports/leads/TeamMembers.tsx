@@ -1,3 +1,4 @@
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -100,24 +101,27 @@ export default function LeadsTeamMembers() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 flex-wrap">
               <Button variant="outline" size="icon">▦</Button>
-              <Select value={owner} onValueChange={setOwner}>
-                <SelectTrigger className="w-40"><SelectValue placeholder="- Owner -"/></SelectTrigger>
-                <SelectContent>
-                  {ownerOptions.map(opt => (<SelectItem key={opt} value={opt}>{opt}</SelectItem>))}
-                </SelectContent>
-              </Select>
-              <Select value={source} onValueChange={setSource}>
-                <SelectTrigger className="w-40"><SelectValue placeholder="- Source -"/></SelectTrigger>
-                <SelectContent>
-                  {sourceOptions.map(opt => (<SelectItem key={opt} value={opt}>{opt}</SelectItem>))}
-                </SelectContent>
-              </Select>
-              <Select value={label} onValueChange={setLabel}>
-                <SelectTrigger className="w-40"><SelectValue placeholder="- Label -"/></SelectTrigger>
-                <SelectContent>
-                  {labelOptions.map(opt => (<SelectItem key={opt} value={opt}>{opt}</SelectItem>))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={owner}
+                onValueChange={setOwner}
+                options={ownerOptions.map(opt => ({ value: opt, label: opt }))}
+                placeholder="- Owner -"
+                className="w-40"
+              />
+              <SearchableSelect
+                value={source}
+                onValueChange={setSource}
+                options={sourceOptions.map(opt => ({ value: opt, label: opt }))}
+                placeholder="- Source -"
+                className="w-40"
+              />
+              <SearchableSelect
+                value={label}
+                onValueChange={setLabel}
+                options={labelOptions.map(opt => ({ value: opt, label: opt }))}
+                placeholder="- Label -"
+                className="w-40"
+              />
               <Button variant="outline">Created date</Button>
             </div>
             <div className="flex items-center gap-2">

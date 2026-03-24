@@ -90,11 +90,11 @@ export function PWAInstallPrompt() {
 
     window.addEventListener("beforeinstallprompt", handler);
 
-    // Check if event was already captured before React mounted
-    if ((window as any).deferredInstallPrompt) {
-      const evt = (window as any).deferredInstallPrompt;
-      eventRef.current = evt;
-      setInstallEvent(evt);
+    // Check if event was already captured globally
+    const win = window as any;
+    if (win.deferredInstallPrompt) {
+      eventRef.current = win.deferredInstallPrompt;
+      setInstallEvent(win.deferredInstallPrompt);
     }
 
     return () => {
@@ -105,25 +105,40 @@ export function PWAInstallPrompt() {
   // Main prompt logic
   useEffect(() => {
     if (typeof window === "undefined" || hasCheckedRef.current) return;
-    hasCheckedRef.current = true;
 
     // Don't show if standalone or dismissed
     if (isStandalone()) {
+      hasCheckedRef.current = true;
       setPromptState({ installed: true });
       return;
     }
 
-    if (isPromptDismissed()) return;
+    if (isPromptDismissed()) {
+      hasCheckedRef.current = true;
+      return;
+    }
 
-    // Only show on mobile
+    // If event is already there, we can proceed
+    const win = window as any;
+    if (win.deferredInstallPrompt || eventRef.current) {
+      const evt = win.deferredInstallPrompt || eventRef.current;
+      setInstallEvent(evt);
+      setShowPrompt(true);
+      hasCheckedRef.current = true;
+      return;
+    }
+
+    // Only show on mobile if no event yet
     if (!isMobileDevice()) return;
-
+    
+    hasCheckedRef.current = true;
     const ios = isIOSDevice();
     setIsIOS(ios);
 
     // For Android/Chrome with install event available
-    if (!ios && eventRef.current) {
-      setInstallEvent(eventRef.current);
+    if (!ios && (eventRef.current || win.deferredInstallPrompt)) {
+      const evt = eventRef.current || win.deferredInstallPrompt;
+      setInstallEvent(evt);
       setShowPrompt(true);
       return;
     }
@@ -138,7 +153,8 @@ export function PWAInstallPrompt() {
   }, []);
 
   const handleInstall = useCallback(async () => {
-    const evt = installEvent || eventRef.current;
+    const win = window as any;
+    const evt = installEvent || eventRef.current || win.deferredInstallPrompt;
     if (!evt) return;
 
     setIsLoading(true);
@@ -261,44 +277,28 @@ export function PWAInstallPrompt() {
           )}
 
           <div className="flex flex-col gap-2 pt-1">
-            {showInstallButton ? (
+            {showInstallButton && (
               <Button
                 size="sm"
-                className="w-full font-medium"
+                className="w-full font-black uppercase tracking-widest text-[11px] h-12 bg-indigo-600 hover:bg-indigo-700 shadow-xl shadow-indigo-200 transition-all active:scale-95 flex items-center justify-center gap-3 border-b-4 border-indigo-800"
                 onClick={handleInstall}
                 disabled={isLoading}
               >
                 {isLoading ? (
-                  <span className="flex items-center gap-2">
+                  <>
                     <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                    Installing...
-                  </span>
+                    INITIALIZING...
+                  </>
                 ) : (
-                  <span className="flex items-center gap-2">
-                    <Download className="h-4 w-4" />
-                    Install App
-                  </span>
+                  <>
+                    <Download className="h-5 w-5" />
+                    INSTALL NOW
+                  </>
                 )}
               </Button>
-            ) : !isIOS ? (
-              <div className="space-y-3 text-sm bg-muted/50 rounded-lg p-3">
-                <p className="text-muted-foreground font-medium text-xs uppercase tracking-wide">
-                  Manual Install
-                </p>
-                <ol className="space-y-2 text-muted-foreground">
-                  <li className="flex items-start gap-2">
-                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-semibold mt-0.5">1</span>
-                    <span>Tap the menu (⋮) in your browser</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-semibold mt-0.5">2</span>
-                    <span>Select <strong>Add to Home Screen</strong> or <strong>Install App</strong></span>
-                  </li>
-                </ol>
-              </div>
-            ) : null}
+            )}
 
-            <div className="flex flex-col sm:flex-row gap-2">
+            <div className="flex flex-col sm:flex-row gap-2 mt-2">
               <Button
                 variant="ghost"
                 size="sm"

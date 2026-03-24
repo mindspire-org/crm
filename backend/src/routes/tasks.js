@@ -249,12 +249,13 @@ router.get("/", authenticate, async (req, res) => {
     // Apply search filter
     if (q) {
       const rawQ = String(q).trim();
+      const safeQ = escapeRegex(rawQ);
       const qNoStr = rawQ.startsWith("#") ? rawQ.slice(1).trim() : rawQ;
       const qNo = /^\d+$/.test(qNoStr) ? Number(qNoStr) : null;
       filter.$or = [
-        { title: { $regex: rawQ, $options: "i" } },
-        { description: { $regex: rawQ, $options: "i" } },
-        { tags: { $elemMatch: { $regex: rawQ, $options: "i" } } },
+        { title: { $regex: safeQ, $options: "i" } },
+        { description: { $regex: safeQ, $options: "i" } },
+        { tags: { $elemMatch: { $regex: safeQ, $options: "i" } } },
         ...(qNo !== null ? [{ taskNo: qNo }] : []),
       ];
     }

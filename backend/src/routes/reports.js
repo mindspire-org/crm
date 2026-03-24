@@ -7,11 +7,96 @@ import Lead from "../models/Lead.js";
 import Project from "../models/Project.js";
 import Ticket from "../models/Ticket.js";
 import Employee from "../models/Employee.js";
+import Expense from "../models/Expense.js";
+import Subscription from "../models/Subscription.js";
 import { authenticate } from "../middleware/auth.js";
+
+import Attendance from "../models/Attendance.js";
+import Task from "../models/Task.js";
+import Commission from "../models/Commission.js";
 
 const router = Router();
 
 const parseDate = (s) => (s ? new Date(s) : null);
+
+// GET /api/reports/team-progress - Aggregate team progress data
+router.get("/team-progress", authenticate, async (req, res) => {
+  try {
+    const from = parseDate(req.query.from) || new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const to = parseDate(req.query.to) || new Date();
+
+    const [employees, attendance, tasks, projects, commissions] = await Promise.all([
+      Employee.find({ status: { $ne: "inactive" } }).lean(),
+      Attendance.find({ date: { $gte: from, $lte: to } }).lean(),
+      Task.find({ createdAt: { $gte: from, $lte: to } }).lean(),
+      Project.find({ createdAt: { $gte: from, $lte: to } }).lean(),
+      Commission.find({ createdAt: { $gte: from, $lte: to }, status: "approved" }).lean(),
+    ]);
+
+    const progressData = employees.map(emp => {
+      const empId = emp._id.toString();
+      
+      // Attendance: Count days present
+      const empAttendance = attendance.filter(a => a.employeeId?.toString() === empId);
+      const daysPresent = empAttendance.length;
+
+      // Tasks: Count completed vs total assigned
+      const empTasks = tasks.filter(t => t.assignees?.some(a => a.name === emp.name || a.initials === emp.initials));
+      const completedTasks = empTasks.filter(t => t.status === "done").length;
+      const totalTasks = empTasks.length;
+
+      // Projects: Count active/completed projects owned/assigned
+      // Note: Project model might have different owner/assignee fields, assuming basic filtering for now
+      const empProjects = projects.filter(p => p.ownerId?.toString() === empId || p.team?.includes(empId));
+      const completedProjects = empProjects.filter(p => p.status === "Completed").length;
+      const totalProjects = empProjects.length;
+
+      // Sales: Total commission amount and count
+      const empSales = commissions.filter(c => c.employeeId?.toString() === empId);
+      const totalSalesAmount = empSales.reduce((sum, s) => sum + (s.saleAmount || 0), 0);
+      const totalCommissions = empSales.reduce((sum, s) => sum + (s.commissionAmount || 0), 0);
+      const salesCount = empSales.length;
+
+      // Score calculation (simple weighted average for demonstration)
+      // Attendance (20%), Tasks (30%), Projects (20%), Sales (30%)
+      const attendanceScore = Math.min(100, (daysPresent / 22) * 100); // Assume 22 working days
+      const taskScore = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
+      const projectScore = totalProjects > 0 ? (completedProjects / totalProjects) * 100 : 0;
+      const salesScore = totalSalesAmount > 0 ? Math.min(100, (totalSalesAmount / 100000) * 100) : 0; // Assume 100k target
+
+      const overallScore = (attendanceScore * 0.2) + (taskScore * 0.3) + (projectScore * 0.2) + (salesScore * 0.3);
+
+      return {
+        employeeId: empId,
+        name: emp.name,
+        role: emp.role,
+        avatar: emp.avatar,
+        metrics: {
+          attendance: { daysPresent, totalDays: 22 },
+          tasks: { completed: completedTasks, total: totalTasks },
+          projects: { completed: completedProjects, total: totalProjects },
+          sales: { amount: totalSalesAmount, count: salesCount, commissions: totalCommissions }
+        },
+        scores: {
+          attendance: Math.round(attendanceScore),
+          tasks: Math.round(taskScore),
+          projects: Math.round(projectScore),
+          sales: Math.round(salesScore),
+          overall: Math.round(overallScore)
+        }
+      };
+    });
+
+    // Sort by overall score descending
+    progressData.sort((a, b) => b.scores.overall - a.scores.overall);
+
+    res.json(progressData);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// ... rest of file
 
 // Utility: summarize by account with optional date filter
 async function summarizeByAccount({
@@ -659,6 +744,56 @@ router.get("/key-metrics", authenticate, async (req, res) => {
     });
   } catch (e) {
     res.status(400).json({ error: e.message });
+  }
+});
+
+// GET /api/reports/accounting-summary - Daily, Weekly, Monthly Summary
+router.get("/accounting-summary", authenticate, async (req, res) => {
+  try {
+    const type = req.query.type || "monthly"; // daily, weekly, monthly
+    const now = new Date();
+    let startDate;
+
+    if (type === "daily") {
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    } else if (type === "weekly") {
+      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    } else {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+
+    const [projects, clients, subscriptions, expenses] = await Promise.all([
+      Project.find({ createdAt: { $gte: startDate } }).lean(),
+      Client.find({ createdAt: { $gte: startDate } }).lean(),
+      Subscription.find({ createdAt: { $gte: startDate } }).lean(),
+      Expense.find({ date: { $gte: startDate } }).lean(),
+    ]);
+
+    // Expense breakdown by category
+    const expenseStats = await Expense.aggregate([
+      { $match: { date: { $gte: startDate } } },
+      { $group: { _id: "$category", count: { $sum: 1 }, total: { $sum: "$amount" } } },
+      { $sort: { total: -1 } }
+    ]);
+
+    res.json({
+      projects: {
+        count: projects.length,
+        recent: projects.slice(0, 10).map(p => ({ title: p.title, client: p.client, price: p.price }))
+      },
+      clients: {
+        count: clients.length
+      },
+      subscriptions: {
+        count: subscriptions.length
+      },
+      expenses: {
+        total: expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0),
+        breakdown: expenseStats
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 

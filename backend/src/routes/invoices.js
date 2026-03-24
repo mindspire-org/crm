@@ -142,6 +142,17 @@ router.get("/", authenticate, requirePermission("invoices.read"), async (req, re
       });
     }
     const items = await Invoice.find(filter).sort({ createdAt: -1 }).lean();
+    
+    // Role-based scoping for Marketer/Sales
+    const role = String(req.user?.role || "").toLowerCase().trim();
+    if (role === "marketer" || role === "sales") {
+      const filtered = items.filter(inv => 
+        String(inv.createdBy || "") === String(req.user._id) || 
+        String(inv.salesPersonId || "") === String(req.user._id)
+      );
+      return res.json(filtered);
+    }
+
     res.json(items);
   } catch (e) {
     res.status(400).json({ error: e.message });

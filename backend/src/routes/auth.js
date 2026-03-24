@@ -228,11 +228,29 @@ router.post("/admin/login1", validateBody(loginBodySchema), async (req, res) => 
     if (!ok) {
       user.failedLogins = (user.failedLogins || 0) + 1;
       await user.save().catch(() => {});
+      await logActivity({
+        action: "LOGIN_FAIL",
+        module: "AUTH",
+        details: `Failed admin login attempt for identifier: ${identifier}`,
+        ipAddress: req.ip || req.headers["x-forwarded-for"],
+        userAgent: req.headers["user-agent"],
+        status: "failure"
+      });
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
     await User.updateOne({ _id: user._id }, { $set: { failedLogins: 0, lastLoginAt: new Date() } });
     const token = jwt.sign({ uid: user._id, role: user.role }, JWT_SECRET, { expiresIn: TOKEN_TTL });
+    await User.updateOne({ _id: user._id }, { $set: { lastActiveAt: new Date() } });
+    await logActivity({
+      userId: user._id,
+      username: user.username,
+      action: "LOGIN_SUCCESS",
+      module: "AUTH",
+      details: "Admin logged in successfully",
+      ipAddress: req.ip || req.headers["x-forwarded-for"],
+      userAgent: req.headers["user-agent"]
+    });
     res.json({ token, user: { id: user._id, email: user.email, role: user.role, permissions: user.permissions || [] } });
   } catch (e) {
     res.status(500).json({ error: e.message });

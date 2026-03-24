@@ -60,9 +60,10 @@ const notifyAdmins = async (projectId, projectName, oldLabel) => {
     const admins = await User.find({ role: "admin", email: { $ne: "info@mindspire.com" } }).lean();
     const messages = admins.map(admin => ({
       userId: admin._id,
-      title: `Project label auto-changed to Critical`,
-      message: `Project "${projectName}" (ID: ${projectId}) label was automatically changed from "${oldLabel}" to "Critical" because its deadline is within 2 days.`,
-      type: "system",
+      title: `Critical Deadline Alert`,
+      message: `Project "${projectName}" has been escalated to Critical status due to an upcoming deadline (within 48 hours).`,
+      type: "project_priority",
+      href: `/projects/overview/${projectId}`,
       createdAt: new Date(),
     }));
     if (messages.length) await Notification.insertMany(messages);
@@ -140,22 +141,12 @@ router.get("/", authenticate, async (req, res) => {
   }
 
   // Role-based scoping
-  if (
-    req.user.role === "admin" ||
-    req.user.role === "sales" ||
-    req.user.role === "sales_manager" ||
-    req.user.role === "finance" ||
-    req.user.role === "finance_manager" ||
-    req.user.role === "marketer" ||
-    req.user.role === "project_manager"
-  ) {
+  if (req.user.role === "admin" || req.user.role === "finance" || req.user.role === "finance_manager" || req.user.role === "project_manager") {
     // Can optionally filter by employeeId
     const employeeId = req.query.employeeId?.toString();
     if (employeeId) filter.employeeId = employeeId;
-  } else if (req.user.role === "staff" || req.user.role === "marketing_manager" || req.user.role === "developer") {
-    // Staff, developer and marketing_manager can only see projects assigned to them
-    const staffUser = await User.findOne({ email: req.user.email }).lean();
-    if (!staffUser) return res.json([]);
+  } else if (req.user.role === "marketer" || req.user.role === "sales" || req.user.role === "staff" || req.user.role === "marketing_manager" || req.user.role === "developer" || req.user.role === "sales_manager") {
+    // These roles can only see projects assigned to them
     const employee = await Employee.findOne({ email: req.user.email }).lean();
     if (!employee) return res.json([]);
     filter.employeeId = employee._id;
@@ -216,18 +207,10 @@ router.get("/:id", authenticate, async (req, res) => {
     }
 
     // Role-based access check
-    if (
-      req.user.role === "admin" ||
-      req.user.role === "sales" ||
-      req.user.role === "sales_manager" ||
-      req.user.role === "finance" ||
-      req.user.role === "finance_manager" ||
-      req.user.role === "marketer" ||
-      req.user.role === "project_manager"
-    ) {
-      // Admin/sales/finance/marketer can view any project
-    } else if (req.user.role === "staff" || req.user.role === "marketing_manager" || req.user.role === "developer") {
-      // Staff/developer/marketing_manager can only view projects assigned to them
+    if (req.user.role === "admin" || req.user.role === "finance" || req.user.role === "finance_manager" || req.user.role === "project_manager") {
+      // Admin/finance/project_manager can view any project
+    } else if (req.user.role === "marketer" || req.user.role === "sales" || req.user.role === "staff" || req.user.role === "marketing_manager" || req.user.role === "developer" || req.user.role === "sales_manager") {
+      // Can only view projects assigned to them
       const employee = await Employee.findOne({ email: req.user.email }).lean();
       if (!employee || String(doc.employeeId) !== String(employee._id)) {
         return res.status(403).json({ error: "Access denied" });

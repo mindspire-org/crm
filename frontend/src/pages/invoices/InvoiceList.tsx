@@ -28,6 +28,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Combobox } from "@/components/ui/combobox";
 import { toast } from "@/components/ui/sonner";
 import ExcelJS from "exceljs";
 import {
@@ -125,6 +126,10 @@ export default function InvoiceList() {
   const [labels, setLabels] = useState<string>("");
   const [advanceAmount, setAdvanceAmount] = useState<string>("");
   const [attachments, setAttachments] = useState<{ name: string; path: string }[]>([]);
+  const [openQuickCreateProject, setOpenQuickCreateProject] = useState(false);
+  const [quickProjectTitle, setQuickProjectTitle] = useState("");
+  const [quickProjectStart, setQuickProjectStart] = useState(() => new Date().toISOString().slice(0, 10));
+  const [quickProjectDeadline, setQuickProjectDeadline] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleUploadClick = () => fileInputRef.current?.click();
@@ -482,6 +487,55 @@ export default function InvoiceList() {
       const pid = String(data?._id || data?.id || "");
       if (pid) navigate(`/projects/overview/${encodeURIComponent(pid)}`);
       toast.success("Project created");
+    } catch (e: any) {
+      toast.error(String(e?.message || "Failed to create project"));
+    }
+  };
+
+  const handleQuickCreateProject = async () => {
+    try {
+      const title = String(quickProjectTitle || "").trim();
+      if (!title) {
+        toast.error("Project title is required");
+        return;
+      }
+      if (!clientSel) {
+        toast.error("Please select a client first");
+        return;
+      }
+
+      const client = clientOptions.find(c => c.id === clientSel);
+      const payload: any = {
+        title,
+        client: client?.name || "-",
+        clientId: clientSel,
+        price: 0,
+        start: quickProjectStart ? new Date(quickProjectStart) : undefined,
+        deadline: quickProjectDeadline ? new Date(quickProjectDeadline) : undefined,
+        status: "Open",
+      };
+
+      const r = await fetch(`${API_BASE}/api/projects`, {
+        method: "POST",
+        headers: { ...getAuthHeaders({ "Content-Type": "application/json" }) },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await r.json().catch(() => null);
+      if (!r.ok) {
+        toast.error(String(data?.error || "Failed to create project"));
+        return;
+      }
+
+      const newId = String(data?._id || data?.id || "");
+      if (newId) {
+        setProjectOptions(prev => [...prev, { id: newId, title: title, clientId: clientSel }]);
+        setProjectSel(newId);
+        toast.success("Project created and selected");
+        setOpenQuickCreateProject(false);
+        setQuickProjectTitle("");
+        setQuickProjectDeadline("");
+      }
     } catch (e: any) {
       toast.error(String(e?.message || "Failed to create project"));
     }
@@ -961,36 +1015,40 @@ export default function InvoiceList() {
 
                 <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Client</div>
                 <div className="sm:col-span-9">
-                  <Select value={clientSel} onValueChange={(v)=>{ setClientSel(v); setProjectSel(""); }}>
-                    <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
-                    <SelectContent>
-                      {clientOptions.length === 0 ? (
-                        <SelectItem value="__no_clients__" disabled>No clients</SelectItem>
-                      ) : (
-                        clientOptions.map((c)=> (
-                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
+                  <Combobox
+                    options={clientOptions.map((c) => ({ value: c.id, label: c.name }))}
+                    value={clientSel}
+                    onValueChange={(v) => { setClientSel(v); setProjectSel(""); }}
+                    placeholder="Select client"
+                    emptyMessage="No clients found."
+                  />
                 </div>
 
                 <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Project</div>
-                <div className="sm:col-span-9">
-                  <Select value={projectSel} onValueChange={setProjectSel}>
-                    <SelectTrigger><SelectValue placeholder="Select project" /></SelectTrigger>
-                    <SelectContent>
-                      {(() => {
+                <div className="sm:col-span-9 flex items-center gap-2">
+                  <div className="flex-1">
+                    <Combobox
+                      options={(() => {
                         const list = clientSel
                           ? projectOptions.filter(p => !p.clientId || p.clientId === clientSel)
                           : projectOptions;
-                        if (list.length === 0) return <SelectItem value="__no_projects__" disabled>No projects</SelectItem>;
-                        return list.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
-                        ));
+                        return list.map((p) => ({ value: p.id, label: p.title }));
                       })()}
-                    </SelectContent>
-                  </Select>
+                      value={projectSel}
+                      onValueChange={setProjectSel}
+                      placeholder="Select project"
+                      emptyMessage="No projects found."
+                    />
+                  </div>
+                  <Button variant="outline" size="icon" onClick={() => {
+                    if (!clientSel) {
+                      toast.error("Please select a client first");
+                      return;
+                    }
+                    setOpenQuickCreateProject(true);
+                  }}>
+                    <Plus className="w-4 h-4" />
+                  </Button>
                 </div>
 
                 <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">TAX</div>
@@ -1165,6 +1223,38 @@ export default function InvoiceList() {
                   </div>
                 </>
               )}
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={openQuickCreateProject} onOpenChange={setOpenQuickCreateProject}>
+            <DialogContent className="bg-card max-w-md" aria-describedby={undefined}>
+              <DialogHeader>
+                <DialogTitle>Quick Create Project</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Project Title</Label>
+                  <Input 
+                    value={quickProjectTitle} 
+                    onChange={(e) => setQuickProjectTitle(e.target.value)} 
+                    placeholder="Enter project title"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Start Date</Label>
+                    <DatePicker value={quickProjectStart} onChange={setQuickProjectStart} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Deadline (Optional)</Label>
+                    <DatePicker value={quickProjectDeadline} onChange={setQuickProjectDeadline} />
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setOpenQuickCreateProject(false)}>Cancel</Button>
+                <Button onClick={handleQuickCreateProject}>Create & Select</Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
 
@@ -1537,11 +1627,20 @@ export default function InvoiceList() {
                                 <DropdownMenuItem onClick={()=>navigate(`/invoices/${encodeURIComponent(r.id.split('#')[1] || '1')}/preview`)}>Preview</DropdownMenuItem>
                                 <DropdownMenuItem onClick={async ()=>{
                                   const num = r.id.split('#')[1] || '';
-                                  if (!num) return;
+                                  if (!num || !confirm("Are you sure you want to delete this invoice?")) return;
                                   await fetch(`${API_BASE}/api/invoices/${encodeURIComponent(num)}`, { method: 'DELETE', headers: getAuthHeaders() });
                                   await loadInvoices();
-                                }}>Delete</DropdownMenuItem>
+                                  toast.success("Invoice deleted");
+                                }} className="text-destructive">Delete</DropdownMenuItem>
                                 <DropdownMenuItem onClick={()=>openPaymentFor(r.id)}>Add payment</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => {
+                                  const num = r.id.split('#')[1] || '';
+                                  if (num) navigate(`/invoices/${encodeURIComponent(num)}/preview?download=1`);
+                                }}>Download PDF</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => {
+                                  const num = r.id.split('#')[1] || '';
+                                  if (num) toast.info("Email feature coming soon");
+                                }}>Email to Client</DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </TableCell>

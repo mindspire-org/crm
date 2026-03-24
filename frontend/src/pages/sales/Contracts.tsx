@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Combobox } from "@/components/ui/combobox";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -326,28 +327,22 @@ export default function Contracts() {
 
               <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Client/Lead</div>
               <div className="sm:col-span-9">
-                <Select value={formClient || "-"} onValueChange={(v)=> setFormClient(v === "-" ? "" : v)}>
-                  <SelectTrigger><SelectValue placeholder="Client/Lead" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="-">Client/Lead</SelectItem>
-                    {clientLeadOptions.map((name) => (
-                      <SelectItem key={name} value={name}>{name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Combobox
+                  options={clientLeadOptions.map((name) => ({ value: name, label: name }))}
+                  value={formClient}
+                  onValueChange={setFormClient}
+                  placeholder="Select Client/Lead"
+                />
               </div>
 
               <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Project</div>
               <div className="sm:col-span-9">
-                <Select value={formProjectId} onValueChange={setFormProjectId}>
-                  <SelectTrigger><SelectValue placeholder="Project" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="-">Project</SelectItem>
-                    {projects.map((p) => (
-                      <SelectItem key={p._id} value={p._id}>{p.title || "-"}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Combobox
+                  options={projects.map((p) => ({ value: p._id, label: p.title || "-" }))}
+                  value={formProjectId === "-" ? "" : formProjectId}
+                  onValueChange={(v) => setFormProjectId(v || "-")}
+                  placeholder="Select Project"
+                />
               </div>
 
               <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">TAX</div>

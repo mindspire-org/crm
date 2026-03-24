@@ -8,7 +8,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { Search, Download, Upload, MessageSquare } from "lucide-react";
+import { Search, Download, Upload, MessageSquare, Printer, CheckCircle, CreditCard, MoreVertical, X } from "lucide-react";
+import { DatePicker } from "@/components/ui/date-picker";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useNavigate } from "react-router-dom";
@@ -32,7 +34,9 @@ interface Row {
 export default function Payroll() {
   const navigate = useNavigate();
   const [rows, setRows] = useState<Row[]>([]);
-  const [period, setPeriod] = useState(new Date().toISOString().slice(0,7));
+  const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
+  const [rangeFrom, setRangeFrom] = useState("");
+  const [rangeTo, setRangeTo] = useState("");
   const [query, setQuery] = useState("");
   const [openRun, setOpenRun] = useState(false);
   const [openImport, setOpenImport] = useState(false);
@@ -92,7 +96,13 @@ export default function Payroll() {
     (async () => {
       try {
         const effectivePeriod = tab === "history" ? "all" : period;
-        const url = `${API_BASE}/api/payroll?period=${encodeURIComponent(effectivePeriod)}${query ? `&q=${encodeURIComponent(query)}` : ""}`;
+        const sp = new URLSearchParams();
+        sp.set("period", effectivePeriod);
+        if (query) sp.set("q", query);
+        if (rangeFrom) sp.set("from", rangeFrom);
+        if (rangeTo) sp.set("to", rangeTo);
+        
+        const url = `${API_BASE}/api/payroll?${sp.toString()}`;
         const res = await fetch(url, { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
@@ -111,7 +121,7 @@ export default function Payroll() {
         }
       } catch {}
     })();
-  }, [period, query, tab]);
+  }, [period, query, tab, rangeFrom, rangeTo]);
 
   useEffect(() => {
     (async () => {
@@ -207,6 +217,326 @@ export default function Payroll() {
     openWhatsappChat("", msg); // User will have to pick the contact if phone is empty
   };
 
+  const printPayroll = (r: Row) => {
+    const win = window.open("", "_blank");
+    if (!win) return;
+    
+    // Employee details for the payslip header/info
+    const emp = empMap[r.employeeId || ""] || {};
+    
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Payslip - ${r.employee} - ${r.period}</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+            
+            * { box-sizing: border-box; -webkit-print-color-adjust: exact; }
+            body { 
+              font-family: 'Inter', sans-serif; 
+              margin: 0; 
+              padding: 0; 
+              background-color: #ffffff;
+              color: #1e293b;
+            }
+            .a4-container {
+              width: 210mm;
+              min-height: 297mm;
+              margin: 0 auto;
+              padding: 20mm;
+              position: relative;
+              overflow: hidden;
+            }
+            
+            /* Decorative Elements */
+            .bg-accent {
+              position: absolute;
+              top: 0;
+              right: 0;
+              width: 40%;
+              height: 150px;
+              background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+              clip-path: polygon(0 0, 100% 0, 100% 100%, 30% 100%);
+              z-index: 0;
+              opacity: 0.1;
+            }
+
+            .header {
+              display: flex;
+              justify-content: space-between;
+              align-items: start;
+              margin-bottom: 40px;
+              position: relative;
+              z-index: 1;
+            }
+            .brand-logo {
+              width: 180px;
+              height: auto;
+              margin-bottom: 10px;
+            }
+            .payslip-title {
+              text-align: right;
+            }
+            .payslip-title h1 {
+              font-size: 42px;
+              font-weight: 800;
+              margin: 0;
+              color: #7c3aed;
+              letter-spacing: -0.02em;
+            }
+            .period-badge {
+              display: inline-block;
+              background: #f1f5f9;
+              padding: 6px 12px;
+              border-radius: 8px;
+              font-weight: 600;
+              font-size: 14px;
+              color: #475569;
+              margin-top: 8px;
+            }
+
+            .info-grid {
+              display: grid;
+              grid-template-columns: 1.5fr 1fr;
+              gap: 40px;
+              margin-bottom: 40px;
+              background: #fafafa;
+              padding: 30px;
+              border-radius: 24px;
+              border: 1px solid #f1f5f9;
+            }
+            .info-section h3 {
+              font-size: 12px;
+              text-transform: uppercase;
+              letter-spacing: 0.1em;
+              color: #94a3b8;
+              margin: 0 0 12px 0;
+            }
+            .info-value {
+              font-size: 18px;
+              font-weight: 700;
+              color: #0f172a;
+            }
+            .info-sub {
+              font-size: 14px;
+              color: #64748b;
+              margin-top: 4px;
+            }
+
+            .salary-table {
+              width: 100%;
+              border-collapse: separate;
+              border-spacing: 0;
+              margin-bottom: 40px;
+            }
+            .salary-table th {
+              text-align: left;
+              padding: 16px 20px;
+              font-size: 12px;
+              font-weight: 700;
+              text-transform: uppercase;
+              letter-spacing: 0.05em;
+              color: #64748b;
+              border-bottom: 2px solid #f1f5f9;
+            }
+            .salary-table td {
+              padding: 20px;
+              font-size: 15px;
+              border-bottom: 1px solid #f1f5f9;
+            }
+            .salary-table tr:last-child td {
+              border-bottom: none;
+            }
+            .amount-col {
+              text-align: right;
+              font-family: 'Courier New', Courier, monospace;
+              font-weight: 600;
+            }
+            .deduction {
+              color: #ef4444;
+            }
+
+            .footer-grid {
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 20px;
+              align-items: end;
+            }
+            
+            .net-pay-card {
+              background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+              color: white;
+              padding: 30px;
+              border-radius: 24px;
+              text-align: right;
+              box-shadow: 0 10px 25px -5px rgba(124, 58, 237, 0.3);
+            }
+            .net-pay-label {
+              font-size: 14px;
+              font-weight: 500;
+              opacity: 0.9;
+              margin-bottom: 8px;
+            }
+            .net-pay-amount {
+              font-size: 36px;
+              font-weight: 800;
+              letter-spacing: -0.02em;
+            }
+
+            .signature-box {
+              border-top: 1px solid #e2e8f0;
+              padding-top: 12px;
+              width: 200px;
+              margin-top: 60px;
+              font-size: 13px;
+              color: #64748b;
+              font-weight: 500;
+            }
+
+            .company-contact {
+              margin-top: auto;
+              padding-top: 40px;
+              font-size: 12px;
+              color: #94a3b8;
+              display: flex;
+              justify-content: center;
+              gap: 20px;
+            }
+
+            @media print {
+              body { background: white; }
+              .a4-container { padding: 15mm; margin: 0; width: 100%; height: auto; }
+              .net-pay-card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="a4-container">
+            <div class="bg-accent"></div>
+            
+            <div class="header">
+              <div class="brand">
+                <img src="/HealthSpire%20logo.png" class="brand-logo" alt="HealthSpire">
+                <div style="font-size: 12px; color: #64748b; font-weight: 500;">
+                  764D2 Shah Jelani Rd Township Lahore<br>
+                  info@healthspire.org | +92 312 7231875
+                </div>
+              </div>
+              <div class="payslip-title">
+                <h1>PAYSLIP</h1>
+                <div class="period-badge">For the period of ${r.period}</div>
+              </div>
+            </div>
+
+            <div class="info-grid">
+              <div class="info-section">
+                <h3>Employee Information</h3>
+                <div class="info-value">${r.employee}</div>
+                <div class="info-sub">Employee ID: ${r.employeeId ? r.employeeId.toString().slice(-6).toUpperCase() : 'N/A'}</div>
+              </div>
+              <div class="info-section" style="text-align: right;">
+                <h3>Payment Details</h3>
+                <div class="info-value" style="color: #7c3aed;">${r.status.toUpperCase()}</div>
+                <div class="info-sub">Date: ${new Date().toLocaleDateString('en-PK', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
+              </div>
+            </div>
+
+            <table class="salary-table">
+              <thead>
+                <tr>
+                  <th>Description</th>
+                  <th class="amount-col">Amount (PKR)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="font-weight: 600; color: #334155;">Basic Salary</td>
+                  <td class="amount-col">${Number(r.basic).toLocaleString()}</td>
+                </tr>
+                <tr>
+                  <td>Allowances</td>
+                  <td class="amount-col">+ ${Number(r.allowances).toLocaleString()}</td>
+                </tr>
+                <tr>
+                  <td>Deductions</td>
+                  <td class="amount-col deduction">- ${Number(r.deductions).toLocaleString()}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="footer-grid">
+              <div class="signature-section">
+                <div class="signature-box">Employer Signature</div>
+                <div class="signature-box">Employee Signature</div>
+              </div>
+              <div class="net-pay-card">
+                <div class="net-pay-label">Net Payable Amount</div>
+                <div class="net-pay-amount">${money.format(r.net).replace('PKR', '').trim()} <span style="font-size: 16px; font-weight: 600;">PKR</span></div>
+              </div>
+            </div>
+
+            <div class="company-contact">
+              <span>www.healthspire.org</span>
+              <span>•</span>
+              <span>info@healthspire.org</span>
+              <span>•</span>
+              <span>+92 312 7231875</span>
+            </div>
+          </div>
+          <script>
+            window.onload = () => {
+              setTimeout(() => {
+                window.print();
+                // window.close();
+              }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `;
+    win.document.write(html);
+    win.document.close();
+  };
+
+  const processPayroll = async (r: Row) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/payroll/${r.id}/process`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        toast.success("Payroll processed and ledger updated");
+        const updated = await res.json();
+        setRows(rows.map(x => x.id === r.id ? { ...x, status: updated.status } : x));
+      } else {
+        const err = await res.json();
+        toast.error(err.error || "Failed to process");
+      }
+    } catch (e) {
+      toast.error("Connection error");
+    }
+  };
+
+  const payPayroll = async (r: Row) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/payroll/${r.id}/pay`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        toast.success("Payroll marked as paid and journal posted");
+        const updated = await res.json();
+        setRows(rows.map(x => x.id === r.id ? { ...x, status: updated.status } : x));
+      } else {
+        const err = await res.json();
+        toast.error(err.error || "Failed to mark as paid");
+      }
+    } catch (e) {
+      toast.error("Connection error");
+    }
+  };
+
   const list = useMemo(() => {
     const s = query.toLowerCase();
     if (tab === "history") return rows.filter((r) => r.employee.toLowerCase().includes(s));
@@ -299,10 +629,34 @@ export default function Payroll() {
                 <TabsTrigger value="history">History</TabsTrigger>
               </TabsList>
             </Tabs>
+          <div className="flex items-center gap-2">
+            {(tab === "history" || (rangeFrom || rangeTo)) && (
+              <div className="flex items-center gap-2 mr-2">
+                <DatePicker 
+                  value={rangeFrom} 
+                  onChange={setRangeFrom} 
+                  placeholder="From Date"
+                  className="h-9 w-32"
+                />
+                <span className="text-slate-400">→</span>
+                <DatePicker 
+                  value={rangeTo} 
+                  onChange={setRangeTo} 
+                  placeholder="To Date"
+                  className="h-9 w-32"
+                />
+                {(rangeFrom || rangeTo) && (
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setRangeFrom(""); setRangeTo(""); }}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <Label className="text-sm text-muted-foreground">Period</Label>
               <Input className="w-32" placeholder="YYYY-MM" value={period} onChange={(e)=>setPeriod(e.target.value)} disabled={tab === "history"} />
             </div>
+          </div>
           </div>
 
           <Table>
@@ -347,15 +701,43 @@ export default function Payroll() {
                   <TableCell className="font-semibold">{money.format(r.net)}</TableCell>
                   <TableCell>{statusBadge(r.status)}</TableCell>
                   <TableCell>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
-                      onClick={() => sendOnWhatsapp(r)}
-                      title="Send via WhatsApp"
-                    >
-                      <MessageSquare className="w-4 h-4" />
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+                        onClick={() => sendOnWhatsapp(r)}
+                        title="Send via WhatsApp"
+                      >
+                        <MessageSquare className="w-4 h-4" />
+                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreVertical className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => printPayroll(r)}>
+                            <Printer className="w-4 h-4 mr-2" /> Print Payslip
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => sendOnWhatsapp(r)}>
+                            <MessageSquare className="w-4 h-4 mr-2 text-green-600" /> WhatsApp
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          {r.status === "draft" && (
+                            <DropdownMenuItem onClick={() => processPayroll(r)}>
+                              <CheckCircle className="w-4 h-4 mr-2 text-blue-600" /> Process (Accrue)
+                            </DropdownMenuItem>
+                          )}
+                          {r.status === "processed" && (
+                            <DropdownMenuItem onClick={() => payPayroll(r)}>
+                              <CreditCard className="w-4 h-4 mr-2 text-emerald-600" /> Mark as Paid
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

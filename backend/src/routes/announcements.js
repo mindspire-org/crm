@@ -1,6 +1,9 @@
 import { Router } from "express";
 import Announcement from "../models/Announcement.js";
+import User from "../models/User.js";
+import Notification from "../models/Notification.js";
 import { authenticate } from "../middleware/auth.js";
+import { broadcastSse } from "../services/realtime.js";
 
 const router = Router();
 
@@ -58,6 +61,50 @@ router.post("/", authenticate, async (req, res) => {
       createdBy: req.user?._id,
       createdByName,
     });
+
+    // Create notifications for target users
+    try {
+      const targetRoles = [];
+      if (doc.shareWith.teamMembers) {
+        // Broadly all staff/admin roles
+        targetRoles.push("admin", "staff", "marketer", "marketing_manager", "sales", "finance", "developer", "project_manager");
+      }
+      if (doc.shareWith.clients) targetRoles.push("client");
+      if (doc.shareWith.leads) targetRoles.push("lead");
+
+      if (targetRoles.length > 0) {
+        const users = await User.find({ 
+          role: { $in: targetRoles },
+          _id: { $ne: req.user?._id } // Don't notify self
+        }).select("_id").lean();
+
+        if (users.length > 0) {
+          const notifications = users.map(u => ({
+            userId: u._id,
+            type: "announcement",
+            title: `New Notice: ${doc.title}`,
+            message: doc.message.replace(/<[^>]*>?/gm, '').substring(0, 100) + "...",
+            href: `/announcements/${doc._id}`,
+            meta: { announcementId: doc._id }
+          }));
+
+          await Notification.insertMany(notifications);
+          
+          // Broadcast to trigger real-time popup/refresh
+          broadcastSse({ 
+            event: "announcement", 
+            data: { 
+              id: doc._id, 
+              title: doc.title, 
+              message: doc.message,
+              roles: targetRoles 
+            } 
+          });
+        }
+      }
+    } catch (notifErr) {
+      console.error("Failed to create announcement notifications:", notifErr);
+    }
 
     res.status(201).json(doc);
   } catch (e) {

@@ -1,3 +1,4 @@
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -72,24 +73,27 @@ export default function TicketsStatistics() {
       <Card>
         <CardContent className="p-4">
           <div className="flex items-center gap-2 flex-wrap mb-3">
-            <Select value={type} onValueChange={setType}>
-              <SelectTrigger className="w-40"><SelectValue placeholder="- Ticket type -"/></SelectTrigger>
-              <SelectContent>
-                {typeOptions.map(opt => (<SelectItem key={opt} value={opt}>{opt}</SelectItem>))}
-              </SelectContent>
-            </Select>
-            <Select value={assigned} onValueChange={setAssigned}>
-              <SelectTrigger className="w-40"><SelectValue placeholder="- Assigned to -"/></SelectTrigger>
-              <SelectContent>
-                {assignedOptions.map(opt => (<SelectItem key={opt} value={opt}>{opt}</SelectItem>))}
-              </SelectContent>
-            </Select>
-            <Select value={label} onValueChange={setLabel}>
-              <SelectTrigger className="w-40"><SelectValue placeholder="- Label -"/></SelectTrigger>
-              <SelectContent>
-                {labelOptions.map(opt => (<SelectItem key={opt} value={opt}>{opt}</SelectItem>))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={type}
+              onValueChange={setType}
+              options={typeOptions.map(opt => ({ value: opt, label: opt }))}
+              placeholder="- Ticket type -"
+              className="w-40"
+            />
+            <SearchableSelect
+              value={assigned}
+              onValueChange={setAssigned}
+              options={assignedOptions.map(opt => ({ value: opt, label: opt }))}
+              placeholder="- Assigned to -"
+              className="w-40"
+            />
+            <SearchableSelect
+              value={label}
+              onValueChange={setLabel}
+              options={labelOptions.map(opt => ({ value: opt, label: opt }))}
+              placeholder="- Label -"
+              className="w-40"
+            />
             <div className="inline-flex items-center gap-2">
               <Button variant="outline" size="icon" onClick={()=>setCursor(new Date(cursor.getFullYear(), cursor.getMonth()-1, 1))}><ChevronLeft className="w-4 h-4"/></Button>
               <span className="text-sm text-muted-foreground">{ymLabel}</span>

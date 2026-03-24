@@ -8,7 +8,6 @@ import {
   FolderKanban,
   MessageSquare,
   Calendar,
-  
   Settings,
   ChevronDown,
   Building2,
@@ -17,7 +16,6 @@ import {
   Clock,
   CreditCard,
   Folder,
-  // 3. CRM
   CheckSquare,
   StickyNote,
   Activity,
@@ -31,6 +29,7 @@ import {
   Ticket,
   HelpCircle,
   X,
+  ShieldAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { API_BASE } from "@/lib/api/base";
@@ -46,6 +45,17 @@ interface NavItem {
 const navigation: NavItem[] = [
   // 1. Dashboard
   { title: "Dashboard", href: "/", icon: LayoutDashboard },
+
+  // Performance & Targets (Sales/Marketer focused)
+  { 
+    title: "My Performance", 
+    href: "/performance/targets", 
+    icon: Activity,
+    children: [
+      { title: "My Targets", href: "/performance/targets" },
+      { title: "Earnings & Stats", href: "/performance/earnings" },
+    ]
+  },
 
   // Appointments (Admin-only)
   { title: "Appointments", href: "/appointments", icon: Calendar },
@@ -77,6 +87,7 @@ const navigation: NavItem[] = [
     children: [
       { title: "Dashboard", href: "/hrm" },
       { title: "Employees", href: "/hrm/employees" },
+      { title: "My Profile", href: "/hrm/my-profile" },
       { title: "Attendance", href: "/hrm/attendance" },
       { title: "Leave", href: "/hrm/leaves" },
       { title: "Payroll", href: "/hrm/payroll" },
@@ -133,7 +144,6 @@ const navigation: NavItem[] = [
   { title: "Tickets", href: "/tickets", icon: Ticket },
   { title: "Events", href: "/events", icon: Calendar },
   { title: "Tasks", href: "/tasks", icon: CheckSquare },
-  { title: "Team Activity", href: "/tasks/activity", icon: Activity },
   { title: "Messages", href: "/messages", icon: MessageSquare },
   { title: "Announcements", href: "/announcements", icon: Megaphone },
   { title: "Calendar", href: "/calendar", icon: Calendar },
@@ -201,8 +211,11 @@ const navigation: NavItem[] = [
     icon: Users,
     children: [
       { title: "Manage Users", href: "/user-management/users" },
+      { title: "Target Command", href: "/admin/targets" },
+      { title: "Team Progress", href: "/admin/team-progress" },
       { title: "Roles & Permissions", href: "/user-management/roles" },
       { title: "Delete Request", href: "/user-management/delete-request" },
+      { title: "Audit Logs", href: "/admin/audit-logs" },
     ],
   },
 ];
@@ -268,18 +281,37 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onClose }: SidebarPro
 
   const isAllowed = (item: NavItem) => {
     // Explicitly hide admin-only items for non-admin roles (except project_manager gets more access)
-    const adminOnlyItems = ["Appointments", "Team Activity", "User Management", "Client portal"];
+    const adminOnlyItems = ["Appointments", "Team Activity", "User Management", "Client portal", "Audit Logs"];
     if (adminOnlyItems.includes(item.title) && role !== "admin") {
       return false;
+    }
+    
+    // Also check if any child item is admin-only
+    if (item.children) {
+      const hasAdminOnlyChild = item.children.some(child => child.title === "Audit Logs");
+      if (hasAdminOnlyChild && role !== "admin") {
+        // We handle this by filtering children later, but for titles like "Audit Logs" directly:
+        if (item.title === "Audit Logs") return false;
+      }
     }
     
     // Hide Prospects and Leads/CRM section for project_manager (not relevant)
     if ((item.title === "Prospects" || item.title === "CRM") && role === "project_manager") {
       return false;
     }
+
+    // Performance section visibility
+    if (item.title === "My Performance") {
+      return ["admin", "marketer", "sales", "sales_manager", "marketing_manager", "finance", "finance_manager"].includes(role);
+    }
     
-    // Hide Sales section for non-admin and non-finance roles
-    if (item.title === "Sales" && !["admin", "finance", "finance_manager", "finance manager"].includes(role)) {
+    // Hide Subscription & Reports for marketer/sales
+    if ((item.title === "Subscriptions" || item.title === "Reports") && (role === "marketer" || role === "sales" || role === "sales_manager")) {
+      return false;
+    }
+    
+    // Hide Sales section for non-admin, non-finance, and non-sales/marketing roles
+    if (item.title === "Sales" && !["admin", "finance", "finance_manager", "finance manager", "sales", "marketer", "sales_manager", "marketing_manager"].includes(role)) {
       return false;
     }
     
@@ -349,15 +381,24 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onClose }: SidebarPro
       // For developers, only show specific HRM items
       if (role === "developer" && item.title === "HRM") {
         nextChildren = nextChildren.filter((c) => 
-          c.href === "/hrm/attendance" || c.href === "/hrm/my-salary-ledger"
+          c.href === "/hrm/attendance" || c.href === "/hrm/my-salary-ledger" || c.href === "/hrm/my-profile"
         );
       }
       
       // For team_members, limit HRM items
       if (role === "team_member" && item.title === "HRM") {
         nextChildren = nextChildren.filter((c) => 
-          c.href === "/hrm/attendance" || c.href === "/hrm/leaves" || c.href === "/hrm/my-salary-ledger"
+          c.href === "/hrm/attendance" || c.href === "/hrm/leaves" || c.href === "/hrm/my-salary-ledger" || c.href === "/hrm/my-profile"
         );
+      }
+
+      // Ensure 'My Profile' is visible for other non-admin roles (marketer, sales, etc)
+      if (["marketer", "sales", "staff", "finance"].includes(role) && item.title === "HRM") {
+        const hasMyProfile = nextChildren.some(c => c.href === "/hrm/my-profile");
+        if (!hasMyProfile && item.children?.some(c => c.href === "/hrm/my-profile")) {
+          const profileItem = item.children.find(c => c.href === "/hrm/my-profile");
+          if (profileItem) nextChildren.push(profileItem);
+        }
       }
       
       return { ...item, children: nextChildren };
@@ -378,8 +419,10 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onClose }: SidebarPro
   };
 
   const isActive = (href: string) => {
-    if (href === "/") return location.pathname === "/";
-    return location.pathname.startsWith(href);
+    const path = location.pathname;
+    if (href === "/") return path === "/";
+    if (href === "/tasks") return path === "/tasks";
+    return path.startsWith(href);
   };
 
   return (

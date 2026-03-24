@@ -50,16 +50,21 @@ const Payroll = lazy(() => import("./pages/hrm/Payroll"));
 const HrmDashboard = lazy(() => import("./pages/hrm/HrmDashboard"));
 const Departments = lazy(() => import("./pages/hrm/Departments"));
 const Recruitment = lazy(() => import("./pages/hrm/Recruitment"));
+const MyTargets = lazy(() => import("./pages/performance/MyTargets"));
 const LeadAssignment = lazy(() => import("./pages/admin/LeadAssignment"));
 const LeadApprovals = lazy(() => import("./pages/admin/LeadApprovals"));
 const CommissionsPage = lazy(() => import("./pages/hrm/CommissionsPage"));
 const Announcements = lazy(() => import("./pages/announcements/Announcements"));
 const Backups = lazy(() => import("./pages/admin/Backups"));
+const AuditLogs = lazy(() => import("./pages/admin/AuditLogs"));
 const AddAnnouncement = lazy(() => import("./pages/announcements/AddAnnouncement"));
 const AnnouncementView = lazy(() => import("./pages/announcements/AnnouncementView"));
 const Subscriptions = lazy(() => import("./pages/subscriptions/Subscriptions"));
 const SubscriptionDetails = lazy(() => import("./pages/subscriptions/SubscriptionDetails"));
-const Messaging = lazy(() => import("./pages/messaging"));
+const SubscriptionPrint = lazy(() => import("./pages/subscriptions/SubscriptionPrint"));
+const AnnouncementPoster = lazy(() => import("./pages/announcements/AnnouncementPoster"));
+const JobPoster = lazy(() => import("./pages/hrm/JobPoster"));
+const Messaging = lazy(() => import("./pages/messaging/index"));
 const Orders = lazy(() => import("./pages/sales/Orders"));
 const Store = lazy(() => import("./pages/sales/Store"));
 const Checkout = lazy(() => import("./pages/sales/Checkout"));
@@ -71,15 +76,18 @@ const ContractDetail = lazy(() => import("./pages/sales/ContractDetail"));
 const ContractPreview = lazy(() => import("./pages/sales/ContractPreview"));
 const Expenses = lazy(() => import("./pages/sales/Expenses"));
 const RecurringRevenue = lazy(() => import("./pages/sales/RecurringRevenue"));
+const ExpenseDetail = lazy(() => import("./pages/sales/ExpenseDetail"));
 const EstimateList = lazy(() => import("./pages/prospects/EstimateList"));
-const EstimateDetail = lazy(() => import("./pages/prospects/EstimatePreview"));
+const EstimateDetail = lazy(() => import("./pages/prospects/EstimateDetailPage"));
 const EstimateRequests = lazy(() => import("./pages/prospects/EstimateRequests"));
 const EstimateForms = lazy(() => import("./pages/prospects/EstimateForms"));
 const Proposals = lazy(() => import("./pages/prospects/Proposals"));
-const ProposalDetail = lazy(() => import("./pages/prospects/ProposalDetail"));
-const ManageUsers = lazy(() => import("./pages/user-management/ManageUsers"));
+const ProposalDetail = lazy(() => import("./pages/prospects/ProposalDetail.tsx"));
+const TeamProgress = lazy(() => import("./pages/admin/TeamProgress"));
+const ManageUsers = lazy(() => import("./pages/user-management/ManageUsers.tsx"));
 const RolesPermissions = lazy(() => import("./pages/user-management/RolesPermissions"));
 const DeleteRequest = lazy(() => import("./pages/user-management/DeleteRequest"));
+const TargetManagement = lazy(() => import("./pages/performance/TargetManagement"));
 const InvoicesSummary = lazy(() => import("./pages/reports/sales/InvoicesSummary"));
 const IncomeVsExpenses = lazy(() => import("./pages/reports/finance/IncomeVsExpenses"));
 const ExpensesSummary = lazy(() => import("./pages/reports/finance/ExpensesSummary"));
@@ -134,6 +142,8 @@ const MySalaryLedger = lazy(() => import("./pages/hrm/MySalaryLedger"));
 const VendorLedger = lazy(() => import("./pages/accounting/VendorLedger"));
 const Vendors = lazy(() => import("./pages/accounting/Vendors"));
 const Recovery = lazy(() => import("./pages/accounting/Recovery"));
+const PublicJobApplication = lazy(() => import("./pages/public/PublicJobApplication"));
+const PublicJobEnrollment = lazy(() => import("./pages/public/PublicJobEnrollment"));
 
 const queryClient = new QueryClient();
 
@@ -235,16 +245,18 @@ const RequireAuth = ({ children }: { children: React.ReactNode }) => {
 
 const DashboardByRole = () => {
   const user = getStoredAuthUser();
-  const role = user?.role || "admin";
+  const role = String(user?.role || "admin").toLowerCase().trim();
   
   switch (role) {
     case "client":
       return <ClientDashboard />;
     case "marketer":
-      return <MarketerDashboard />;
+    case "sales":
+    case "sales_manager":
+    case "sales manager":
     case "marketing_manager":
     case "marketing manager":
-      return <CrmDashboard />;
+      return <MarketerDashboard />;
     case "staff":
       return <TeamMemberDashboard />;
     default:
@@ -282,6 +294,12 @@ const App = () => (
           {/* Public appointment booking form */}
           <Route path="/public/appointments/book" element={<AppointmentsBook />} />
 
+          {/* Public Job Application form */}
+          <Route path="/public/jobs/:id/apply" element={<PublicJobApplication />} />
+
+          {/* Public Job Enrollment form */}
+          <Route path="/public/jobs/:id/enroll" element={<PublicJobEnrollment />} />
+
           {/* Protected app */}
           <Route
             element={
@@ -316,12 +334,14 @@ const App = () => (
             {/* HRM Routes */}
             <Route path="/hrm" element={getStoredAuthUser()?.role === "admin" ? <HrmDashboard /> : <Navigate to="/" replace />} />
             <Route path="/hrm/employees" element={getStoredAuthUser()?.role === "admin" ? <Employees /> : <Navigate to="/" replace />} />
+            <Route path="/hrm/my-profile" element={<EmployeeProfile />} />
             <Route path="/hrm/employees/:id" element={getStoredAuthUser()?.role === "admin" ? <EmployeeProfile /> : <Navigate to="/" replace />} />
             <Route path="/hrm/attendance" element={<Attendance />} />
             <Route path="/hrm/leaves" element={getStoredAuthUser()?.role === "admin" ? <Leave /> : <Navigate to="/" replace />} />
             <Route path="/hrm/payroll" element={getStoredAuthUser()?.role === "admin" ? <Payroll /> : <Navigate to="/" replace />} />
             <Route path="/hrm/departments" element={getStoredAuthUser()?.role === "admin" ? <Departments /> : <Navigate to="/" replace />} />
             <Route path="/hrm/recruitment" element={getStoredAuthUser()?.role === "admin" ? <Recruitment /> : <Navigate to="/" replace />} />
+            <Route path="/hrm/jobs/:id/poster" element={getStoredAuthUser()?.role === "admin" ? <JobPoster /> : <Navigate to="/" replace />} />
             <Route path="/hrm/commissions" element={getStoredAuthUser()?.role === "admin" ? <CommissionsPage /> : <Navigate to="/" replace />} />
             <Route path="/hrm/my-salary-ledger" element={<MySalaryLedger />} />
             {/* Project Routes */}
@@ -332,6 +352,10 @@ const App = () => (
             <Route path="/projects/timeline" element={<Timeline />} />
             {/* Portfolio */}
             <Route path="/portfolio" element={<Portfolio />} />
+            {/* Performance Routes */}
+            <Route path="/performance/targets" element={<MyTargets />} />
+            <Route path="/performance/earnings" element={<MyTargets />} />
+            <Route path="/admin/targets" element={<TargetManagement />} />
             {/* Communication */}
             <Route path="/messages" element={<Messaging />} />
             <Route path="/email" element={<Chat />} />
@@ -344,8 +368,10 @@ const App = () => (
               element={getStoredAuthUser()?.role === "admin" ? <AddAnnouncement /> : <Navigate to="/announcements" replace />}
             />
             <Route path="/announcements/:id" element={<AnnouncementView />} />
+            <Route path="/announcements/:id/poster" element={<AnnouncementPoster />} />
             <Route path="/subscriptions" element={<Subscriptions />} />
             <Route path="/subscriptions/:id" element={<SubscriptionDetails />} />
+          <Route path="/subscriptions/:id/print" element={<SubscriptionPrint />} />
             <Route path="/orders" element={<Orders />} />
             {/* Alias route so Sidebar link /sales/orders resolves to the same Orders list */}
             <Route path="/sales" element={<Navigate to="/sales/orders" replace />} />
@@ -357,12 +383,14 @@ const App = () => (
             <Route path="/sales/checkout" element={<Checkout />} />
             <Route path="/sales/payments" element={<Payments />} />
             <Route path="/sales/expenses" element={<Expenses />} />
+            <Route path="/sales/expenses/:id" element={<ExpenseDetail />} />
             <Route path="/sales/items" element={<Items />} />
             <Route path="/sales/contracts" element={<Contracts />} />
             <Route path="/sales/contracts/:id" element={<ContractDetail />} />
             {/* Prospects */}
             <Route path="/prospects/estimates" element={<EstimateList />} />
             <Route path="/prospects/estimates/:id" element={<EstimateDetail />} />
+            <Route path="/prospects/estimates/:id/preview" element={<EstimatePreview />} />
             <Route path="/prospects/estimate-requests" element={<EstimateRequests />} />
             <Route path="/prospects/estimate-forms" element={<EstimateForms />} />
             <Route path="/prospects/proposals" element={<Proposals />} />
@@ -469,6 +497,14 @@ const App = () => (
             <Route 
               path="/admin/backups" 
               element={getStoredAuthUser()?.role === "admin" ? <Backups /> : <Navigate to="/" replace />} 
+            />
+            <Route 
+              path="/admin/team-progress" 
+              element={getStoredAuthUser()?.role === "admin" ? <TeamProgress /> : <Navigate to="/" replace />} 
+            />
+            <Route 
+              path="/admin/audit-logs" 
+              element={getStoredAuthUser()?.role === "admin" ? <AuditLogs /> : <Navigate to="/" replace />} 
             />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/settings/:section" element={<SettingsPage />} />

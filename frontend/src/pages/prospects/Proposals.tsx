@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Combobox } from "@/components/ui/combobox";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -249,15 +250,17 @@ export default function Proposals() {
 
                 <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Client/Lead</div>
                 <div className="sm:col-span-9">
-                  <Select value={clientId} onValueChange={(v)=>{ setClientId(v); const c = clients.find((x:any)=>String(x._id)===String(v)); if (c) setClient(clientDisplay(c)); }}>
-                    <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="-">- Select client -</SelectItem>
-                      {clients.map((c:any)=> (
-                        <SelectItem key={String(c._id)} value={String(c._id)}>{clientDisplay(c)}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Combobox
+                    options={clients.map((c: any) => ({ value: String(c._id), label: clientDisplay(c) }))}
+                    value={clientId === "-" ? "" : clientId}
+                    onValueChange={(v) => {
+                      setClientId(v || "-");
+                      const c = clients.find((x: any) => String(x._id) === String(v));
+                      if (c) setClient(clientDisplay(c));
+                      else setClient("");
+                    }}
+                    placeholder="Select client"
+                  />
                 </div>
 
                 <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Title</div>

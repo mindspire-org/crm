@@ -14,6 +14,15 @@ router.get("/", async (req, res) => {
     const filter = {};
     if (clientId) filter.clientId = clientId;
     if (q) filter.$or = [{ client: { $regex: q, $options: "i" } }, { status: { $regex: q, $options: "i" } }];
+    // Role-based scoping
+    const role = String(req.user?.role || "").toLowerCase().trim();
+    if (role === "marketer" || role === "sales" || role === "sales_manager") {
+      filter.$or = [
+        { createdBy: req.user._id },
+        { salesPersonId: req.user._id }
+      ];
+    }
+
     const items = await Order.find(filter).sort({ createdAt: -1 }).lean();
     res.json(items);
   } catch (e) { res.status(400).json({ error: e.message }); }

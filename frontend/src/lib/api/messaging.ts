@@ -24,6 +24,8 @@ export interface Message {
   createdAt: string;
   updatedAt: string;
   isDeleted?: boolean;
+  isStarred?: boolean;
+  isPinned?: boolean;
 }
 
 export interface Conversation {

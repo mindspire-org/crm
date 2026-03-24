@@ -23,6 +23,16 @@ router.get("/", async (req, res) => {
   }
 });
 
+router.get("/:id", async (req, res) => {
+  try {
+    const doc = await Job.findById(req.params.id).lean();
+    if (!doc) return res.status(404).json({ error: "Not found" });
+    res.json(doc);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 router.post("/", async (req, res) => {
   try {
     const doc = await Job.create(req.body);

@@ -9,8 +9,9 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { Label } from "@/components/ui/label";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, CheckCircle2, Edit, MoreHorizontal, RefreshCw, Search, Plus, Tags, Trash2 } from "lucide-react";
+import { Calendar, CheckCircle2, Edit, MoreHorizontal, RefreshCw, Search, Plus, Tags, Trash2, Printer } from "lucide-react";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 import { API_BASE } from "@/lib/api/base";
 import { getAuthHeaders } from "@/lib/api/auth";
 
@@ -70,6 +71,7 @@ export default function Subscriptions() {
   const [newLabelColor, setNewLabelColor] = useState("#4F46E5");
 
   const [editingSubscription, setEditingSubscription] = useState<SubscriptionDoc | null>(null);
+  const navigate = useNavigate();
 
   const [title, setTitle] = useState("");
   const [productName, setProductName] = useState("");
@@ -698,9 +700,19 @@ export default function Subscriptions() {
                         ) : "-"}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
-                        <button onClick={() => window.location.href = `/subscriptions/${s._id}`} className="text-blue-600 hover:text-blue-800 hover:underline">
-                          {s.title || "-"}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => window.location.href = `/subscriptions/${s._id}`} className="text-blue-600 hover:text-blue-800 hover:underline">
+                            {s.title || "-"}
+                          </button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => navigate(`/subscriptions/${s._id}/print`, { state: { data: s, type: 'OVERVIEW' } })}
+                          >
+                            <Printer className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-muted-foreground">
                         <div className="flex flex-col">

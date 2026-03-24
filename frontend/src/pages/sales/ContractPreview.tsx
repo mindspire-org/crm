@@ -108,13 +108,14 @@ export default function ContractPreview() {
     const rows: { label: string; value: string; bold?: boolean }[] = [{ label: "Sub Total", value: `Rs.${subTotal.toLocaleString()}` }];
     if (tax1 > 0) rows.push({ label: `Tax (${doc?.tax1}%)`, value: `Rs.${tax1.toLocaleString()}` });
     if (tax2 > 0) rows.push({ label: `Tax (${doc?.tax2}%)`, value: `Rs.${tax2.toLocaleString()}` });
+    if (Number(doc?.discount || 0) > 0) rows.push({ label: "Discount", value: `-Rs.${Number(doc.discount).toLocaleString()}` });
     rows.push({ label: "Total Amount", value: `Rs.${total.toLocaleString()}`, bold: true });
     return rows;
-  }, [subTotal, tax1, tax2, doc?.tax1, doc?.tax2, total]);
+  }, [subTotal, tax1, tax2, doc?.tax1, doc?.tax2, doc?.discount, total]);
 
   const sections = useMemo(() => {
-    if (!doc?.note) return [];
-    return [{ heading: "CONTRACT TERMS & SCOPE", content: doc.note.replace(/<[^>]*>/g, "") }];
+    if (!doc?.note) return [{ heading: "CONTRACT TERMS & SCOPE", content: "Detailed scope of work and technical specifications." }];
+    return [{ heading: "CONTRACT TERMS & SCOPE", content: doc.note }];
   }, [doc?.note]);
 
   if (!doc) return <div className="p-8 text-center">Loading contract...</div>;
@@ -148,12 +149,12 @@ export default function ContractPreview() {
       <div className="shadow-2xl bg-white rounded-sm overflow-hidden">
         <HaroomPrintTemplate
           ref={pdfTargetRef}
-          title="CONTRACT AGREEMENT"
+          title={doc.title?.toUpperCase() || "CONTRACT AGREEMENT"}
           brand={viewBrand}
           clientName={doc.client || "-"}
-          clientAddress={doc.clientAddress}
+          clientAddress={doc.clientAddress || doc.address || ""}
           docNumber={doc.number || doc._id?.slice(-8).toUpperCase() || "-"}
-          date={doc.contractDate ? new Date(doc.contractDate).toLocaleDateString() : new Date().toLocaleDateString()}
+          date={doc.contractDate ? new Date(doc.contractDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) : new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
           items={items.map(it => ({
             description: `${it.name}${it.description ? `\n${it.description}` : ""}`,
             qty: it.quantity,
@@ -161,12 +162,17 @@ export default function ContractPreview() {
             total: Number(it.quantity || 0) * Number(it.rate || 0)
           }))}
           totals={totals}
+          timeframe={doc.timeframe}
+          timeframeStartDate={doc.timeframeStartDate}
+          timeframeDays={doc.timeframeDays}
           sections={sections}
+          paymentInformation={doc.paymentTerms || "50% Upfront Advance Payment required to initiate the project. Remaining 50% upon successful deployment and handover."}
+          termsText={doc.termsConditions || "1. Validity: This contract is valid for 15 days from the date of issuance.\n2. Support: Post-deployment support is included for 30 days.\n3. Confidentiality: Both parties agree to maintain strict confidentiality of shared business data."}
           signatureData={{
             companyName: "Health Spire (Pvt) Ltd",
             companySignatory: "Mr. Qutaibah Talat",
             companyDesignation: "CEO",
-            clientName: doc.client || "Client Name"
+            clientName: doc.client || "Authorized Client Representative"
           }}
         />
       </div>

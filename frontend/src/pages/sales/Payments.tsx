@@ -7,7 +7,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { RefreshCw, Search, Plus, ChevronLeft, ChevronRight } from "lucide-react";
+import { RefreshCw, Search, Plus, ChevronLeft, ChevronRight, Printer } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { API_BASE } from "@/lib/api/base";
@@ -449,7 +449,26 @@ export default function Payments() {
                           <TableCell>{fmtDate(p.date)}</TableCell>
                           <TableCell>{p.method || "-"}</TableCell>
                           <TableCell>{p.note || "—"}</TableCell>
-                          <TableCell>Rs.{Number(p.amount || 0).toLocaleString()}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-between gap-2">
+                              <span>Rs.{Number(p.amount || 0).toLocaleString()}</span>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => {
+                                  const meta = getPaymentInvoiceMeta(p);
+                                  if (meta.invoiceObjectId) {
+                                    window.open(`/invoices/${meta.invoiceObjectId}/preview?print=1`, "_blank");
+                                  } else {
+                                    toast({ title: "No Invoice", description: "This payment is not linked to an invoice preview.", variant: "destructive" });
+                                  }
+                                }}
+                              >
+                                <Printer className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
                         </TableRow>
                       ))}
                       <TableRow>

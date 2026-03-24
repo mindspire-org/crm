@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
@@ -306,20 +307,20 @@ export default function Timeline() {
                 })}
               </SelectContent>
             </Select>
-            <Select value={assignee} onValueChange={setAssignee}>
-              <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="Assigned to"/></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="-">- Assigned to -</SelectItem>
-                {assignees.map(a => (<SelectItem key={a} value={a}>{a}</SelectItem>))}
-              </SelectContent>
-            </Select>
-            <Select value={milestone} onValueChange={setMilestone}>
-              <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="Milestone"/></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="-">- Milestone -</SelectItem>
-                {milestones.map(m => (<SelectItem key={m} value={m}>{m}</SelectItem>))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={assignee}
+              onValueChange={setAssignee}
+              options={assignees.map(a => ({ value: a, label: a }))}
+              placeholder="- Assigned to -"
+              className="w-full sm:w-48"
+            />
+            <SearchableSelect
+              value={milestone}
+              onValueChange={setMilestone}
+              options={milestones.map(m => ({ value: m, label: m }))}
+              placeholder="- Milestone -"
+              className="w-full sm:w-48"
+            />
             <div className="ml-auto text-sm text-muted-foreground">{startDate.toLocaleString(undefined,{ month: 'long', year: 'numeric' })}</div>
           </div>
         </CardContent>

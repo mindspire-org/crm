@@ -1,4 +1,4 @@
-import { useLocation, useParams, Link } from "react-router-dom";
+import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,16 +12,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Mail, Phone, Send, Camera, Upload, ChevronLeft, ChevronRight, Briefcase, Calendar, Clock, FileText, FolderKanban, DollarSign, User, Settings, Globe, Clock3, CalendarDays, FileClock, StickyNote, Wallet, TrendingUp, Activity, CheckCircle, Timer, MapPin, BadgeCheck, AlertCircle } from "lucide-react";
+import { Mail, Phone, Send, Camera, Upload, ChevronLeft, ChevronRight, Briefcase, Calendar, Clock, FileText, FolderKanban, DollarSign, User, Settings, Globe, Clock3, CalendarDays, FileClock, StickyNote, Wallet, TrendingUp, Activity, CheckCircle, Timer, MapPin, BadgeCheck, AlertCircle, FileSpreadsheet, Edit, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { getAuthHeaders } from "@/lib/api/auth";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { API_BASE } from "@/lib/api/base";
+import { getCurrentUser } from "@/utils/roleAccess";
 
 export default function EmployeeProfile() {
   const { id } = useParams();
   const location = useLocation() as any;
+  const navigate = useNavigate();
+  const currentUser = getCurrentUser();
+  const isSelf = !id || id === "my-profile";
+
   const [emp, setEmp] = useState(
     (location.state?.employee as
     | {
@@ -35,6 +40,7 @@ export default function EmployeeProfile() {
         status: "active" | "on-leave" | "remote";
         joinDate: string;
         initials: string;
+        image?: string;
       }
     | undefined) || undefined
   );
@@ -43,7 +49,38 @@ export default function EmployeeProfile() {
   const routeDbId = isObjectId(id) ? id : undefined;
   const stateDbId = isObjectId(location.state?.dbId) ? (location.state?.dbId as string) : undefined;
   const empDbId = isObjectId((location.state?.employee as any)?.dbId) ? ((location.state?.employee as any)?.dbId as string) : undefined;
-  const dbId = stateDbId || routeDbId || empDbId;
+  
+  const [dbId, setDbId] = useState<string | undefined>(stateDbId || routeDbId || empDbId);
+
+  const loadMyEmployeeId = async () => {
+    if (!isSelf || !currentUser?.email) return;
+    try {
+      // Use an admin-tier search or a dedicated self-discovery endpoint if available.
+      // For now, let's ensure the search by email is robust.
+      const res = await fetch(`${API_BASE}/api/employees?q=${encodeURIComponent(currentUser.email)}`, { headers: getAuthHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        const myRecord = Array.isArray(data) ? data.find((e: any) => e.email?.toLowerCase() === currentUser.email.toLowerCase()) : null;
+        if (myRecord?._id) {
+          setDbId(myRecord._id);
+        } else {
+          // If search by 'q' fails or returns restricted list, try direct discovery if backend supports it
+          // or show an error toast.
+          console.warn("My employee record not found via email search.");
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load self-profile ID:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (isSelf) {
+      loadMyEmployeeId();
+    } else if (id) {
+      setDbId(id);
+    }
+  }, [id, isSelf, currentUser?.email]);
 
   const name = emp?.name || `Employee #${id}`;
   const initials = emp?.initials || name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
@@ -60,6 +97,7 @@ export default function EmployeeProfile() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [records, setRecords] = useState<any[]>([]);
+  const [activeLeaves, setActiveLeaves] = useState<any[]>([]);
   const [monthFilter, setMonthFilter] = useState<string>("");
   const [leaves, setLeaves] = useState<any[]>([]);
   const [expenseItems, setExpenseItems] = useState<any[]>([]);
@@ -79,6 +117,12 @@ export default function EmployeeProfile() {
   const [projectSearch, setProjectSearch] = useState("");
   const [projectStatusFilter, setProjectStatusFilter] = useState<string>("all");
   const [projectForm, setProjectForm] = useState({ title: "", client: "", price: "", start: "", deadline: "", status: "Open" });
+  const [openImport, setOpenImport] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<any>(null);
+  const [openEditRecord, setOpenEditRecord] = useState(false);
+  const [editForm, setEditForm] = useState({ date: "", clockIn: "", clockOut: "" });
 
   // General Info state
   const [firstName, setFirstName] = useState("");
@@ -468,7 +512,14 @@ export default function EmployeeProfile() {
         const res = await fetch(`${API_BASE}/api/leaves?q=${encodeURIComponent(n)}`, { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
-          setLeaves(Array.isArray(data) ? data.filter((l:any)=> (l.name||"").toLowerCase().includes(n.toLowerCase())) : []);
+          const empLeaves = Array.isArray(data) ? data.filter((l:any)=> (l.name||"").toLowerCase().includes(n.toLowerCase())) : [];
+          setLeaves(empLeaves);
+          // Filter for active leaves (pending or approved and not yet passed)
+          const active = empLeaves.filter((l: any) => 
+            (l.status === 'approved' || l.status === 'pending') && 
+            new Date(l.to || l.from) >= new Date()
+          );
+          setActiveLeaves(active);
         }
       } catch {}
     })();
@@ -576,6 +627,86 @@ export default function EmployeeProfile() {
       }
       toast.success("Expense removed");
     } catch {}
+  };
+
+  const handleImport = async () => {
+    if (!selectedFile || !dbId) return;
+    try {
+      setImporting(true);
+      const fd = new FormData();
+      fd.append("file", selectedFile);
+      fd.append("employeeId", dbId);
+      const res = await fetch(`${API_BASE}/api/attendance/import`, {
+        method: "POST",
+        headers: { Authorization: getAuthHeaders().Authorization },
+        body: fd,
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(`Import success: ${data.results.created} created, ${data.results.updated} updated`);
+        setOpenImport(false);
+        setSelectedFile(null);
+        // Refresh records
+        const params = new URLSearchParams();
+        params.set("employeeId", dbId);
+        if (fromDate) params.set("from", fromDate);
+        if (toDate) params.set("to", toDate);
+        const r2 = await fetch(`${API_BASE}/api/attendance/records?${params.toString()}`, { headers: getAuthHeaders() });
+        if (r2.ok) {
+          const d2 = await r2.json();
+          setRecords(Array.isArray(d2) ? d2 : []);
+        }
+      } else {
+        toast.error(data.error || "Import failed");
+      }
+    } catch (e) {
+      toast.error("Import error");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleEditRecord = (r: any) => {
+    setEditingRecord(r);
+    setEditForm({
+      date: r.date ? new Date(r.date).toISOString().slice(0, 10) : "",
+      clockIn: r.clockIn ? new Date(r.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : "",
+      clockOut: r.clockOut ? new Date(r.clockOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : "",
+    });
+    setOpenEditRecord(true);
+  };
+
+  const saveEditedRecord = async () => {
+    if (!editingRecord || !dbId) return;
+    try {
+      const payload = {
+        employeeId: dbId,
+        date: editForm.date,
+        clockIn: editForm.clockIn ? `${editForm.date}T${editForm.clockIn}:00` : undefined,
+        clockOut: editForm.clockOut ? `${editForm.date}T${editForm.clockOut}:00` : undefined,
+      };
+      const res = await fetch(`${API_BASE}/api/attendance/manual`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        toast.success("Record updated");
+        setOpenEditRecord(false);
+        // Refresh
+        const params = new URLSearchParams();
+        params.set("employeeId", dbId);
+        if (fromDate) params.set("from", fromDate);
+        if (toDate) params.set("to", toDate);
+        const r2 = await fetch(`${API_BASE}/api/attendance/records?${params.toString()}`, { headers: getAuthHeaders() });
+        if (r2.ok) {
+          const d2 = await r2.json();
+          setRecords(Array.isArray(d2) ? d2 : []);
+        }
+      }
+    } catch (e) {
+      toast.error("Failed to update record");
+    }
   };
 
   return (
@@ -999,14 +1130,61 @@ export default function EmployeeProfile() {
                       <p className="text-sm text-muted-foreground">View and manage employee attendance records</p>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-4 mb-6 p-4 bg-muted/30 rounded-lg">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">From Date</Label>
-                      <DatePicker value={fromDate} onChange={setFromDate} placeholder="Select start date" />
+                  <div className="flex flex-wrap gap-4 mb-6 p-4 bg-muted/30 rounded-lg items-end justify-between">
+                    <div className="flex gap-4 items-end">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">From Date</Label>
+                        <DatePicker value={fromDate} onChange={setFromDate} placeholder="Select start date" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">To Date</Label>
+                        <DatePicker value={toDate} onChange={setToDate} placeholder="Select end date" />
+                      </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">To Date</Label>
-                      <DatePicker value={toDate} onChange={setToDate} placeholder="Select end date" />
+                    <div className="flex gap-2">
+                      <Dialog open={openImport} onOpenChange={setOpenImport}>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" size="sm">
+                            <Upload className="w-4 h-4 mr-2" />
+                            Import Timesheet
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="bg-card">
+                          <DialogHeader>
+                            <DialogTitle>Import Timesheet</DialogTitle>
+                          </DialogHeader>
+                          <div className="space-y-4 py-4">
+                            <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+                              <div className="flex items-center gap-3">
+                                <FileSpreadsheet className="w-8 h-8 text-primary" />
+                                <div>
+                                  <div className="text-sm font-medium">Sample Templates</div>
+                                  <div className="text-xs text-muted-foreground">Download format</div>
+                                </div>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button variant="outline" size="sm" onClick={() => window.open(`${API_BASE}/api/attendance/sample-template?format=xlsx`, "_blank")}>
+                                  Excel
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={() => window.open(`${API_BASE}/api/attendance/sample-template?format=csv`, "_blank")}>
+                                  CSV
+                                </Button>
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Select File</Label>
+                              <Input type="file" accept=".xlsx, .xls, .csv" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} />
+                              <p className="text-[10px] text-muted-foreground italic">Records for this employee on these dates will be updated.</p>
+                            </div>
+                          </div>
+                          <DialogFooter>
+                            <Button variant="outline" onClick={() => setOpenImport(false)}>Cancel</Button>
+                            <Button onClick={handleImport} disabled={!selectedFile || importing}>
+                              {importing ? "Importing..." : "Start Import"}
+                            </Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
                     </div>
                   </div>
                   <div className="border rounded-xl overflow-hidden bg-white dark:bg-slate-800">
@@ -1081,13 +1259,14 @@ export default function EmployeeProfile() {
                           <TableHead className="font-semibold">Day</TableHead>
                           <TableHead className="font-semibold">Clock In</TableHead>
                           <TableHead className="font-semibold">Clock Out</TableHead>
-                          <TableHead className="text-right font-semibold">Hours</TableHead>
+                          <TableHead className="font-semibold">Hours</TableHead>
+                          <TableHead className="text-right font-semibold">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {records.length === 0 && (
                           <TableRow>
-                            <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                            <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                               <Calendar className="w-8 h-8 mx-auto mb-2 opacity-40" />
                               <p>No records found for selected month</p>
                             </TableCell>
@@ -1101,30 +1280,93 @@ export default function EmployeeProfile() {
                           return (
                             <TableRow key={r._id} className="hover:bg-muted/30">
                               <TableCell className="font-medium">{d ? d.toLocaleDateString(undefined, { day: '2-digit', month: 'short' }) : '-'}</TableCell>
-                              <TableCell className="text-emerald-600">{cin ? cin.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}</TableCell>
-                              <TableCell className="text-amber-600">{cout ? cout.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}</TableCell>
-                              <TableCell className="text-right font-semibold">{dur ? dur.toFixed(2) : '-'}</TableCell>
+                              <TableCell className="text-emerald-600 font-medium">{cin ? cin.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}</TableCell>
+                              <TableCell className="text-amber-600 font-medium">{cout ? cout.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}</TableCell>
+                              <TableCell className="font-bold">{dur ? dur.toFixed(2) : '-'}</TableCell>
+                              <TableCell className="text-right">
+                                <Button variant="ghost" size="sm" onClick={() => handleEditRecord(r)}>
+                                  <Edit className="w-3.5 h-3.5" />
+                                </Button>
+                              </TableCell>
                             </TableRow>
                           );
                         })}
                       </TableBody>
                     </Table>
                   </div>
+
+                  <Dialog open={openEditRecord} onOpenChange={setOpenEditRecord}>
+                    <DialogContent className="bg-card">
+                      <DialogHeader>
+                        <DialogTitle>Edit Time Record</DialogTitle>
+                      </DialogHeader>
+                      <div className="grid gap-4 py-4">
+                        <div className="space-y-2">
+                          <Label>Date</Label>
+                          <Input type="date" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Clock In</Label>
+                            <Input type="time" value={editForm.clockIn} onChange={(e) => setEditForm({ ...editForm, clockIn: e.target.value })} />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Clock Out</Label>
+                            <Input type="time" value={editForm.clockOut} onChange={(e) => setEditForm({ ...editForm, clockOut: e.target.value })} />
+                          </div>
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button variant="outline" onClick={() => setOpenEditRecord(false)}>Cancel</Button>
+                        <Button onClick={saveEditedRecord}>Update Record</Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
                 </div>
               </TabsContent>
 
               {/* Leave */}
               <TabsContent value="leave" className="mt-0 p-6">
                 <div className="max-w-5xl">
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
-                      <Calendar className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
+                        <Calendar className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold">Leave Records</h3>
+                        <p className="text-sm text-muted-foreground">View employee leave history and status</p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-lg font-semibold">Leave Records</h3>
-                      <p className="text-sm text-muted-foreground">View employee leave history and status</p>
+                    <div className="flex items-center gap-4">
+                      <div className={cn(
+                        "flex items-center gap-2 px-3 py-1.5 rounded-lg border",
+                        activeLeaves.length >= 2 ? "bg-red-50 border-red-200 text-red-700" : "bg-emerald-50 border-emerald-200 text-emerald-700"
+                      )}>
+                        <AlertCircle className="w-4 h-4" />
+                        <span className="text-sm font-medium">Active Leaves: {activeLeaves.length} / 2</span>
+                      </div>
+                      <Button 
+                        disabled={activeLeaves.length >= 2} 
+                        onClick={() => navigate('/hrm/leaves', { state: { employeeName: name } })}
+                        variant={activeLeaves.length >= 2 ? "outline" : "default"}
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Request Leave
+                      </Button>
                     </div>
                   </div>
+
+                  {activeLeaves.length >= 2 && (
+                    <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 text-red-800 animate-in fade-in slide-in-from-top-2">
+                      <AlertCircle className="w-5 h-5 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="font-semibold text-sm">Leave Limit Reached</p>
+                        <p className="text-xs opacity-90">This employee currently has {activeLeaves.length} active leaves. A maximum of 2 active leaves is allowed.</p>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="border rounded-xl overflow-hidden bg-white dark:bg-slate-800">
                     <Table>
                       <TableHeader>

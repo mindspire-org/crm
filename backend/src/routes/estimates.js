@@ -5,6 +5,7 @@ import Proposal from "../models/Proposal.js";
 import Contract from "../models/Contract.js";
 import Project from "../models/Project.js";
 import { ensureInvoiceForContract } from "../services/contractOps.js";
+import Invoice from "../models/Invoice.js";
 import User from "../models/User.js";
 import Notification from "../models/Notification.js";
 import { authenticate } from "../middleware/auth.js";
@@ -35,7 +36,7 @@ const canViewEstimates = (role) => {
 
 const canCreateEstimates = (role) => {
   const r = normRole(role);
-  return r === "admin" || r === "marketing_manager" || r === "marketer";
+  return r === "admin" || r === "marketing_manager" || r === "marketer" || r === "sales" || r === "sales_manager";
 };
 
 const canApproveEstimates = (role) => {
@@ -105,18 +106,39 @@ router.get("/", authenticate, async (req, res) => {
     if (!canViewEstimates(req.user?.role)) return res.status(403).json({ error: "Access denied" });
     const { q = "", status, leadId, clientId } = req.query;
     const cond = {};
-    if (q) cond.$or = [
-      { number: new RegExp(q, "i") },
-      { client: new RegExp(q, "i") },
-    ];
+    if (q && q.trim() !== "\\") {
+      const safeQ = String(q).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      cond.$or = [
+        { number: new RegExp(safeQ, "i") },
+        { client: new RegExp(safeQ, "i") },
+      ];
+    }
     if (status && status !== "-") cond.status = status;
     if (leadId) cond.leadId = leadId;
     if (clientId) cond.clientId = clientId;
-    const list = await Estimate.find(cond)
+
+    // Role-based scoping
+    const role = normRole(req.user?.role);
+    if (role === "marketer" || role === "sales" || role === "sales_manager") {
+      // In this system, 'createdBy' tracks the user who created the estimate
+      cond.createdBy = req.user._id;
+    }
+
+    const items = await Estimate.find(cond)
       .populate({ path: "createdBy", select: "name email role" })
       .sort({ createdAt: -1 })
       .lean();
-    res.json(list);
+    
+    // Scoping for non-admin/management: Hide Pending/Rejected ones not owned by them
+    if (role !== "admin" && role !== "marketing_manager" && role !== "sales_manager" && role !== "finance_manager") {
+      const filtered = items.filter(est => 
+        est.approvalStatus === "Approved" || 
+        String(est.createdBy?._id || est.createdBy || "") === String(req.user._id)
+      );
+      return res.json(filtered);
+    }
+
+    res.json(items);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -219,6 +241,67 @@ router.post("/:id/reject", authenticate, async (req, res) => {
   }
 });
 
+// Convert estimate to invoice (idempotent by label)
+router.post("/:id/convert-to-invoice", authenticate, async (req, res) => {
+  try {
+    if (!canViewEstimates(req.user?.role)) return res.status(403).json({ error: "Access denied" });
+    const est = await Estimate.findById(req.params.id).lean();
+    if (!est) return res.status(404).json({ error: "Not found" });
+
+    const label = `estimate:${String(est._id)}`;
+    const existing = await Invoice.findOne({ labels: label }).lean().catch(() => null);
+    if (existing?._id) return res.status(200).json(existing);
+
+    const items = (Array.isArray(est.items) ? est.items : []).map((it) => {
+      const qty = Number(it?.quantity ?? 1) || 0;
+      const rate = Number(it?.rate ?? 0) || 0;
+      return {
+        name: String(it?.item || it?.name || "Item"),
+        quantity: qty,
+        rate,
+        taxable: false,
+        total: Number(it?.total ?? (qty * rate)) || 0,
+      };
+    });
+
+    // Create a basic invoice with estimate items. Let invoices.js compute final amount on POST normally,
+    // but we compute here to avoid requiring internal helper imports.
+    const subTotal = items.reduce((sum, it) => sum + (Number(it.quantity || 0) * Number(it.rate || 0)), 0);
+    const tax1 = Number(est.tax || 0) || 0;
+    const tax2 = Number(est.tax2 || 0) || 0;
+    const t1 = (tax1 / 100) * subTotal;
+    const t2 = (tax2 / 100) * subTotal;
+    const discount = Number(est.discount || 0) || 0;
+    const advanceAmount = Number(est.advancedAmount || 0) || 0;
+    const amount = Math.max(0, subTotal + t1 + t2 - discount - advanceAmount);
+
+    const inv = await Invoice.create({
+      number: `EST-${String(est.number || String(Math.floor(Date.now() / 1000)))}`,
+      clientId: est.clientId || undefined,
+      client: est.client || "",
+      issueDate: new Date(),
+      dueDate: est.validUntil || undefined,
+      status: "Unpaid",
+      items,
+      tax1,
+      tax2,
+      discount,
+      advanceAmount,
+      note: String(est.note || ""),
+      labels: label,
+      amount,
+    });
+
+    try {
+      broadcastSse({ event: "invalidate", data: { keys: ["invoices"], id: String(inv?._id || "") } });
+    } catch {}
+
+    res.status(201).json(inv);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Update estimate (partial)
 router.patch("/:id", authenticate, async (req, res) => {
   try {
@@ -226,12 +309,25 @@ router.patch("/:id", authenticate, async (req, res) => {
     const pre = await Estimate.findById(req.params.id).lean();
     if (!pre) return res.status(404).json({ error: "Not found" });
 
-    const isApprover = canApproveEstimates(req.user?.role);
     const role = normRole(req.user?.role);
+    const isApprover = canApproveEstimates(req.user?.role);
+    const isSalesManager = role === "sales_manager" || role === "finance_manager";
+    const isAuthorizedApprover = isApprover || isSalesManager;
+
+    // Strict Restriction for Marketer/Sales
+    if (role === "marketer" || role === "sales") {
+      // Marketer/Sales CANNOT edit an estimate once it is Approved or Pending (already submitted for review)
+      // They can only edit if it's still a Draft OR if they are specifically allowed by some other logic.
+      // But the request says "cant edit or print it as it ask for approval"
+      if (pre.approvalStatus === "Approved" || pre.approvalStatus === "Pending") {
+        return res.status(403).json({ error: "Cannot edit an estimate that is pending or already approved. Please contact management." });
+      }
+    }
+
     const lockedApprovalFields = ["approvalStatus", "approvedBy", "approvedAt", "rejectedBy", "rejectedAt"];
     for (const k of lockedApprovalFields) {
-      if (update?.[k] !== undefined && !isApprover) {
-        return res.status(403).json({ error: "Only admin/marketing manager can change approval" });
+      if (update?.[k] !== undefined && !isAuthorizedApprover) {
+        return res.status(403).json({ error: "Only authorized management can change approval" });
       }
     }
 
@@ -373,10 +469,10 @@ router.patch("/:id", authenticate, async (req, res) => {
             await Contract.updateOne({ _id: contract._id, projectId: null }, { $set: { projectId: project._id } }).catch(() => null);
           }
 
-          // 4) Create invoice when a contract is created
+          // 4) Ensure an invoice exists for the contract (covers both newly created and already existing contracts)
           try {
-            if (createdContract?._id) {
-              await ensureInvoiceForContract({ contract: createdContract, project });
+            if (contract?._id) {
+              await ensureInvoiceForContract({ contract, project });
             }
           } catch {}
         } catch {}

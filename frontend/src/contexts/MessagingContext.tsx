@@ -81,7 +81,7 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       
       // Update the conversations list with the new last message
       queryClient.setQueryData(['conversations'], (old: any) =>
-        old.map((conv: any) =>
+        (Array.isArray(old) ? old : []).map((conv: any) =>
           conv._id === selectedConversation?._id
             ? { ...conv, lastMessage: newMessage, updatedAt: new Date().toISOString() }
             : conv
@@ -95,7 +95,7 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     mutationFn: messagingApi.createConversation,
     onSuccess: (newConversation) => {
       // Add the new conversation to the list
-      queryClient.setQueryData(['conversations'], (old: any) => [newConversation, ...(old || [])]);
+      queryClient.setQueryData(['conversations'], (old: any) => [newConversation, ...(Array.isArray(old) ? old : [])]);
       setSelectedConversation(newConversation);
     },
   });
@@ -106,7 +106,7 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     onSuccess: (_, messageIds) => {
       // Update the messages in the current conversation
       queryClient.setQueryData(['messages', selectedConversation?._id], (old: any) =>
-        old.map((msg: any) =>
+        (Array.isArray(old) ? old : []).map((msg: any) =>
           messageIds.includes(msg._id) 
             ? { ...msg, readBy: [...(msg.readBy || []), userId] }
             : msg
@@ -115,7 +115,7 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       
       // Update the unread count in the conversations list
       queryClient.setQueryData(['conversations'], (old: any) =>
-        old.map((conv: any) =>
+        (Array.isArray(old) ? old : []).map((conv: any) =>
           conv._id === selectedConversation?._id
             ? { ...conv, unreadCount: 0 }
             : conv

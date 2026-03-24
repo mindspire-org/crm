@@ -1,3 +1,7 @@
+import Project from "../models/Project.js";
+import Invoice from "../models/Invoice.js";
+import Payment from "../models/Payment.js";
+import mongoose from "mongoose";
 import { Router } from "express";
 import Client from "../models/Client.js";
 import { ensureLinkedAccount } from "../services/accounting.js";
@@ -48,14 +52,64 @@ router.get("/", authenticate, async (req, res) => {
           ],
         }
       : {};
-    
-    // Use lean() for better performance and select only needed fields
-    const items = await Client.find(filter)
-      .select("company person email phone avatar clientGroups labels _id createdAt")
-      .sort({ createdAt: -1 })
-      .lean()
-      .limit(1000); // Add reasonable limit
-    
+
+    // Use aggregation to fetch clients and their financial data in ONE pass
+    const pipeline = [
+      { $match: filter },
+      { $sort: { createdAt: -1 } },
+      { $limit: 1000 },
+      // Look up project counts
+      {
+        $lookup: {
+          from: "projects",
+          localField: "_id",
+          foreignField: "clientId",
+          as: "projects"
+        }
+      },
+      // Look up total invoiced
+      {
+        $lookup: {
+          from: "invoices",
+          localField: "_id",
+          foreignField: "clientId",
+          as: "invoices"
+        }
+      },
+      // Look up payments
+      {
+        $lookup: {
+          from: "payments",
+          localField: "_id",
+          foreignField: "clientId",
+          as: "payments"
+        }
+      },
+      {
+        $project: {
+          company: 1,
+          person: 1,
+          email: 1,
+          phone: 1,
+          avatar: 1,
+          clientGroups: 1,
+          labels: 1,
+          _id: 1,
+          createdAt: 1,
+          projectsCount: { $size: "$projects" },
+          totalInvoiced: { $sum: "$invoices.amount" },
+          paymentReceived: { $sum: "$payments.amount" },
+          due: { 
+            $subtract: [
+              { $sum: "$invoices.amount" },
+              { $sum: "$payments.amount" }
+            ] 
+          }
+        }
+      }
+    ];
+
+    const items = await Client.aggregate(pipeline);
     res.json(items);
   } catch (e) {
     res.status(400).json({ error: e.message });

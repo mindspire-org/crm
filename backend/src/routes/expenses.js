@@ -6,6 +6,7 @@ import JournalEntry from "../models/JournalEntry.js";
 import Counter from "../models/Counter.js";
 import { authenticate } from "../middleware/auth.js";
 import { broadcastSse } from "../services/realtime.js";
+import { ensureLinkedAccount, getSettings, postJournal } from "../services/accounting.js";
 
 const router = Router();
 
@@ -28,9 +29,89 @@ async function getNextVoucherNo(type) {
   return `${prefix}-${String(counter.value).padStart(5, "0")}`;
 }
 
+async function postExpenseToLedger({ data, user }) {
+  if (!data.accountId) {
+    throw new Error("Account is required to post an expense");
+  }
+
+  const expenseAcc = await Account.findById(data.accountId).lean();
+  if (!expenseAcc) throw new Error("Invalid expense account");
+
+  const settings = await getSettings();
+
+  const method = String(data.paymentMethod || "cash").toLowerCase();
+  let creditAccountCode = settings.cashAccount;
+  let creditEntityType;
+  let creditEntityId;
+
+  if (method === "bank") {
+    creditAccountCode = settings.bankAccount || "10102";
+  } else if (method === "payable") {
+    if (data.vendorId) {
+      const linked = await ensureLinkedAccount("vendor", data.vendorId, data.vendor || "Vendor");
+      creditAccountCode = linked.code;
+      creditEntityType = "vendor";
+      creditEntityId = data.vendorId;
+    } else {
+      creditAccountCode = settings.apParent || "20101";
+    }
+  } else {
+    // method is cash
+    creditAccountCode = settings.cashAccount || "10101";
+  }
+
+  if (!creditAccountCode) {
+    throw new Error("Accounting settings not configured for this payment method");
+  }
+
+  const totalAmount = (Number(data.amount) || 0) + (Number(data.tax) || 0) + (Number(data.tax2) || 0);
+  if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+    throw new Error("Amount must be greater than 0");
+  }
+
+  const journalEntry = await postJournal({
+    date: data.date || new Date(),
+    memo: data.description || data.title || "Expense",
+    refNo: data.title || "Expense",
+    currency: "PKR",
+    lines: [
+      { accountCode: expenseAcc.code, debit: totalAmount, credit: 0, description: data.title || "Expense" },
+      {
+        accountCode: creditAccountCode,
+        debit: 0,
+        credit: totalAmount,
+        description: `Payment for: ${data.title || "Expense"}`,
+        entityType: creditEntityType,
+        entityId: creditEntityId,
+      },
+    ],
+    postedBy: user?.email || user?._id || "system",
+  });
+
+  const voucherNo = await getNextVoucherNo("expense");
+  const voucher = await Voucher.create({
+    voucherNo,
+    type: "expense",
+    date: new Date(data.date || Date.now()),
+    memo: data.description || data.title,
+    refNo: data.title,
+    currency: "PKR",
+    postedBy: user?.email || user?._id,
+    journalEntryId: journalEntry._id,
+    vendorId: data.vendorId || undefined,
+    employeeId: data.employeeId || undefined,
+    clientId: data.clientId || undefined,
+    status: "posted",
+  });
+
+  return { journalEntry, voucher };
+}
+
 router.get("/", authenticate, async (req, res) => {
   try {
     const q = req.query.q?.toString().trim();
+    const from = req.query.from?.toString();
+    const to = req.query.to?.toString();
     const employeeId = req.query.employeeId?.toString();
     const clientId = req.query.clientId?.toString();
     const projectId = req.query.projectId?.toString();
@@ -43,6 +124,12 @@ router.get("/", authenticate, async (req, res) => {
     if (projectId) filter.projectId = projectId;
     if (vendorId) filter.vendorId = vendorId;
     if (accountId) filter.accountId = accountId;
+
+    if (from || to) {
+      filter.date = {};
+      if (from) filter.date.$gte = new Date(from);
+      if (to) filter.date.$lte = new Date(to);
+    }
 
     if (q) filter.$or = [
       { title: { $regex: q, $options: "i" } },
@@ -65,6 +152,45 @@ router.get("/", authenticate, async (req, res) => {
   }
 });
 
+router.get("/:id", authenticate, async (req, res) => {
+  try {
+    const item = await Expense.findById(req.params.id)
+      .populate("employeeId", "name firstName lastName")
+      .populate("clientId", "company person")
+      .populate("vendorId", "name company")
+      .populate("accountId", "code name")
+      .populate("voucherId", "voucherNo status")
+      .lean();
+
+    if (!item) return res.status(404).json({ error: "Expense not found" });
+    res.json(item);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/:id/post", authenticate, async (req, res) => {
+  try {
+    const existing = await Expense.findById(req.params.id).lean();
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    if (existing.status === "posted") return res.json(existing);
+
+    const payload = { ...existing, ...req.body, status: "posted" };
+    const { voucher } = await postExpenseToLedger({ data: payload, user: req.user });
+
+    const updated = await Expense.findByIdAndUpdate(
+      req.params.id,
+      { status: "posted", voucherId: voucher._id },
+      { new: true }
+    );
+
+    try { broadcastSse({ event: "invalidate", data: { keys: ["expenses"], id: String(updated?._id || "") } }); } catch {}
+    res.json(updated);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 router.post("/", authenticate, async (req, res) => {
   try {
     const data = { ...req.body };
@@ -74,69 +200,8 @@ router.post("/", authenticate, async (req, res) => {
       return res.status(400).json({ error: "Account is required to post an expense" });
     }
 
-    let voucher = null;
     if (data.status === "posted") {
-      // 1. Create Journal Entry
-      // Determine the Credit Account (Cash or Bank or Payable)
-      // For simplicity, we'll assume a default cash/bank account if not provided in metadata
-      // In a real scenario, this would come from accounting settings
-      const expenseAcc = await Account.findById(data.accountId);
-      if (!expenseAcc) return res.status(400).json({ error: "Invalid expense account" });
-
-      // Default Credit Account logic (should ideally come from AccountingSettings)
-      // Here we use a placeholder logic or assume paymentMethod maps to certain codes
-      let creditAccountCode = "10101"; // Default Cash placeholder
-      if (data.paymentMethod === "bank") creditAccountCode = "10102"; // Default Bank placeholder
-      if (data.paymentMethod === "payable") creditAccountCode = "20101"; // Default Accounts Payable placeholder
-
-      const creditAcc = await Account.findOne({ code: creditAccountCode });
-      
-      const totalAmount = (Number(data.amount) || 0) + (Number(data.tax) || 0) + (Number(data.tax2) || 0);
-
-      const lines = [
-        {
-          accountId: expenseAcc._id,
-          accountCode: expenseAcc.code,
-          debit: totalAmount,
-          credit: 0,
-          description: data.title || "Expense"
-        },
-        {
-          accountId: creditAcc?._id,
-          accountCode: creditAcc?.code || creditAccountCode,
-          debit: 0,
-          credit: totalAmount,
-          description: `Payment for: ${data.title || "Expense"}`
-        }
-      ];
-
-      const journalEntry = await JournalEntry.create({
-        date: new Date(data.date || Date.now()),
-        memo: data.description || data.title,
-        refNo: data.title,
-        currency: "PKR",
-        postedBy: req.user.email || req.user._id,
-        postedAt: new Date(),
-        lines
-      });
-
-      // 2. Create Voucher
-      const voucherNo = await getNextVoucherNo("expense");
-      voucher = await Voucher.create({
-        voucherNo,
-        type: "expense",
-        date: new Date(data.date || Date.now()),
-        memo: data.description || data.title,
-        refNo: data.title,
-        currency: "PKR",
-        postedBy: req.user.email || req.user._id,
-        journalEntryId: journalEntry._id,
-        vendorId: data.vendorId || undefined,
-        employeeId: data.employeeId || undefined,
-        clientId: data.clientId || undefined,
-        status: "posted"
-      });
-
+      const { voucher } = await postExpenseToLedger({ data, user: req.user });
       data.voucherId = voucher._id;
     }
 

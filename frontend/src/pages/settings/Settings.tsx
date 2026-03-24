@@ -1,4 +1,4 @@
-import { useParams, Link } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import { useSettings } from "@/hooks/useSettings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,11 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useMemo, useRef, useState } from "react";
+import { Upload, X, Building2, Globe, Mail, Phone, MapPin, Clock, Calendar, Check, RefreshCw, Send } from "lucide-react";
+import { getAuthHeaders } from "@/lib/api/auth";
+import { API_BASE } from "@/lib/api/base";
+import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
 
 const sections = [
   { key: "general", label: "General" },
@@ -20,6 +25,7 @@ const sections = [
   { key: "notifications", label: "Notifications" },
   { key: "integration", label: "Integration" },
   { key: "cron", label: "Cron Job" },
+  { key: "hr", label: "HR Settings" },
   { key: "terms", label: "Terms" },
   { key: "updates", label: "Updates" },
 ] as const;
@@ -34,6 +40,70 @@ export default function SettingsPage() {
   const [newCurCode, setNewCurCode] = useState("");
   const [newCurSymbol, setNewCurSymbol] = useState("");
   const [newCurRate, setNewCurRate] = useState<string>("");
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const [sendingTest, setSendingTest] = useState(false);
+  const [testEmail, setTestEmail] = useState("");
+
+  const handleSendTestEmail = async () => {
+    if (!testEmail) {
+      toast.error("Please enter a recipient email address");
+      return;
+    }
+    setSendingTest(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/settings/test-email`, {
+        method: "POST",
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ to: testEmail }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("Test email dispatched successfully");
+      } else {
+        throw new Error(data.error || "Failed to send test email");
+      }
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setSendingTest(false);
+    }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file");
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      const formData = new FormData();
+      formData.append("logo", file);
+
+      const res = await fetch(`${API_BASE}/api/settings/logo`, {
+        method: "POST",
+        headers: { ...getAuthHeaders() },
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        saveSection("general", { ...settings.general, logoUrl: data.logoUrl });
+        toast.success("Logo uploaded successfully");
+      } else {
+        const err = await res.json();
+        throw new Error(err.error || "Upload failed");
+      }
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
 
   const currencies = useMemo(() => {
     const list = Array.isArray((settings as any)?.localization?.currencies)
@@ -88,80 +158,153 @@ export default function SettingsPage() {
         </TabsList>
 
         <TabsContent value="general">
-          <Card className="p-6 space-y-4">
-            <div className="text-lg font-semibold">General</div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label>Company name</Label>
-                <Input value={settings.general.companyName} onChange={(e)=>saveSection('general', { ...settings.general, companyName: e.target.value })} />
-              </div>
-              <div>
-                <Label>Logo URL</Label>
-                <Input value={settings.general.logoUrl} onChange={(e)=>saveSection('general', { ...settings.general, logoUrl: e.target.value })} />
-              </div>
-              <div>
-                <Label>Favicon URL</Label>
-                <Input value={settings.general.faviconUrl || ''} onChange={(e)=>saveSection('general', { ...settings.general, faviconUrl: e.target.value })} />
-              </div>
-              <div>
-                <Label>Domain</Label>
-                <Input value={settings.general.domain || ''} onChange={(e)=>saveSection('general', { ...settings.general, domain: e.target.value })} />
-              </div>
-              <div>
-                <Label>Company email</Label>
-                <Input type="email" value={settings.general.companyEmail || ''} onChange={(e)=>saveSection('general', { ...settings.general, companyEmail: e.target.value })} />
-              </div>
-              <div>
-                <Label>Company phone</Label>
-                <Input value={settings.general.companyPhone || ''} onChange={(e)=>saveSection('general', { ...settings.general, companyPhone: e.target.value })} />
-              </div>
-              <div>
-                <Label>Timezone</Label>
-                <Input value={settings.general.timezone} onChange={(e)=>saveSection('general', { ...settings.general, timezone: e.target.value })} />
-              </div>
-              <div>
-                <Label>Date format</Label>
-                <Input value={settings.general.dateFormat} onChange={(e)=>saveSection('general', { ...settings.general, dateFormat: e.target.value })} />
-              </div>
-              <div>
-                <Label>Address line 1</Label>
-                <Input value={settings.general.addressLine1 || ''} onChange={(e)=>saveSection('general', { ...settings.general, addressLine1: e.target.value })} />
-              </div>
-              <div>
-                <Label>Address line 2</Label>
-                <Input value={settings.general.addressLine2 || ''} onChange={(e)=>saveSection('general', { ...settings.general, addressLine2: e.target.value })} />
-              </div>
-              <div>
-                <Label>City</Label>
-                <Input value={settings.general.city || ''} onChange={(e)=>saveSection('general', { ...settings.general, city: e.target.value })} />
-              </div>
-              <div>
-                <Label>State/Province</Label>
-                <Input value={settings.general.state || ''} onChange={(e)=>saveSection('general', { ...settings.general, state: e.target.value })} />
-              </div>
-              <div>
-                <Label>ZIP/Postal code</Label>
-                <Input value={settings.general.zip || ''} onChange={(e)=>saveSection('general', { ...settings.general, zip: e.target.value })} />
-              </div>
-              <div>
-                <Label>Country</Label>
-                <Input value={settings.general.country || ''} onChange={(e)=>saveSection('general', { ...settings.general, country: e.target.value })} />
-              </div>
-              <div className="flex items-center justify-between rounded-md border p-3 col-span-full">
-                <div>
-                  <div className="text-sm font-medium">White-label branding</div>
-                  <div className="text-xs text-muted-foreground">Hide default branding in the app</div>
-                </div>
-                <Switch checked={!!settings.general.brandingEnabled} onCheckedChange={(v)=>saveSection('general', { ...settings.general, brandingEnabled: Boolean(v) })} />
-              </div>
-              <div className="col-span-full">
-                <Label>Login page message</Label>
-                <Textarea value={settings.general.loginMessage || ''} onChange={(e)=>saveSection('general', { ...settings.general, loginMessage: e.target.value })} />
-              </div>
+          <Card className="p-8 sm:p-10 space-y-10 rounded-[2.5rem] border-slate-200 shadow-2xl bg-white relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-8 opacity-5">
+              <Building2 className="w-32 h-32" />
             </div>
-            <div className="flex gap-2 pt-2">
-              <Button onClick={()=>toast.success('General settings saved')}>Save changes</Button>
-              <Button variant="outline" onClick={()=>{ resetSection('general'); toast.success('General settings reset'); }}>Reset section</Button>
+            
+            <div className="relative space-y-8">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900 uppercase tracking-tight">Corporate Profile</h2>
+                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-400 mt-1">Tech Entity Identity Parameters</p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+                {/* Logo Section */}
+                <div className="lg:col-span-4 space-y-6">
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Corporate Branding (Logo)</Label>
+                  <div className="relative group aspect-square rounded-[2rem] border-2 border-dashed border-slate-200 bg-slate-50/50 overflow-hidden flex flex-col items-center justify-center transition-all hover:border-indigo-300 hover:bg-indigo-50/30">
+                    {settings.general.logoUrl ? (
+                      <>
+                        <img 
+                          src={settings.general.logoUrl.startsWith('http') ? settings.general.logoUrl : `${API_BASE}${settings.general.logoUrl}`} 
+                          alt="Logo" 
+                          className="w-full h-full object-contain p-8"
+                        />
+                        <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-all flex flex-col items-center justify-center gap-3">
+                          <Button 
+                            variant="secondary" 
+                            size="sm" 
+                            className="rounded-xl font-bold text-[10px] tracking-widest uppercase h-10 px-6"
+                            onClick={() => logoInputRef.current?.click()}
+                            disabled={uploadingLogo}
+                          >
+                            {uploadingLogo ? <RefreshCw className="w-3.5 h-3.5 animate-spin mr-2" /> : <Upload className="w-3.5 h-3.5 mr-2" />}
+                            Update Logo
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="text-white hover:text-rose-400 hover:bg-transparent font-bold text-[10px] tracking-widest uppercase"
+                            onClick={() => saveSection("general", { ...settings.general, logoUrl: "" })}
+                          >
+                            <X className="w-3.5 h-3.5 mr-2" /> Remove
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center gap-4 text-center p-6">
+                        <div className="p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
+                          <Upload className="w-8 h-8 text-slate-300" />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">No Logo Defined</p>
+                          <p className="text-[10px] text-slate-400 font-medium">Import corporate identity from local device</p>
+                        </div>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="mt-2 rounded-xl font-bold text-[10px] tracking-widest uppercase border-slate-200"
+                          onClick={() => logoInputRef.current?.click()}
+                          disabled={uploadingLogo}
+                        >
+                          {uploadingLogo ? <RefreshCw className="w-3.5 h-3.5 animate-spin mr-2" /> : "Select File"}
+                        </Button>
+                      </div>
+                    )}
+                    <input 
+                      type="file" 
+                      ref={logoInputRef} 
+                      className="hidden" 
+                      accept="image/*" 
+                      onChange={handleLogoUpload} 
+                    />
+                  </div>
+                </div>
+
+                <div className="lg:col-span-8 space-y-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Company Name</Label>
+                      <div className="relative">
+                        <Input value={settings.general.companyName} onChange={(e)=>saveSection('general', { ...settings.general, companyName: e.target.value })} className="h-12 pl-11 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-indigo-500 font-bold" />
+                        <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Corporate Domain</Label>
+                      <div className="relative">
+                        <Input value={settings.general.domain || ''} onChange={(e)=>saveSection('general', { ...settings.general, domain: e.target.value })} className="h-12 pl-11 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-indigo-500 font-bold font-mono" />
+                        <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Corporate Email</Label>
+                      <div className="relative">
+                        <Input type="email" value={settings.general.companyEmail || ''} onChange={(e)=>saveSection('general', { ...settings.general, companyEmail: e.target.value })} className="h-12 pl-11 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-indigo-500 font-bold" />
+                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Primary Phone</Label>
+                      <div className="relative">
+                        <Input value={settings.general.companyPhone || ''} onChange={(e)=>saveSection('general', { ...settings.general, companyPhone: e.target.value })} className="h-12 pl-11 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-indigo-500 font-bold tabular-nums" />
+                        <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1 text-center block">Headquarters Address</Label>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="md:col-span-2">
+                        <Input placeholder="Address Line 1" value={settings.general.addressLine1 || ''} onChange={(e)=>saveSection('general', { ...settings.general, addressLine1: e.target.value })} className="h-12 rounded-xl border-slate-200 bg-slate-50/50" />
+                      </div>
+                      <Input placeholder="City" value={settings.general.city || ''} onChange={(e)=>saveSection('general', { ...settings.general, city: e.target.value })} className="h-12 rounded-xl border-slate-200 bg-slate-50/50" />
+                      <Input placeholder="State/Province" value={settings.general.state || ''} onChange={(e)=>saveSection('general', { ...settings.general, state: e.target.value })} className="h-12 rounded-xl border-slate-200 bg-slate-50/50" />
+                      <Input placeholder="ZIP/Postal" value={settings.general.zip || ''} onChange={(e)=>saveSection('general', { ...settings.general, zip: e.target.value })} className="h-12 rounded-xl border-slate-200 bg-slate-50/50" />
+                      <Input placeholder="Country" value={settings.general.country || ''} onChange={(e)=>saveSection('general', { ...settings.general, country: e.target.value })} className="h-12 rounded-xl border-slate-200 bg-slate-50/50" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-6 border-t border-slate-100">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <div className="space-y-0.5">
+                      <p className="text-xs font-bold text-slate-700 uppercase tracking-widest">Corporate Branding Visibility</p>
+                      <p className="text-[10px] text-slate-400 font-medium">Hide default Mind Spire branding across the system</p>
+                    </div>
+                    <Switch checked={!!settings.general.brandingEnabled} onCheckedChange={(v)=>saveSection('general', { ...settings.general, brandingEnabled: Boolean(v) })} />
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 justify-end">
+                  <Button 
+                    variant="outline" 
+                    className="h-12 px-8 rounded-xl font-bold uppercase text-[10px] tracking-widest border-slate-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all"
+                    onClick={() => { resetSection('general'); toast.success('General settings reset'); }}
+                  >
+                    Reset Protocol
+                  </Button>
+                  <Button 
+                    className="h-12 px-10 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold uppercase text-[10px] tracking-widest shadow-xl transition-all active:scale-95"
+                    onClick={() => toast.success('General settings saved')}
+                  >
+                    Save Changes
+                  </Button>
+                </div>
+              </div>
             </div>
           </Card>
         </TabsContent>
@@ -505,64 +648,98 @@ export default function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="email">
-          <Card className="p-6 space-y-4">
-            <div className="text-lg font-semibold">Email (SMTP)</div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label>SMTP host</Label>
-                <Input value={settings.email.smtpHost} onChange={(e)=>saveSection('email', { ...settings.email, smtpHost: e.target.value })} />
-              </div>
-              <div>
-                <Label>SMTP port</Label>
-                <Input type="number" value={settings.email.smtpPort as any} onChange={(e)=>saveSection('email', { ...settings.email, smtpPort: e.target.value? Number(e.target.value) : '' })} />
-              </div>
-              <div>
-                <Label>SMTP user</Label>
-                <Input value={settings.email.smtpUser} onChange={(e)=>saveSection('email', { ...settings.email, smtpUser: e.target.value })} />
-              </div>
-              <div>
-                <Label>SMTP password</Label>
-                <Input type="password" value={settings.email.smtpPass} onChange={(e)=>saveSection('email', { ...settings.email, smtpPass: e.target.value })} />
-              </div>
-              <div>
-                <Label>From name</Label>
-                <Input value={settings.email.fromName} onChange={(e)=>saveSection('email', { ...settings.email, fromName: e.target.value })} />
-              </div>
-              <div>
-                <Label>From email</Label>
-                <Input type="email" value={settings.email.fromEmail} onChange={(e)=>saveSection('email', { ...settings.email, fromEmail: e.target.value })} />
-              </div>
-              <div className="flex items-center justify-between rounded-md border p-3 col-span-full">
-                <div>
-                  <div className="text-sm font-medium">Use secure connection (TLS/SSL)</div>
-                  <div className="text-xs text-muted-foreground">Enable if your SMTP requires TLS/SSL</div>
-                </div>
-                <Switch checked={settings.email.secure} onCheckedChange={(v)=>saveSection('email', { ...settings.email, secure: Boolean(v) })} />
-              </div>
-              <div>
-                <Label>Reply-To</Label>
-                <Input type="email" value={settings.email.replyTo || ''} onChange={(e)=>saveSection('email', { ...settings.email, replyTo: e.target.value })} />
-              </div>
-              <div>
-                <Label>Rate limit per minute</Label>
-                <Input type="number" value={(settings.email.rateLimitPerMinute ?? '') as any} onChange={(e)=>saveSection('email', { ...settings.email, rateLimitPerMinute: e.target.value? Number(e.target.value) : '' })} />
-              </div>
-              <div>
-                <Label>Test recipient</Label>
-                <Input type="email" value={settings.email.testRecipient || ''} onChange={(e)=>saveSection('email', { ...settings.email, testRecipient: e.target.value })} />
-              </div>
-              <div className="col-span-full">
-                <Label>Default signature</Label>
-                <Textarea className="min-h-[100px]" value={settings.email.defaultSignature || ''} onChange={(e)=>saveSection('email', { ...settings.email, defaultSignature: e.target.value })} />
-              </div>
+          <Card className="p-8 sm:p-10 space-y-10 rounded-[2.5rem] border-slate-200 shadow-2xl bg-white relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-8 opacity-5">
+              <Mail className="w-32 h-32" />
             </div>
-            <div className="flex gap-2">
-              <Button onClick={()=>toast.success('Email settings saved')}>Save changes</Button>
-              <Button variant="outline" onClick={()=>{
-                const to = settings.email.testRecipient || settings.notifications.testEmail || settings.email.fromEmail;
-                toast.success(`Test email queued (simulated) to ${to}`);
-              }}>Send test</Button>
-              <Button variant="outline" onClick={()=>{ resetSection('email'); toast.success('Email settings reset'); }}>Reset section</Button>
+            <div className="relative space-y-8">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900 uppercase tracking-tight">Email Integration</h2>
+                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-400 mt-1">SMTP Protocol Configuration</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">SMTP Host</Label>
+                  <Input 
+                    value={settings.email?.smtpHost || ""} 
+                    onChange={(e) => saveSection("email" as any, { ...settings.email, smtpHost: e.target.value })} 
+                    placeholder="smtp.hostinger.com"
+                    className="h-12 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-indigo-500 font-bold" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">SMTP Port</Label>
+                  <Input 
+                    type="number"
+                    value={settings.email?.smtpPort || ""} 
+                    onChange={(e) => saveSection("email" as any, { ...settings.email, smtpPort: e.target.value })} 
+                    placeholder="465"
+                    className="h-12 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-indigo-500 font-bold" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">SMTP User</Label>
+                  <Input 
+                    value={settings.email?.smtpUser || ""} 
+                    onChange={(e) => saveSection("email" as any, { ...settings.email, smtpUser: e.target.value })} 
+                    placeholder="user@yourdomain.com"
+                    className="h-12 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-indigo-500 font-bold" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">SMTP Password</Label>
+                  <Input 
+                    type="password"
+                    value={settings.email?.smtpPass || ""} 
+                    onChange={(e) => saveSection("email" as any, { ...settings.email, smtpPass: e.target.value })} 
+                    placeholder="••••••••"
+                    className="h-12 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-indigo-500 font-bold" 
+                  />
+                </div>
+              </div>
+
+              <div className="pt-6 border-t border-slate-100 space-y-6">
+                <div className="space-y-2">
+                  <h3 className="text-sm font-bold uppercase tracking-widest text-slate-900">Connection Audit</h3>
+                  <p className="text-[10px] font-medium text-slate-400 uppercase tracking-widest leading-relaxed">Dispatch a test transmission to verify SMTP handshake integrity.</p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-4 items-end">
+                  <div className="flex-1 space-y-2">
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Test Recipient</Label>
+                    <Input 
+                      value={testEmail} 
+                      onChange={(e) => setTestEmail(e.target.value)} 
+                      placeholder="audit@domain.com"
+                      className="h-12 rounded-xl border-slate-200 bg-white focus:ring-indigo-500 font-medium" 
+                    />
+                  </div>
+                  <Button 
+                    onClick={handleSendTestEmail} 
+                    disabled={sendingTest || !testEmail}
+                    className="h-12 px-8 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold uppercase text-[10px] tracking-widest shadow-lg transition-all active:scale-95"
+                  >
+                    {sendingTest ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
+                    SEND TEST TRANSMISSION
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-4 pt-6">
+                <Button 
+                  variant="outline" 
+                  className="h-12 px-8 rounded-xl font-bold uppercase text-[10px] tracking-widest border-slate-200"
+                  onClick={() => { resetSection("email" as any); toast.success("Email settings reset"); }}
+                >
+                  Reset Protocol
+                </Button>
+                <Button 
+                  className="h-12 px-10 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold uppercase text-[10px] tracking-widest shadow-xl"
+                  onClick={() => toast.success("Email settings saved")}
+                >
+                  Save Configuration
+                </Button>
+              </div>
             </div>
           </Card>
         </TabsContent>
@@ -742,6 +919,145 @@ export default function SettingsPage() {
               <Button onClick={()=>toast.success('Integration saved')}>Save changes</Button>
               <Button variant="outline" onClick={()=>toast.success('Slack test sent (simulated)')}>Test Slack</Button>
               <Button variant="outline" onClick={()=>toast.success('Twilio test sent (simulated)')}>Test Twilio</Button>
+            </div>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="hr">
+          <Card className="p-8 sm:p-10 space-y-10 rounded-[2.5rem] border-slate-200 shadow-2xl bg-white relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-8 opacity-5">
+              <Clock className="w-32 h-32" />
+            </div>
+            <div className="relative space-y-8">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900 uppercase tracking-tight">HR Settings</h2>
+                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-400 mt-1">Standard Timing &amp; Criteria</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Standard Timing */}
+                <div className="space-y-6">
+                  <h3 className="text-sm font-bold uppercase tracking-widest text-indigo-600 flex items-center gap-2">
+                    <Clock className="w-4 h-4" /> Standard Timing
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Start Time</Label>
+                      <Input 
+                        type="time"
+                        value={settings.hr?.standardStartTime || "09:00"} 
+                        onChange={(e) => saveSection("hr" as any, { ...settings.hr, standardStartTime: e.target.value })} 
+                        className="h-12 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-indigo-500 font-bold" 
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">End Time</Label>
+                      <Input 
+                        type="time"
+                        value={settings.hr?.standardEndTime || "18:00"} 
+                        onChange={(e) => saveSection("hr" as any, { ...settings.hr, standardEndTime: e.target.value })} 
+                        className="h-12 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-indigo-500 font-bold" 
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Late Threshold (Mins)</Label>
+                      <Input 
+                        type="number"
+                        value={settings.hr?.lateThresholdMinutes || 15} 
+                        onChange={(e) => saveSection("hr" as any, { ...settings.hr, lateThresholdMinutes: parseInt(e.target.value) || 0 })} 
+                        className="h-12 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-indigo-500 font-bold" 
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Absent Threshold (Hours)</Label>
+                      <Input 
+                        type="number"
+                        value={settings.hr?.absentThresholdHours || 4} 
+                        onChange={(e) => saveSection("hr" as any, { ...settings.hr, absentThresholdHours: parseInt(e.target.value) || 0 })} 
+                        className="h-12 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-indigo-500 font-bold" 
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Deduction Criteria */}
+                <div className="space-y-6">
+                  <h3 className="text-sm font-bold uppercase tracking-widest text-rose-600 flex items-center gap-2">
+                    <DollarSign className="w-4 h-4" /> Deduction Criteria
+                  </h3>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Late Deduction (PKR)</Label>
+                      <Input 
+                        type="number"
+                        value={settings.hr?.deductionLateAmount || 500} 
+                        onChange={(e) => saveSection("hr" as any, { ...settings.hr, deductionLateAmount: parseInt(e.target.value) || 0 })} 
+                        className="h-12 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-indigo-500 font-bold" 
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Absent Deduction (PKR)</Label>
+                      <Input 
+                        type="number"
+                        value={settings.hr?.deductionAbsentAmount || 2000} 
+                        onChange={(e) => saveSection("hr" as any, { ...settings.hr, deductionAbsentAmount: parseInt(e.target.value) || 0 })} 
+                        className="h-12 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-indigo-500 font-bold" 
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Hiring Criteria */}
+                <div className="space-y-6 md:col-span-2 pt-6 border-t border-slate-100">
+                  <h3 className="text-sm font-bold uppercase tracking-widest text-emerald-600 flex items-center gap-2">
+                    <Target className="w-4 h-4" /> Hiring Criteria
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Min Experience</Label>
+                      <Input 
+                        value={settings.hr?.hiringMinExperience || "2 years"} 
+                        onChange={(e) => saveSection("hr" as any, { ...settings.hr, hiringMinExperience: e.target.value })} 
+                        className="h-12 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-indigo-500 font-bold" 
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Min Education</Label>
+                      <Input 
+                        value={settings.hr?.hiringMinEducation || "Bachelor's"} 
+                        onChange={(e) => saveSection("hr" as any, { ...settings.hr, hiringMinEducation: e.target.value })} 
+                        className="h-12 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-indigo-500 font-bold" 
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Age Limit</Label>
+                      <Input 
+                        value={settings.hr?.hiringAgeLimit || "18-45"} 
+                        onChange={(e) => saveSection("hr" as any, { ...settings.hr, hiringAgeLimit: e.target.value })} 
+                        className="h-12 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-indigo-500 font-bold" 
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-4 pt-6">
+                <Button 
+                  variant="outline" 
+                  className="h-12 px-8 rounded-xl font-bold uppercase text-[10px] tracking-widest border-slate-200"
+                  onClick={() => { resetSection("hr" as any); toast.success("HR settings reset"); }}
+                >
+                  Reset HR Defaults
+                </Button>
+                <Button 
+                  className="h-12 px-10 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold uppercase text-[10px] tracking-widest shadow-xl"
+                  onClick={() => toast.success("HR settings saved successfully")}
+                >
+                  Save HR Configuration
+                </Button>
+              </div>
             </div>
           </Card>
         </TabsContent>

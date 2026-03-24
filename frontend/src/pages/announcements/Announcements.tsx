@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Search, Edit, X, Plus } from "lucide-react";
+import { Search, Edit, X, Plus, Image as ImageIcon } from "lucide-react";
 import { API_BASE } from "@/lib/api/base";
 
 
@@ -55,14 +55,17 @@ export default function Announcements() {
   const getCurrentUserRole = () => {
     try {
       const raw = localStorage.getItem("auth_user") || sessionStorage.getItem("auth_user");
-      if (!raw) return "admin";
+      if (!raw) return "user";
       const u = JSON.parse(raw);
-      return u?.role || "admin";
+      // Ensure role is a string and normalized to lowercase for consistent comparison
+      const roleStr = String(u?.role || "user").toLowerCase().trim();
+      return roleStr;
     } catch {
-      return "admin";
+      return "user";
     }
   };
   const role = getCurrentUserRole();
+  const isAdmin = role === "admin";
 
   const fetchAnnouncements = async () => {
     try {
@@ -139,7 +142,7 @@ export default function Announcements() {
     <div className="space-y-4 animate-fade-in">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-medium">Announcements</h1>
-        {role === "admin" && (
+        {isAdmin && (
           <Button size="sm" variant="outline" onClick={() => navigate("/announcements/new")}>
             <Plus className="w-4 h-4 mr-2" />
             Add announcement
@@ -166,48 +169,53 @@ export default function Announcements() {
               <div className="mb-3 text-sm text-destructive">{error}</div>
             )}
             
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/40">
-                  <TableHead>Title</TableHead>
-                  <TableHead>Created by</TableHead>
-                  <TableHead>Start date</TableHead>
-                  <TableHead>End date</TableHead>
-                  <TableHead className="w-14"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {list.map((a) => (
-                  <TableRow key={a._id}>
-                    <TableCell>
-                      <button
-                        type="button"
-                        className="text-primary hover:underline text-left"
-                        onClick={() => navigate(`/announcements/${a._id}`)}
-                      >
-                        {a.title}
-                      </button>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Avatar className="w-6 h-6">
-                          <AvatarFallback className="bg-gradient-to-br from-primary to-indigo text-white text-[10px]">{initialsFrom(a.createdByName)}</AvatarFallback>
-                        </Avatar>
-                        <span>{a.createdByName || ""}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>{toYmd(a.startDate)}</TableCell>
-                    <TableCell>{toYmd(a.endDate)}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="icon-sm"><Edit className="w-4 h-4"/></Button>
-                        <Button variant="ghost" size="icon-sm" disabled={loading} onClick={()=>remove(a._id)}><X className="w-4 h-4"/></Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+    <Table>
+      <TableHeader>
+        <TableRow className="bg-muted/40">
+          <TableHead>Title</TableHead>
+          <TableHead>Created by</TableHead>
+          <TableHead>Start date</TableHead>
+          <TableHead>End date</TableHead>
+          <TableHead className={isAdmin ? "w-28" : "w-14"}></TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {list.map((a) => (
+          <TableRow key={a._id}>
+            <TableCell>
+              <button
+                type="button"
+                className="text-primary hover:underline text-left"
+                onClick={() => navigate(`/announcements/${a._id}`)}
+              >
+                {a.title}
+              </button>
+            </TableCell>
+            <TableCell>
+              <div className="flex items-center gap-2">
+                <Avatar className="w-6 h-6">
+                  <AvatarFallback className="bg-gradient-to-br from-primary to-indigo text-white text-[10px]">{initialsFrom(a.createdByName)}</AvatarFallback>
+                </Avatar>
+                <span>{a.createdByName || ""}</span>
+              </div>
+            </TableCell>
+            <TableCell>{toYmd(a.startDate)}</TableCell>
+            <TableCell>{toYmd(a.endDate)}</TableCell>
+            <TableCell className="text-right">
+              <div className="flex items-center justify-end gap-1">
+                <Button variant="ghost" size="icon-sm" onClick={() => navigate(`/announcements/${a._id}/poster`)} title="View Poster"><ImageIcon className="w-4 h-4 text-indigo-600"/></Button>
+                {isAdmin && (
+                  <>
+                    <Button variant="ghost" size="icon-sm"><Edit className="w-4 h-4"/></Button>
+                    <Button variant="ghost" size="icon-sm" disabled={loading} onClick={()=>remove(a._id)}><X className="w-4 h-4"/></Button>
+                  </>
+                )}
+              </div>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
 
             {/* Pagination */}
             <div className="flex items-center justify-between p-3 border-t">

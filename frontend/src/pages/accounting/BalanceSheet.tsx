@@ -65,40 +65,40 @@ export default function BalanceSheet() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative rounded-[3rem] border border-white/5 bg-black/20 backdrop-blur-3xl p-1 shadow-2xl transition-all duration-500 hover:border-white/10"
+        className="relative rounded-[3rem] border border-slate-200 bg-white p-1 shadow-xl transition-all duration-500 hover:border-indigo-200"
       >
         <div className="p-8 pb-4 flex items-center gap-4">
-          <div className={cn("p-3 rounded-2xl border shadow-lg", color)}>
+          <div className={cn("p-3 rounded-2xl shadow-sm border", color)}>
             <Icon className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-xl font-black uppercase italic tracking-tighter text-white">{title}</h3>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30">{rows.length} Active Registries</p>
+            <h3 className="text-xl font-bold uppercase tracking-tight text-slate-900">{title}</h3>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{rows.length} Active Registries</p>
           </div>
         </div>
 
         <div className="px-8 pb-8 space-y-2 mt-6">
           {rows.length === 0 ? (
-            <div className="py-12 text-center text-white/10 font-bold uppercase tracking-widest text-xs italic">No {title} Data</div>
+            <div className="py-12 text-center text-slate-300 font-bold uppercase tracking-widest text-xs italic bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">No {title} Data</div>
           ) : (
             rows.map((r:any, i:number)=> (
               <div key={i} className={cn(
                 "flex justify-between items-center py-4 px-6 rounded-2xl transition-all border border-transparent",
-                r.hasChildren ? "bg-white/5 border-white/10 mb-2" : "bg-white/[0.02] hover:bg-white/[0.05]"
+                r.hasChildren ? "bg-slate-50 border-slate-100 mb-2 shadow-sm" : "bg-white hover:bg-slate-50 hover:shadow-md hover:border-slate-100"
               )}>
                 <div className="flex flex-col" style={rowIndent(Number(r.level || 0))}>
                   <span className={cn(
-                    "text-[10px] font-black font-mono tracking-widest uppercase",
-                    r.hasChildren ? "text-indigo-400" : "text-white/30"
+                    "text-[10px] font-bold font-mono tracking-widest uppercase",
+                    r.hasChildren ? "text-indigo-600" : "text-slate-400"
                   )}>{r.accountCode}</span>
                   <span className={cn(
-                    "font-black tracking-tight",
-                    r.hasChildren ? "text-base uppercase text-white" : "text-sm text-slate-300"
+                    "font-bold tracking-tight transition-colors",
+                    r.hasChildren ? "text-base uppercase text-slate-900" : "text-sm text-slate-600 group-hover:text-slate-900"
                   )}>{r.accountName}</span>
                 </div>
                 <span className={cn(
-                  "font-black text-lg tabular-nums tracking-tighter",
-                  compute(r) < 0 ? "text-rose-400" : "text-white"
+                  "font-bold text-lg tabular-nums tracking-tighter",
+                  compute(r) < 0 ? "text-rose-600" : "text-slate-900"
                 )}>
                   {compute(r).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
@@ -113,36 +113,36 @@ export default function BalanceSheet() {
   const totals = data?.totals || { assets:0, liabilities:0, equity:0 };
 
   return (
-    <div className="p-6 space-y-8 min-h-screen bg-[#020617] text-white">
+    <div className="p-6 space-y-8 min-h-screen bg-slate-50/50 text-slate-900">
       {/* Dynamic Background */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-500/5 blur-[120px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-blue-500/5 blur-[120px]" />
+      <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
+        <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-100/50 blur-[120px]" />
+        <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-blue-100/50 blur-[120px]" />
       </div>
 
-      {/* Premium Institutional Header */}
+      {/* Premium Corporate Header */}
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative group overflow-hidden rounded-[2.5rem] border border-white/10 bg-white/5 backdrop-blur-3xl p-8 md:p-12 shadow-2xl"
+        className="relative group overflow-hidden rounded-[2.5rem] border border-slate-200 bg-white p-8 md:p-12 shadow-xl"
       >
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/20 via-blue-500/5 to-transparent opacity-50" />
+        <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/50 via-white to-transparent opacity-50" />
         <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-8">
           <div className="space-y-4">
             <div className="flex items-center gap-4">
-              <div className="p-4 bg-indigo-500/20 rounded-[1.5rem] border border-indigo-500/30 shadow-[0_0_30px_-5px_rgba(99,102,241,0.4)]">
-                <Landmark className="w-8 h-8 text-indigo-400" />
+              <div className="p-4 bg-indigo-600 rounded-[1.5rem] shadow-lg shadow-indigo-200">
+                <Landmark className="w-8 h-8 text-white" />
               </div>
               <div>
-                <h1 className="text-4xl md:text-6xl font-black tracking-tighter uppercase italic leading-none">
-                  Institutional <span className="text-indigo-400">Position</span>
+                <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900 uppercase">
+                  Corporate <span className="text-indigo-600">Position</span>
                 </h1>
                 <div className="flex items-center gap-2 mt-2">
-                  <Badge className="bg-indigo-500/20 text-indigo-300 border-indigo-500/30 text-[10px] font-black uppercase tracking-widest px-3 py-1">Registry Balance Sheet</Badge>
+                  <Badge variant="secondary" className="bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-100 transition-colors py-1 px-3 text-[10px] font-bold uppercase tracking-widest">Registry Balance Sheet</Badge>
                   {data && (
                     <Badge className={cn(
-                      "text-[10px] font-black uppercase tracking-widest px-3 py-1 border-0",
-                      data.balanced ? "bg-emerald-500/20 text-emerald-300" : "bg-rose-500/20 text-rose-300 shadow-[0_0_20px_rgba(244,63,94,0.3)]"
+                      "text-[10px] font-bold uppercase tracking-widest px-3 py-1 border-0",
+                      data.balanced ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700 shadow-lg shadow-rose-100"
                     )}>
                       {data.balanced ? "PROTOCOL_BALANCED" : "INTEGRITY_ALERT"}
                     </Badge>
@@ -153,24 +153,23 @@ export default function BalanceSheet() {
           </div>
           
           <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center bg-black/40 backdrop-blur-2xl border border-white/10 rounded-[1.5rem] p-1 shadow-inner h-14">
-              <Calendar className="w-5 h-5 text-indigo-400 ml-4 mr-2" />
-              <Input
-                type="date"
-                value={asOf}
-                onChange={(e) => setAsOf(e.target.value)}
-                className="border-0 bg-transparent text-white focus-visible:ring-0 w-40 h-full font-black font-mono text-base shadow-none"
+            <div className="flex items-center bg-slate-50 rounded-2xl border border-slate-200 p-1.5 shadow-sm">
+              <Calendar className="w-5 h-5 text-indigo-600 ml-4 mr-2" />
+              <DatePicker 
+                value={asOf} 
+                onChange={setAsOf} 
+                className="border-0 bg-transparent text-slate-900 focus:ring-0 w-40 h-9 font-bold font-mono text-base p-0"
               />
             </div>
             
-            <div className="bg-white/5 rounded-[1.5rem] border border-white/10 p-1 h-14">
+            <div className="bg-slate-50 rounded-2xl border border-slate-200 p-1.5 shadow-sm h-[52px] flex items-center">
               <Select value={basis} onValueChange={(v: any) => setBasis(v)}>
-                <SelectTrigger className="border-0 bg-transparent focus:ring-0 h-full w-36 font-black text-[10px] tracking-widest uppercase text-indigo-400">
+                <SelectTrigger className="border-0 bg-transparent focus:ring-0 h-full w-36 font-bold text-xs tracking-widest uppercase text-indigo-600 shadow-none">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-[#0a0a0a] border-white/10 rounded-2xl text-white">
-                  <SelectItem value="accrual" className="uppercase font-black text-[10px] tracking-widest py-3">Accrual Basis</SelectItem>
-                  <SelectItem value="cash" className="uppercase font-black text-[10px] tracking-widest py-3">Cash Basis</SelectItem>
+                <SelectContent className="bg-white border-slate-200 rounded-2xl shadow-xl">
+                  <SelectItem value="accrual" className="uppercase font-bold text-[10px] tracking-widest py-3">Accrual Basis</SelectItem>
+                  <SelectItem value="cash" className="uppercase font-bold text-[10px] tracking-widest py-3">Cash Basis</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -178,9 +177,10 @@ export default function BalanceSheet() {
             <Button 
               onClick={load} 
               disabled={busy} 
-              className="rounded-[1.5rem] bg-indigo-600 hover:bg-indigo-500 text-white h-14 px-10 font-black tracking-widest shadow-[0_20px_50px_-10px_rgba(79,70,229,0.5)] border-0 transition-all duration-300"
+              size="lg"
+              className="rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white h-[52px] px-8 font-bold tracking-widest shadow-lg shadow-indigo-100 border-0 transition-all active:scale-95"
             >
-              <RefreshCw className={cn("w-5 h-5 mr-3", busy && "animate-spin text-indigo-400")} />
+              <RefreshCw className={cn("w-5 h-5 mr-3", busy && "animate-spin")} />
               CALCULATE
             </Button>
           </div>
@@ -188,55 +188,68 @@ export default function BalanceSheet() {
       </motion.div>
 
       {!data ? (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center justify-center py-40 border-2 border-dashed border-white/5 rounded-[3rem] opacity-20">
-          <Scale className="w-20 h-20 mb-4 stroke-[1px]" />
-          <p className="font-black uppercase tracking-[0.4em] text-sm italic text-center">Awaiting Institutional Calibration<br/>Select As-Of Date and Execute Protocol</p>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center justify-center py-40 border-2 border-dashed border-slate-200 rounded-[3rem] bg-white shadow-sm opacity-60">
+          <Scale className="w-20 h-20 mb-4 stroke-[1px] text-slate-300" />
+          <p className="font-bold uppercase tracking-[0.4em] text-sm text-slate-400 text-center">Awaiting Institutional Calibration<br/>Select As-Of Date and Execute Protocol</p>
         </motion.div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
           <div className="space-y-8">
-            {renderSection("Registry Assets", data?.assets, (r)=> Number(r.debit||0) - Number(r.credit||0), TrendingUp, "bg-emerald-500/10 border-emerald-500/20 text-emerald-400")}
+            {renderSection("Registry Assets", data?.assets, (r)=> Number(r.debit||0) - Number(r.credit||0), TrendingUp, "bg-emerald-50 border-emerald-100 text-emerald-600")}
             
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-8 bg-emerald-500/10 rounded-[2.5rem] border border-emerald-500/20 flex items-center justify-between shadow-[0_20px_50px_rgba(16,185,129,0.1)]">
-              <div className="flex items-center gap-3">
-                <ShieldCheck className="w-6 h-6 text-emerald-400" />
-                <span className="text-xl font-black uppercase italic tracking-tighter text-emerald-400 leading-none">Net Operational Assets</span>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-8 bg-emerald-600 rounded-[2.5rem] flex items-center justify-between shadow-lg shadow-emerald-100">
+              <div className="flex items-center gap-3 text-white">
+                <ShieldCheck className="w-6 h-6" />
+                <span className="text-xl font-bold uppercase tracking-tight leading-none">Net Operational Assets</span>
               </div>
-              <span className="text-4xl font-black tabular-nums tracking-tighter text-emerald-400 leading-none italic drop-shadow-[0_0_15px_rgba(52,211,153,0.4)]">
-                {formatMoney(totals.assets)}
-              </span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-sm font-bold text-white/60 uppercase">PKR</span>
+                <span className="text-4xl font-bold tabular-nums tracking-tighter text-white leading-none">
+                  {formatMoney(totals.assets)}
+                </span>
+              </div>
             </motion.div>
           </div>
 
           <div className="space-y-8">
-            {renderSection("Operational Liabilities", data?.liabilities, (r)=> Number(r.credit||0) - Number(r.debit||0), TrendingDown, "bg-rose-500/10 border-rose-500/20 text-rose-400")}
-            {renderSection("Registry Equity", data?.equity, (r)=> Number(r.credit||0) - Number(r.debit||0), Target, "bg-blue-500/10 border-blue-500/20 text-blue-400")}
+            {renderSection("Operational Liabilities", data?.liabilities, (r)=> Number(r.credit||0) - Number(r.debit||0), TrendingDown, "bg-rose-50 border-rose-100 text-rose-600")}
+            {renderSection("Registry Equity", data?.equity, (r)=> Number(r.credit||0) - Number(r.debit||0), Target, "bg-blue-50 border-blue-100 text-blue-600")}
             
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-10 bg-gradient-to-br from-indigo-600/20 to-purple-600/10 rounded-[3rem] border border-white/10 shadow-2xl space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">Bottom Line Performance</span>
-                  <span className="text-lg font-black uppercase italic tracking-tighter text-indigo-400">Yield Carryforward</span>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-10 bg-white rounded-[3rem] border border-slate-200 shadow-2xl space-y-6 relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/50 via-white to-transparent opacity-50" />
+              <div className="relative z-10 space-y-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-col text-left">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Bottom Line Performance</span>
+                    <span className="text-lg font-bold uppercase tracking-tight text-indigo-600">Yield Carryforward</span>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-xs font-bold text-slate-300">PKR</span>
+                    <span className="text-2xl font-bold tabular-nums tracking-tighter text-slate-900">
+                      {formatMoney(data.retainedEarnings)}
+                    </span>
+                  </div>
                 </div>
-                <span className="text-2xl font-black tabular-nums tracking-tighter text-white italic">
-                  {formatMoney(data.retainedEarnings)}
-                </span>
-              </div>
-              <Separator className="bg-white/5" />
-              <div className="flex items-center justify-between pt-2">
-                <div className="flex items-center gap-3">
-                  <ShieldCheck className="w-6 h-6 text-indigo-400" />
-                  <span className="text-xl font-black uppercase italic tracking-tighter text-white leading-none">Total L+E Registry</span>
+                <Separator className="bg-slate-100" />
+                <div className="flex items-center justify-between pt-2">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-indigo-100 rounded-xl">
+                      <ShieldCheck className="w-6 h-6 text-indigo-600" />
+                    </div>
+                    <span className="text-xl font-bold uppercase tracking-tight text-slate-900 leading-none">Total L+E Registry</span>
+                  </div>
+                  <div className="flex items-baseline gap-2 text-indigo-600">
+                    <span className="text-sm font-bold opacity-50 uppercase">PKR</span>
+                    <span className="text-4xl font-bold tabular-nums tracking-tighter leading-none">
+                      {formatMoney(totals.liabilities + totals.equity)}
+                    </span>
+                  </div>
                 </div>
-                <span className="text-4xl font-black tabular-nums tracking-tighter text-white leading-none italic drop-shadow-[0_0_15px_rgba(99,102,241,0.4)]">
-                  {formatMoney(totals.liabilities + totals.equity)}
-                </span>
               </div>
             </motion.div>
           </div>
         </div>
       )}
-
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }

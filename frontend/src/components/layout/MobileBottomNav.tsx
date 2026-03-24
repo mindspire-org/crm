@@ -118,10 +118,10 @@ const getRoleBasedNav = (role: string): NavItem[] => {
   if (normalizedRole === "team_member" || normalizedRole === "staff") {
     return [
       { title: "Dashboard", href: "/", icon: LayoutDashboard },
+      { title: "My Profile", href: "/hrm/my-profile", icon: User },
       { title: "Attendance", href: "/hrm/attendance", icon: BarChart3 },
-      { title: "Leave", href: "/hrm/leaves", icon: CreditCard },
       { title: "My Ledger", href: "/hrm/my-salary-ledger", icon: DollarSign },
-      { title: "Profile", href: "/profile", icon: User },
+      { title: "Tasks", href: "/tasks", icon: CheckSquare },
     ];
   }
 

@@ -1,16 +1,41 @@
 import { useEffect, useRef, useState } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { TopNav } from "./TopNav";
 import { MobileBottomNav } from "./MobileBottomNav";
 import { cn } from "@/lib/utils";
+import { Bell, Megaphone, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { API_BASE } from "@/lib/api/base";
 
 export function MainLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [activeAnnouncement, setActiveAnnouncement] = useState<any>(null);
   const prevCollapsedRef = useRef<boolean>(false);
   const didAutoCollapseRef = useRef(false);
+
+  useEffect(() => {
+    // SSE Listener for real-time announcements
+    const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+    if (!token) return;
+
+    const sse = new EventSource(`${API_BASE}/api/realtime/stream?token=${token}`);
+    
+    sse.addEventListener("announcement", (e: any) => {
+      try {
+        const data = JSON.parse(e.data);
+        setActiveAnnouncement(data);
+      } catch (err) {
+        console.error("Failed to parse announcement SSE:", err);
+      }
+    });
+
+    return () => sse.close();
+  }, []);
 
   const handleMenuClick = () => {
     const isDesktop = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(min-width: 1024px)").matches;
@@ -87,6 +112,55 @@ export function MainLayout() {
             <Outlet />
           </div>
         </main>
+
+        {/* Real-time Announcement Popup */}
+        {activeAnnouncement && (
+          <div className="fixed bottom-6 right-6 z-[100] animate-in fade-in slide-in-from-bottom-10 duration-500 max-w-sm w-full px-4 sm:px-0">
+            <Card className="overflow-hidden border-2 border-indigo-500 shadow-2xl bg-white/95 backdrop-blur">
+              <div className="bg-indigo-600 p-3 text-white flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Megaphone className="w-4 h-4" />
+                  <span className="text-xs font-black uppercase tracking-widest italic">New Announcement</span>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-6 w-6 text-white hover:bg-white/20" 
+                  onClick={() => setActiveAnnouncement(null)}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+              <div className="p-4 space-y-3">
+                <h3 className="font-black text-slate-900 uppercase italic leading-tight">
+                  {activeAnnouncement.title}
+                </h3>
+                <p className="text-sm text-slate-600 line-clamp-2 leading-relaxed">
+                  {activeAnnouncement.message?.replace(/<[^>]*>?/gm, '')}
+                </p>
+                <div className="flex gap-2 pt-1">
+                  <Button 
+                    className="flex-1 bg-slate-900 text-white font-black uppercase text-[10px] tracking-widest rounded-xl"
+                    onClick={() => {
+                      navigate(`/announcements/${activeAnnouncement.id}`);
+                      setActiveAnnouncement(null);
+                    }}
+                  >
+                    View Details
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    className="flex-1 border-slate-200 font-black uppercase text-[10px] tracking-widest rounded-xl"
+                    onClick={() => setActiveAnnouncement(null)}
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          </div>
+        )}
+
         <MobileBottomNav onMenuClick={handleMenuClick} />
       </div>
     </div>

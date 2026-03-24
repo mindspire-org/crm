@@ -14,7 +14,13 @@ const ContractSchema = new mongoose.Schema(
     status: { type: String, default: "draft" },
     tax1: { type: Number, default: 0 },
     tax2: { type: Number, default: 0 },
+    discount: { type: Number, default: 0 },
+    advanceAmount: { type: Number, default: 0 },
+    paymentTermsPercentage: { type: Number, default: 50 },
     note: { type: String, default: "" },
+    timeframe: { type: String, default: "" },
+    timeframeStartDate: { type: Date },
+    timeframeDays: { type: Number, default: 20 },
     items: [
       {
         name: { type: String, default: "" },

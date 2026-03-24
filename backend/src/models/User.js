@@ -43,6 +43,7 @@ const UserSchema = new mongoose.Schema(
     clientId: { type: mongoose.Schema.Types.ObjectId, ref: "Client" },
     failedLogins: { type: Number, default: 0 },
     lastLoginAt: { type: Date },
+    lastActiveAt: { type: Date },
     createdBy: { type: String, default: "system" }, // e.g. self-signup
   },
   { timestamps: true }

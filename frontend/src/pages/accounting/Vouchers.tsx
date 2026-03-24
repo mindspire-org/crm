@@ -26,6 +26,11 @@ import { getAuthHeaders } from "@/lib/api/auth";
 import { API_BASE } from "@/lib/api/base";
 import { motion, AnimatePresence } from "framer-motion";
 
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { ChevronsUpDown, Check } from "lucide-react";
+import { DatePicker } from "@/components/ui/date-picker";
+
 type VoucherType = "sales_invoice" | "customer_payment" | "vendor_bill" | "expense" | "vendor_payment" | "journal";
 
 interface Line {
@@ -37,7 +42,10 @@ interface Line {
   entityId?: string;
 }
 
+import { useNavigate } from "react-router-dom";
+
 export default function Vouchers() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [vouchers, setVouchers] = useState<any[]>([]);
   const [accounts, setAccounts] = useState<any[]>([]);
@@ -45,12 +53,17 @@ export default function Vouchers() {
   const [vendors, setVendors] = useState<any[]>([]);
   
   const [showAdd, setShowAdd] = useState(false);
+  const [tab, setTab] = useState<"all" | "draft" | "posted">("all");
+  const [rangeFrom, setRangeFrom] = useState("");
+  const [rangeTo, setRangeTo] = useState("");
   const [type, setType] = useState<VoucherType>("journal");
   const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [memo, setMemo] = useState("");
   const [refNo, setRefNo] = useState("");
   const [entityType, setEntityType] = useState<"client" | "vendor" | "employee">("client");
   const [entityId, setEntityId] = useState<string>("");
+  const [accountOpen, setAccountOpen] = useState<number | null>(null);
+  const [entityOpen, setEntityOpen] = useState(false);
   const [lines, setLines] = useState<Line[]>([
     { accountCode: "", debit: 0, credit: 0, description: "" },
     { accountCode: "", debit: 0, credit: 0, description: "" },
@@ -60,22 +73,23 @@ export default function Vouchers() {
   const totalCredit = lines.reduce((sum, l) => sum + Number(l.credit || 0), 0);
   const isBalanced = Math.abs(totalDebit - totalCredit) < 0.01;
 
-  useEffect(() => {
-    void loadData();
-  }, []);
-
   const loadData = async () => {
     setLoading(true);
     try {
       const headers = getAuthHeaders();
-      const [vRes, aRes, cRes, venRes] = await Promise.all([
-        fetch(`${API_BASE}/api/vouchers`, { headers }),
+      const sp = new URLSearchParams();
+      if (rangeFrom) sp.set("from", rangeFrom);
+      if (rangeTo) sp.set("to", rangeTo);
+      const qs = sp.toString() ? `?${sp.toString()}` : "";
+      
+      const res = await fetch(`${API_BASE}/api/vouchers${qs}`, { headers });
+      if (res.ok) setVouchers(await res.json());
+      
+      const [aRes, cRes, venRes] = await Promise.all([
         fetch(`${API_BASE}/api/accounts`, { headers }),
         fetch(`${API_BASE}/api/clients`, { headers }),
         fetch(`${API_BASE}/api/vendors`, { headers }),
       ]);
-      
-      if (vRes.ok) setVouchers(await vRes.json());
       if (aRes.ok) setAccounts(await aRes.json());
       if (cRes.ok) setClients(await cRes.json());
       if (venRes.ok) setVendors(await venRes.json());
@@ -83,6 +97,14 @@ export default function Vouchers() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    void loadData();
+  }, [rangeFrom, rangeTo]);
+
+  useEffect(() => {
+    // initial load already covered by range dependency if we set defaults or just keep it
+  }, []);
 
   const addLine = () => {
     setLines([...lines, { accountCode: "", debit: 0, credit: 0, description: "" }]);
@@ -183,7 +205,32 @@ export default function Vouchers() {
       >
         <div className="absolute inset-0 bg-gradient-to-br from-indigo-50 via-white to-transparent group-hover:opacity-100 transition-opacity duration-1000 opacity-50" />
         <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-8">
-          <div className="space-y-4">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-2">
+              <DatePicker 
+                value={rangeFrom} 
+                onChange={setRangeFrom} 
+                placeholder="From Date"
+                className="h-10 w-36 rounded-xl border-slate-200 bg-white shadow-sm transition-all focus:ring-indigo-500 font-bold text-xs"
+              />
+              <span className="text-slate-400 font-bold">→</span>
+              <DatePicker 
+                value={rangeTo} 
+                onChange={setRangeTo} 
+                placeholder="To Date"
+                className="h-10 w-36 rounded-xl border-slate-200 bg-white shadow-sm transition-all focus:ring-indigo-500 font-bold text-xs"
+              />
+              {(rangeFrom || rangeTo) && (
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-8 w-8 rounded-full text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                  onClick={() => { setRangeFrom(""); setRangeTo(""); }}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
             <div className="flex items-center gap-4">
               <div className="p-4 bg-indigo-100 rounded-[1.5rem] border border-indigo-200 shadow-sm">
                 <Receipt className="w-8 h-8 text-indigo-600" />
@@ -194,7 +241,7 @@ export default function Vouchers() {
                 </h1>
                 <div className="flex items-center gap-2 mt-2">
                   <Badge className="bg-indigo-100 text-indigo-700 border-indigo-200 text-[10px] font-bold uppercase tracking-widest px-3 py-1">Double-Entry Source Protocol</Badge>
-                  <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px] font-bold uppercase tracking-widest px-3 py-1">Institutional Audit Trail</Badge>
+                  <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px] font-bold uppercase tracking-widest px-3 py-1">Corporate Audit Trail</Badge>
                 </div>
               </div>
             </div>
@@ -238,29 +285,29 @@ export default function Vouchers() {
                 </Button>
               </div>
               
-              <div className="bg-gradient-to-r from-indigo-600 to-indigo-800 p-10 flex items-center justify-between">
+              <div className="bg-slate-900 p-8 flex items-center justify-between border-b border-white/5">
                 <div className="flex items-center gap-4">
-                  <div className="p-3 bg-white/10 rounded-2xl border border-white/20">
-                    <Zap className="w-6 h-6 text-white" />
+                  <div className="p-2.5 bg-indigo-500 rounded-xl">
+                    <Zap className="w-5 h-5 text-white" />
                   </div>
                   <div>
-                    <h2 className="text-2xl font-bold text-white uppercase tracking-tight leading-none">Drafting Source Protocol</h2>
-                    <p className="text-white/60 text-[10px] font-bold uppercase tracking-[0.3em] mt-2">{typeLabels[type]}</p>
+                    <h2 className="text-xl font-bold text-white uppercase tracking-tight">Drafting Protocol</h2>
+                    <p className="text-indigo-400 text-[9px] font-bold uppercase tracking-[0.3em] mt-1">{typeLabels[type]}</p>
                   </div>
                 </div>
-                <Badge className="bg-white/20 text-white border-white/30 px-4 py-1.5 font-bold uppercase tracking-widest text-[10px]">Awaiting Finalization</Badge>
+                <Badge variant="outline" className="bg-white/5 text-white/40 border-white/10 px-3 py-1 font-bold uppercase tracking-widest text-[9px]">Registry Buffer</Badge>
               </div>
 
-              <CardContent className="p-10 space-y-10">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8">
-                  <div className="space-y-3">
-                    <Label className="text-[10px] font-bold uppercase tracking-[0.3em] text-indigo-600 ml-1">Voucher Taxonomy</Label>
+              <CardContent className="p-8 sm:p-10 space-y-10">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-6 items-end">
+                  <div className="lg:col-span-3 space-y-2">
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Taxonomy</Label>
                     <Select value={type} onValueChange={(v: VoucherType) => {
                       setType(v);
                       if (v === "sales_invoice" || v === "customer_payment") setEntityType("client");
                       else if (v === "vendor_bill" || v === "vendor_payment") setEntityType("vendor");
                     }}>
-                      <SelectTrigger className="h-14 rounded-2xl border-slate-200 bg-slate-50 focus:ring-indigo-500 font-bold uppercase text-[10px] tracking-widest text-slate-900 shadow-sm transition-all hover:bg-white">
+                      <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-slate-50/50 focus:ring-indigo-500 font-bold uppercase text-[10px] tracking-widest text-slate-900 shadow-sm transition-all hover:bg-white">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="bg-white border-slate-200 rounded-2xl text-slate-900 shadow-xl">
@@ -272,37 +319,89 @@ export default function Vouchers() {
                   </div>
                   
                   {type !== "journal" && (
-                    <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="space-y-3">
-                      <Label className="text-[10px] font-bold uppercase tracking-[0.3em] text-indigo-600 ml-1">{entityType.toUpperCase()} PROTOCOL</Label>
-                      <Select value={entityId} onValueChange={setEntityId}>
-                        <SelectTrigger className="h-14 rounded-2xl border-slate-200 bg-slate-50 focus:ring-indigo-500 font-bold text-sm text-slate-900 shadow-sm transition-all hover:bg-white">
-                          <SelectValue placeholder={`Link ${entityType}`} />
-                        </SelectTrigger>
-                        <SelectContent className="bg-white border-slate-200 rounded-2xl text-slate-900 shadow-xl">
-                          {entityType === "client" ? (
-                            clients.map(c => <SelectItem key={c._id} value={c._id} className="font-bold">{c.company || c.person}</SelectItem>)
-                          ) : entityType === "vendor" ? (
-                            vendors.map(v => <SelectItem key={v._id} value={v._id} className="font-bold">{v.name || v.company}</SelectItem>)
-                          ) : null}
-                        </SelectContent>
-                      </Select>
+                    <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="lg:col-span-3 space-y-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">{entityType.toUpperCase()} LINK</Label>
+                      <Popover open={entityOpen} onOpenChange={setEntityOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            className="h-12 w-full rounded-xl border-slate-200 bg-slate-50/50 font-bold text-sm text-slate-900 shadow-sm transition-all hover:bg-white uppercase tracking-tight justify-between px-4"
+                          >
+                            <span className="truncate">
+                              {entityId
+                                ? (entityType === "client" 
+                                    ? clients.find(c => c._id === entityId)?.company || clients.find(c => c._id === entityId)?.person
+                                    : vendors.find(v => v._id === entityId)?.name || vendors.find(v => v._id === entityId)?.company)
+                                : `Link ${entityType}`}
+                            </span>
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[300px] p-0 shadow-2xl border-slate-200 rounded-2xl overflow-hidden" align="start">
+                          <Command className="rounded-none">
+                            <CommandInput placeholder={`Search ${entityType}...`} className="h-12 border-none focus:ring-0" />
+                            <CommandList className="max-h-[300px]">
+                              <CommandEmpty>No {entityType} found.</CommandEmpty>
+                              <CommandGroup>
+                                {entityType === "client" ? (
+                                  clients.map(c => (
+                                    <CommandItem
+                                      key={c._id}
+                                      value={c.company || c.person}
+                                      onSelect={() => {
+                                        setEntityId(c._id);
+                                        setEntityOpen(false);
+                                      }}
+                                      className="py-3 px-4 cursor-pointer hover:bg-indigo-50"
+                                    >
+                                      <div className="flex items-center w-full gap-2">
+                                        <Check className={cn("h-4 w-4 text-indigo-600 shrink-0", entityId === c._id ? "opacity-100" : "opacity-0")} />
+                                        <span className="font-medium truncate">{c.company || c.person}</span>
+                                      </div>
+                                    </CommandItem>
+                                  ))
+                                ) : (
+                                  vendors.map(v => (
+                                    <CommandItem
+                                      key={v._id}
+                                      value={v.name || v.company}
+                                      onSelect={() => {
+                                        setEntityId(v._id);
+                                        setEntityOpen(false);
+                                      }}
+                                      className="py-3 px-4 cursor-pointer hover:bg-indigo-50"
+                                    >
+                                      <div className="flex items-center w-full gap-2">
+                                        <Check className={cn("h-4 w-4 text-indigo-600 shrink-0", entityId === v._id ? "opacity-100" : "opacity-0")} />
+                                        <span className="font-medium truncate">{v.name || v.company}</span>
+                                      </div>
+                                    </CommandItem>
+                                  ))
+                                )}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                     </motion.div>
                   )}
 
-                  <div className="space-y-3">
-                    <Label className="text-[10px] font-bold uppercase tracking-[0.3em] text-indigo-600 ml-1">Effective Date</Label>
-                    <div className="h-14 bg-slate-50 rounded-2xl border border-slate-200 flex items-center px-4 shadow-sm overflow-hidden transition-all hover:bg-white focus-within:bg-white focus-within:ring-1 focus-within:ring-indigo-500 text-slate-900">
-                      <Calendar className="w-5 h-5 text-indigo-600 mr-3" />
-                      <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="border-0 bg-transparent text-slate-900 focus-visible:ring-0 font-bold font-mono text-base tabular-nums p-0 h-full shadow-none" />
-                    </div>
+                  <div className="lg:col-span-2 space-y-2">
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Effective Date</Label>
+                    <DatePicker 
+                      value={date} 
+                      onChange={setDate} 
+                      className="h-12 rounded-xl border-slate-200 bg-slate-50/50 hover:bg-white focus:bg-white focus:ring-indigo-500 font-bold font-mono text-sm transition-all shadow-sm w-full"
+                    />
                   </div>
-                  <div className="space-y-3">
-                    <Label className="text-[10px] font-bold uppercase tracking-[0.3em] text-indigo-600 ml-1">Reference ID</Label>
-                    <Input value={refNo} onChange={e => setRefNo(e.target.value)} placeholder="PROTOCOL_REF" className="h-14 rounded-2xl border-slate-200 bg-slate-50 focus-visible:ring-indigo-500 font-bold font-mono tracking-widest text-slate-900 shadow-sm transition-all hover:bg-white" />
+                  <div className="lg:col-span-2 space-y-2">
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Ref ID</Label>
+                    <Input value={refNo} onChange={e => setRefNo(e.target.value)} placeholder="REF_CODE" className="h-12 rounded-xl border-slate-200 bg-slate-50/50 focus-visible:ring-indigo-500 font-bold font-mono tracking-widest text-slate-900 shadow-sm transition-all hover:bg-white" />
                   </div>
-                  <div className="space-y-3">
-                    <Label className="text-[10px] font-bold uppercase tracking-[0.3em] text-indigo-600 ml-1">Operational Memo</Label>
-                    <Input value={memo} onChange={e => setMemo(e.target.value)} placeholder="Context narrative..." className="h-14 rounded-2xl border-slate-200 bg-slate-50 focus-visible:ring-indigo-500 font-bold text-slate-900 shadow-sm transition-all hover:bg-white" />
+                  <div className="lg:col-span-2 space-y-2">
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Operational Memo</Label>
+                    <Input value={memo} onChange={e => setMemo(e.target.value)} placeholder="Narrative..." className="h-12 rounded-xl border-slate-200 bg-slate-50/50 focus-visible:ring-indigo-500 font-bold text-slate-900 shadow-sm transition-all hover:bg-white" />
                   </div>
                 </div>
 
@@ -321,19 +420,43 @@ export default function Vouchers() {
                       {lines.map((line, idx) => (
                         <TableRow key={idx} className="group transition-all duration-300 rounded-2xl overflow-hidden hover:bg-indigo-50 bg-white border border-slate-100 shadow-sm">
                           <TableCell className="py-6 px-8 border-0">
-                            <Select value={line.accountCode} onValueChange={v => updateLine(idx, { accountCode: v })}>
-                              <SelectTrigger className="border-0 shadow-none focus:ring-0 bg-transparent h-auto p-0 font-bold text-indigo-600 hover:text-indigo-700 transition-colors uppercase tracking-tight text-lg leading-none">
-                                <SelectValue placeholder="SELECT REGISTRY" />
-                              </SelectTrigger>
-                              <SelectContent className="bg-white border-slate-200 rounded-2xl text-slate-900 shadow-xl max-h-[400px]">
-                                {accounts.map(acc => (
-                                  <SelectItem key={acc.code} value={acc.code} className="py-3 uppercase font-bold text-[10px] tracking-widest border-b border-slate-50 last:border-0 hover:bg-indigo-50">
-                                    <span className="opacity-40 mr-2 font-mono">{acc.code}</span>
-                                    {acc.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <Popover open={accountOpen === idx} onOpenChange={(open) => setAccountOpen(open ? idx : null)}>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  className="border-0 shadow-none focus:ring-0 bg-transparent h-auto p-0 font-bold text-indigo-600 hover:text-indigo-700 transition-colors uppercase tracking-tight text-lg leading-none"
+                                >
+                                  {line.accountCode || "SELECT REGISTRY"}
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-[300px] p-0 shadow-2xl border-slate-200 rounded-2xl overflow-hidden" align="start">
+                                <Command className="rounded-none">
+                                  <CommandInput placeholder="Search registry..." className="h-11 border-none focus:ring-0" />
+                                  <CommandList className="max-h-[300px]">
+                                    <CommandEmpty>No account found.</CommandEmpty>
+                                    <CommandGroup>
+                                      {accounts.map(acc => (
+                                        <CommandItem
+                                          key={acc.code}
+                                          value={`${acc.code} ${acc.name}`}
+                                          onSelect={() => {
+                                            updateLine(idx, { accountCode: acc.code });
+                                            setAccountOpen(null);
+                                          }}
+                                          className="py-3 px-4 cursor-pointer hover:bg-indigo-50"
+                                        >
+                                          <div className="flex items-center w-full gap-2">
+                                            <Check className={cn("h-4 w-4 text-indigo-600 shrink-0", line.accountCode === acc.code ? "opacity-100" : "opacity-0")} />
+                                            <span className="font-mono text-xs opacity-40 min-w-[40px]">{acc.code}</span>
+                                            <span className="font-medium truncate">{acc.name}</span>
+                                          </div>
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                  </CommandList>
+                                </Command>
+                              </PopoverContent>
+                            </Popover>
                           </TableCell>
                           <TableCell className="py-6 px-6 border-0">
                             <Input value={line.description} onChange={e => updateLine(idx, { description: e.target.value })} placeholder="Registry note..." className="border-0 shadow-none focus-visible:ring-0 bg-transparent p-0 font-bold text-slate-500 group-hover:text-slate-900 transition-colors h-auto" />

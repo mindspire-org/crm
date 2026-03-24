@@ -58,33 +58,33 @@ export default function IncomeStatement() {
   };
 
   return (
-    <div className="p-6 space-y-8 min-h-screen bg-[#020617] text-white">
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-500/5 blur-[120px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-emerald-500/5 blur-[120px]" />
+    <div className="max-w-7xl mx-auto p-6 space-y-8 min-h-screen bg-slate-50/50 text-slate-900">
+      <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
+        <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-100/50 blur-[120px]" />
+        <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-emerald-100/50 blur-[120px]" />
       </div>
 
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative group overflow-hidden rounded-[2.5rem] border border-white/10 bg-white/5 backdrop-blur-3xl p-8 md:p-12 shadow-2xl"
+        className="relative group overflow-hidden rounded-[2.5rem] border border-slate-200 bg-white p-8 md:p-12 shadow-xl"
       >
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/20 via-emerald-500/5 to-transparent opacity-50" />
+        <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/50 via-white to-transparent opacity-50" />
         <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-8">
           <div className="space-y-4">
             <div className="flex items-center gap-4">
-              <div className="p-4 bg-indigo-500/20 rounded-[1.5rem] border border-indigo-500/30 shadow-[0_0_30px_-5px_rgba(99,102,241,0.4)]">
-                <PieChart className="w-8 h-8 text-indigo-400" />
+              <div className="p-4 bg-indigo-600 rounded-[1.5rem] shadow-lg shadow-indigo-200">
+                <PieChart className="w-8 h-8 text-white" />
               </div>
               <div>
-                <h1 className="text-4xl md:text-6xl font-black tracking-tighter uppercase italic leading-none">
-                  Yield <span className="text-indigo-400">Statement</span>
+                <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900 uppercase">
+                  Yield <span className="text-indigo-600">Statement</span>
                 </h1>
                 <div className="flex items-center gap-2 mt-2">
-                  <Badge className="bg-indigo-500/20 text-indigo-300 border-indigo-500/30 text-[10px] font-black uppercase tracking-widest px-3 py-1">Income & Burn Analysis</Badge>
+                  <Badge variant="secondary" className="bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-100 transition-colors py-1 px-3 text-[10px] font-bold uppercase tracking-widest">Income & Burn Analysis</Badge>
                   <Badge className={cn(
-                    "text-[10px] font-black uppercase tracking-widest px-3 py-1 border-0",
-                    net >= 0 ? "bg-emerald-500/20 text-emerald-300" : "bg-rose-500/20 text-rose-300"
+                    "text-[10px] font-bold uppercase tracking-widest px-3 py-1 border-0",
+                    net >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
                   )}>
                     {net >= 0 ? "PROFITABLE PROTOCOL" : "DIVERGENT YIELD"}
                   </Badge>
@@ -93,36 +93,36 @@ export default function IncomeStatement() {
             </div>
           </div>
           
-                <div className="flex flex-wrap items-center gap-4">
-                  <div className="flex items-center bg-black/40 backdrop-blur-2xl border border-white/10 rounded-[1.5rem] p-1 shadow-inner h-14 text-white">
-                    <div className="flex items-center px-4 border-r border-white/10">
-                      <Calendar className="w-4 h-4 text-slate-500 mr-2" />
-                      <Input
-                        type="date"
-                        value={from}
-                        onChange={(e) => setFrom(e.target.value)}
-                        className="border-0 bg-transparent text-white focus-visible:ring-0 w-36 h-full font-black font-mono text-sm shadow-none"
-                      />
-                    </div>
-                    <div className="flex items-center px-4">
-                      <ArrowRightLeft className="w-4 h-4 text-slate-500 mr-2" />
-                      <Input
-                        type="date"
-                        value={to}
-                        onChange={(e) => setTo(e.target.value)}
-                        className="border-0 bg-transparent text-white focus-visible:ring-0 w-36 h-full font-black font-mono text-sm shadow-none"
-                      />
-                    </div>
-                  </div>
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center bg-slate-50 rounded-2xl border border-slate-200 p-1.5 shadow-sm">
+              <div className="flex items-center px-3 border-r border-slate-200">
+                <Calendar className="w-4 h-4 text-slate-400 mr-2" />
+                <DatePicker 
+                  value={from} 
+                  onChange={setFrom} 
+                  placeholder="From"
+                  className="border-0 bg-transparent text-slate-900 focus:ring-0 w-32 h-9 text-sm font-semibold p-0"
+                />
+              </div>
+              <div className="flex items-center px-3">
+                <ArrowRightLeft className="w-4 h-4 text-slate-400 mr-2" />
+                <DatePicker 
+                  value={to} 
+                  onChange={setTo} 
+                  placeholder="To"
+                  className="border-0 bg-transparent text-slate-900 focus:ring-0 w-32 h-9 text-sm font-semibold p-0"
+                />
+              </div>
+            </div>
             
-            <div className="bg-white/5 rounded-[1.5rem] border border-white/10 p-1 h-14">
+            <div className="bg-slate-50 rounded-2xl border border-slate-200 p-1.5 shadow-sm h-[52px] flex items-center">
               <Select value={basis} onValueChange={(v: any) => setBasis(v)}>
-                <SelectTrigger className="border-0 bg-transparent focus:ring-0 h-full w-36 font-black text-[10px] tracking-widest uppercase text-indigo-400">
+                <SelectTrigger className="border-0 bg-transparent focus:ring-0 h-full w-36 font-bold text-xs tracking-widest uppercase text-indigo-600 shadow-none">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-[#0a0a0a] border-white/10 rounded-2xl text-white">
-                  <SelectItem value="accrual" className="uppercase font-black text-[10px] tracking-widest py-3">Accrual Basis</SelectItem>
-                  <SelectItem value="cash" className="uppercase font-black text-[10px] tracking-widest py-3">Cash Basis</SelectItem>
+                <SelectContent className="bg-white border-slate-200 rounded-2xl shadow-xl">
+                  <SelectItem value="accrual" className="uppercase font-bold text-[10px] tracking-widest py-3">Accrual Basis</SelectItem>
+                  <SelectItem value="cash" className="uppercase font-bold text-[10px] tracking-widest py-3">Cash Basis</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -130,9 +130,10 @@ export default function IncomeStatement() {
             <Button 
               onClick={load} 
               disabled={busy} 
-              className="rounded-[1.5rem] bg-indigo-600 hover:bg-indigo-500 text-white h-14 px-10 font-black tracking-widest shadow-[0_20px_50px_-10px_rgba(79,70,229,0.5)] border-0 transition-all duration-300"
+              size="lg"
+              className="rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white h-[52px] px-8 font-bold tracking-widest shadow-lg shadow-indigo-100 border-0 transition-all active:scale-95"
             >
-              <RefreshCw className={cn("w-5 h-5 mr-3", busy && "animate-spin text-indigo-400")} />
+              <RefreshCw className={cn("w-4 h-4 mr-2", busy && "animate-spin")} />
               CALCULATE
             </Button>
           </div>
@@ -143,30 +144,30 @@ export default function IncomeStatement() {
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
-          className="relative rounded-[3rem] border border-white/5 bg-black/20 backdrop-blur-3xl p-1 shadow-2xl hover:border-emerald-500/20 transition-all duration-500"
+          className="relative rounded-[2.5rem] border border-slate-200 bg-white p-1 shadow-xl overflow-hidden"
         >
           <div className="p-8 pb-4 flex items-center gap-4">
-            <div className="p-3 bg-emerald-500/10 rounded-2xl border border-emerald-500/20 shadow-lg">
-              <TrendingUp className="w-6 h-6 text-emerald-400" />
+            <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-100 shadow-sm">
+              <TrendingUp className="w-6 h-6 text-emerald-600" />
             </div>
             <div>
-              <h3 className="text-xl font-black uppercase italic tracking-tighter text-emerald-400">Yield Streams</h3>
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30">Total Recognized Revenue</p>
+              <h3 className="text-xl font-bold uppercase tracking-tight text-slate-900">Yield Streams</h3>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Total Recognized Revenue</p>
             </div>
           </div>
 
           <div className="px-8 pb-8 space-y-4">
-            <div className="space-y-2 mt-6">
+            <div className="space-y-3 mt-6">
               {income.length === 0 ? (
-                <div className="py-12 text-center text-white/10 font-bold uppercase tracking-widest text-xs italic">No Revenue Postings</div>
+                <div className="py-16 text-center text-slate-300 font-bold uppercase tracking-widest text-xs italic bg-slate-50/50 rounded-3xl border border-dashed border-slate-200">No Revenue Postings</div>
               ) : (
                 income.map((r: any, i: number) => (
-                  <div key={i} className="flex justify-between items-center py-4 px-6 rounded-2xl bg-white/[0.02] border border-white/5 group hover:bg-white/[0.05] transition-all">
+                  <div key={i} className="flex justify-between items-center py-4 px-6 rounded-2xl bg-slate-50/50 border border-slate-100 group hover:bg-white hover:shadow-md hover:border-emerald-100 transition-all duration-300">
                     <div className="flex flex-col">
-                      <span className="text-[10px] font-black font-mono text-white/30 tracking-widest group-hover:text-emerald-400 transition-colors uppercase">{r.accountCode}</span>
-                      <span className="font-bold text-sm text-slate-300">{r.accountName}</span>
+                      <span className="text-[10px] font-bold font-mono text-slate-400 tracking-widest group-hover:text-emerald-600 transition-colors uppercase">{r.accountCode}</span>
+                      <span className="font-bold text-sm text-slate-700">{r.accountName}</span>
                     </div>
-                    <span className="font-black text-lg tabular-nums tracking-tighter text-white">
+                    <span className="font-bold text-lg tabular-nums tracking-tighter text-slate-900">
                       {formatMoney(Number(r.credit || 0) - Number(r.debit || 0))}
                     </span>
                   </div>
@@ -174,14 +175,17 @@ export default function IncomeStatement() {
               )}
             </div>
             
-            <div className="mt-8 p-8 bg-emerald-500/10 rounded-[2rem] border border-emerald-500/20 flex items-center justify-between shadow-lg">
+            <div className="mt-8 p-8 bg-emerald-600 rounded-[2rem] flex items-center justify-between shadow-lg shadow-emerald-100">
               <div className="flex items-center gap-3">
-                <ShieldCheck className="w-5 h-5 text-emerald-400" />
-                <span className="font-black uppercase italic tracking-tighter text-emerald-400">Gross Inflow</span>
+                <ShieldCheck className="w-5 h-5 text-white/80" />
+                <span className="font-bold uppercase tracking-widest text-white text-sm">Gross Inflow</span>
               </div>
-              <span className="text-3xl font-black tabular-nums tracking-tighter text-emerald-400 leading-none italic">
-                {formatMoney(data?.totalRevenue)}
-              </span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-xs font-bold text-white/60">PKR</span>
+                <span className="text-3xl font-bold tabular-nums tracking-tighter text-white leading-none">
+                  {formatMoney(data?.totalRevenue)}
+                </span>
+              </div>
             </div>
           </div>
         </motion.div>
@@ -189,30 +193,30 @@ export default function IncomeStatement() {
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
-          className="relative rounded-[3rem] border border-white/5 bg-black/20 backdrop-blur-3xl p-1 shadow-2xl hover:border-rose-500/20 transition-all duration-500"
+          className="relative rounded-[2.5rem] border border-slate-200 bg-white p-1 shadow-xl overflow-hidden"
         >
           <div className="p-8 pb-4 flex items-center gap-4">
-            <div className="p-3 bg-rose-500/10 rounded-2xl border border-rose-500/20 shadow-lg">
-              <TrendingDown className="w-6 h-6 text-rose-400" />
+            <div className="p-3 bg-rose-50 rounded-2xl border border-rose-100 shadow-sm">
+              <TrendingDown className="w-6 h-6 text-rose-600" />
             </div>
             <div>
-              <h3 className="text-xl font-black uppercase italic tracking-tighter text-rose-400">Operational Burn</h3>
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30">Total Operating Expenses</p>
+              <h3 className="text-xl font-bold uppercase tracking-tight text-slate-900">Operational Burn</h3>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Total Operating Expenses</p>
             </div>
           </div>
 
           <div className="px-8 pb-8 space-y-4">
-            <div className="space-y-2 mt-6">
+            <div className="space-y-3 mt-6">
               {expense.length === 0 ? (
-                <div className="py-12 text-center text-white/10 font-bold uppercase tracking-widest text-xs italic">No Expense Postings</div>
+                <div className="py-16 text-center text-slate-300 font-bold uppercase tracking-widest text-xs italic bg-slate-50/50 rounded-3xl border border-dashed border-slate-200">No Expense Postings</div>
               ) : (
                 expense.map((r: any, i: number) => (
-                  <div key={i} className="flex justify-between items-center py-4 px-6 rounded-2xl bg-white/[0.02] border border-white/5 group hover:bg-white/[0.05] transition-all">
+                  <div key={i} className="flex justify-between items-center py-4 px-6 rounded-2xl bg-slate-50/50 border border-slate-100 group hover:bg-white hover:shadow-md hover:border-rose-100 transition-all duration-300">
                     <div className="flex flex-col">
-                      <span className="text-[10px] font-black font-mono text-white/30 tracking-widest group-hover:text-rose-400 transition-colors uppercase">{r.accountCode}</span>
-                      <span className="font-bold text-sm text-slate-300">{r.accountName}</span>
+                      <span className="text-[10px] font-bold font-mono text-slate-400 tracking-widest group-hover:text-rose-600 transition-colors uppercase">{r.accountCode}</span>
+                      <span className="font-bold text-sm text-slate-700">{r.accountName}</span>
                     </div>
-                    <span className="font-black text-lg tabular-nums tracking-tighter text-white">
+                    <span className="font-bold text-lg tabular-nums tracking-tighter text-slate-900">
                       {formatMoney(Number(r.debit || 0) - Number(r.credit || 0))}
                     </span>
                   </div>
@@ -220,14 +224,17 @@ export default function IncomeStatement() {
               )}
             </div>
             
-            <div className="mt-8 p-8 bg-rose-500/10 rounded-[2rem] border border-rose-500/20 flex items-center justify-between shadow-lg">
+            <div className="mt-8 p-8 bg-rose-600 rounded-[2rem] flex items-center justify-between shadow-lg shadow-rose-100">
               <div className="flex items-center gap-3">
-                <ShieldCheck className="w-5 h-5 text-rose-400" />
-                <span className="font-black uppercase italic tracking-tighter text-rose-400">Gross Burn</span>
+                <ShieldCheck className="w-5 h-5 text-white/80" />
+                <span className="font-bold uppercase tracking-widest text-white text-sm">Gross Burn</span>
               </div>
-              <span className="text-3xl font-black tabular-nums tracking-tighter text-rose-400 leading-none italic">
-                {formatMoney(data?.totalExpense)}
-              </span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-xs font-bold text-white/60">PKR</span>
+                <span className="text-3xl font-bold tabular-nums tracking-tighter text-white leading-none">
+                  {formatMoney(data?.totalExpense)}
+                </span>
+              </div>
             </div>
           </div>
         </motion.div>
@@ -236,38 +243,32 @@ export default function IncomeStatement() {
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="relative overflow-hidden rounded-[3rem] border border-white/10 bg-gradient-to-br from-indigo-600/20 to-purple-600/10 p-12 shadow-[0_30px_100px_-15px_rgba(99,102,241,0.3)]"
+        className="relative overflow-hidden rounded-[2.5rem] border border-slate-200 bg-white p-10 shadow-2xl"
       >
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(120,119,198,0.3),rgba(255,255,255,0))]" />
+        <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/50 via-white to-transparent opacity-50" />
         <div className="relative flex flex-col md:flex-row items-center justify-between gap-8">
           <div className="flex items-center gap-6">
             <div className={cn(
-              "p-6 rounded-[2rem] border shadow-2xl",
-              net >= 0 ? "bg-emerald-500/20 border-emerald-500/30" : "bg-rose-500/20 border-rose-500/30"
+              "p-5 rounded-2xl shadow-lg transition-all duration-500",
+              net >= 0 ? "bg-emerald-600 shadow-emerald-100 text-white" : "bg-rose-600 shadow-rose-100 text-white"
             )}>
-              <Calculator className={cn("w-10 h-10", net >= 0 ? "text-emerald-400" : "text-rose-400")} />
+              <Calculator className="w-8 h-8" />
             </div>
             <div className="space-y-1 text-center md:text-left">
-              <h2 className="text-3xl font-black uppercase italic tracking-tighter">Net Institutional <span className="text-indigo-400">Yield</span></h2>
-              <p className="text-xs font-black uppercase tracking-[0.3em] text-white/30">Total bottom-line performance index</p>
+              <h2 className="text-2xl font-bold uppercase tracking-tight text-slate-900">Net Corporate <span className="text-indigo-600">Yield</span></h2>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Total bottom-line performance index</p>
             </div>
           </div>
           
           <div className={cn(
-            "text-6xl md:text-8xl font-black tabular-nums tracking-[calc(-0.05em)] leading-none italic",
-            net >= 0 ? "text-emerald-400 drop-shadow-[0_0_30px_rgba(52,211,153,0.4)]" : "text-rose-400 drop-shadow-[0_0_30px_rgba(244,63,94,0.4)]"
+            "text-6xl md:text-7xl font-bold tabular-nums tracking-tighter leading-none transition-all duration-500",
+            net >= 0 ? "text-emerald-600" : "text-rose-600"
           )}>
+            <span className="text-xl font-bold text-slate-300 mr-2 uppercase italic">PKR</span>
             {formatMoney(net)}
           </div>
         </div>
       </motion.div>
-
-      <style dangerouslySetInnerHTML={{ __html: `
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(99,102,241,0.3); }
-      `}} />
     </div>
   );
 }

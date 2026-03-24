@@ -86,6 +86,9 @@ export default function ClientDetails() {
   const [openAddLicense, setOpenAddLicense] = useState(false);
   const [licenseForm, setLicenseForm] = useState({ product: "", licenseKey: "", status: "active", issuedAt: "", expiresAt: "", note: "" });
 
+  const [openAddTask, setOpenAddTask] = useState(false);
+  const [taskForm, setTaskForm] = useState({ title: "", description: "", status: "todo", priority: "medium", dueDate: "", projectId: "" });
+
   // editable fields
   const [form, setForm] = useState<any>({});
 
@@ -107,6 +110,16 @@ export default function ClientDetails() {
           setClient(row);
           setForm({ ...row });
         }
+
+        // Proactively load invoices and payments to ensure header stats are correct
+        const [invRes, payRes] = await Promise.all([
+          fetch(`${API_BASE}/api/invoices?clientId=${encodeURIComponent(String(id))}`, { headers }),
+          fetch(`${API_BASE}/api/payments?clientId=${encodeURIComponent(String(id))}`, { headers })
+        ]);
+        
+        if (invRes.ok) setInvoices(await invRes.json().catch(() => []));
+        if (payRes.ok) setPayments(await payRes.json().catch(() => []));
+
       } catch (e: any) {
         toast.error(String(e?.message || "Failed to load client"));
       } finally {
@@ -134,7 +147,24 @@ export default function ClientDetails() {
           setProjects(arr);
         } else if (tab === "estimates") {
           const resE = await fetch(`${API_BASE}/api/estimates?clientId=${encodeURIComponent(clientId)}`, { headers });
-          setEstimates(await resE.json().catch(() => []));
+          const byId = await resE.json().catch(() => []);
+          const listById = Array.isArray(byId) ? byId : [];
+
+          if (listById.length) {
+            setEstimates(listById);
+          } else {
+            const clientName = String(client?.company || client?.person || "").trim();
+            if (!clientName) {
+              setEstimates([]);
+            } else {
+              // Fallback for legacy estimates created without clientId
+              const resQ = await fetch(`${API_BASE}/api/estimates?q=${encodeURIComponent(clientName)}`, { headers });
+              const byQ = await resQ.json().catch(() => []);
+              const listByQ = (Array.isArray(byQ) ? byQ : [])
+                .filter((e: any) => String(e?.client || "").trim() === clientName);
+              setEstimates(listByQ);
+            }
+          }
         } else if (tab === "invoices") {
           const r = await fetch(`${API_BASE}/api/invoices?clientId=${encodeURIComponent(String(id))}`, { headers });
           setInvoices(await r.json().catch(() => []));
@@ -142,6 +172,18 @@ export default function ClientDetails() {
           const r = await fetch(`${API_BASE}/api/tickets?clientId=${encodeURIComponent(String(id))}`, { headers });
           const arr = await r.json().catch(() => []);
           setTickets(Array.isArray(arr) ? arr : []);
+        } else if (tab === "proposals") {
+          const r = await fetch(`${API_BASE}/api/proposals?clientId=${encodeURIComponent(String(id))}`, { headers });
+          setProposals(await r.json().catch(() => []));
+        } else if (tab === "contracts") {
+          const r = await fetch(`${API_BASE}/api/contracts?clientId=${encodeURIComponent(String(id))}`, { headers });
+          setContracts(await r.json().catch(() => []));
+        } else if (tab === "subscriptions") {
+          const r = await fetch(`${API_BASE}/api/subscriptions?clientId=${encodeURIComponent(String(id))}`, { headers });
+          setSubscriptions(await r.json().catch(() => []));
+        } else if (tab === "events") {
+          const r = await fetch(`${API_BASE}/api/events?clientId=${encodeURIComponent(String(id))}`, { headers });
+          setEvents(await r.json().catch(() => []));
         }
         // Add other tabs as needed
       } catch (e) {
@@ -167,7 +209,11 @@ export default function ClientDetails() {
           const res = await fetch(`${API_BASE}/api/tasks?projectId=${encodeURIComponent(p._id)}`, { headers });
           if (res.ok) {
             const arr = await res.json().catch(() => []);
-            combined.push(...(Array.isArray(arr) ? arr : []));
+            const normalized = (Array.isArray(arr) ? arr : []).map((t: any) => ({
+              ...t,
+              projectTitle: t?.projectTitle || p?.title || t?.project || "-",
+            }));
+            combined.push(...normalized);
           }
         }
         setTasks(combined);
@@ -270,6 +316,7 @@ export default function ClientDetails() {
 
   const createEstimate = async () => {
     const payload: any = {
+      clientId: client?._id || id,
       client: client?.company || client?.person || "-",
       estimateDate: estimateForm.estimateDate ? new Date(estimateForm.estimateDate) : undefined,
       validUntil: estimateForm.validUntil ? new Date(estimateForm.validUntil) : undefined,
@@ -284,11 +331,13 @@ export default function ClientDetails() {
       if (r.ok) {
         setOpenAddEstimate(false);
         setEstimateForm({ estimateDate: "", validUntil: "", tax: "-", tax2: "-", note: "", advancedAmount: "" });
+        toast.success("Estimate added");
         // reload
-        const resE = await fetch(`${API_BASE}/api/estimates?q=${encodeURIComponent(payload.client)}`, { headers: getAuthHeaders() });
+        const resE = await fetch(`${API_BASE}/api/estimates?clientId=${encodeURIComponent(String(id))}`, { headers: getAuthHeaders() });
         setEstimates(await resE.json().catch(() => []));
       } else {
-        toast.error("Failed to add estimate");
+        const err = await r.json().catch(() => ({}));
+        toast.error(err.error || "Failed to add estimate");
       }
     } catch { toast.error("Failed to add estimate"); }
   };
@@ -318,6 +367,54 @@ export default function ClientDetails() {
         toast.error("Failed to add event");
       }
     } catch { toast.error("Failed to add event"); }
+  };
+
+  const createTask = async () => {
+    const title = (taskForm.title || "").trim();
+    if (!title) {
+      toast.error("Task title is required");
+      return;
+    }
+    if (!projects || projects.length === 0) {
+      toast.error("Please create a project first before adding tasks");
+      return;
+    }
+    try {
+      // Use the first available project if no projectId selected
+      const projectId = taskForm.projectId || projects[0]?._id;
+      if (!projectId) {
+        toast.error("No project available to add task to");
+        return;
+      }
+      const payload: any = {
+        title,
+        description: taskForm.description || undefined,
+        status: taskForm.status || "todo",
+        priority: taskForm.priority || "medium",
+        dueDate: taskForm.dueDate ? new Date(taskForm.dueDate) : undefined,
+        projectId,
+        clientId: client?._id ? String(client._id) : undefined,
+      };
+      const r = await fetch(`${API_BASE}/api/tasks`, { 
+        method: "POST", 
+        headers: getAuthHeaders({ "Content-Type": "application/json" }), 
+        body: JSON.stringify(payload) 
+      });
+      if (r.ok) {
+        setOpenAddTask(false);
+        setTaskForm({ title: "", description: "", status: "todo", priority: "medium", dueDate: "", projectId: "" });
+        toast.success("Task added");
+        // Reload tasks by refreshing projects
+        const clientId = String(id || "");
+        const resP = await fetch(`${API_BASE}/api/projects?clientId=${encodeURIComponent(clientId)}`, { headers: getAuthHeaders() });
+        const pj = await resP.json().catch(() => []);
+        const arr = Array.isArray(pj) ? pj : (Array.isArray((pj as any)?.data) ? (pj as any).data : (Array.isArray((pj as any)?.items) ? (pj as any).items : []));
+        setProjects(arr);
+      } else {
+        const err = await r.json().catch(() => ({}));
+        toast.error(err.error || "Failed to add task");
+      }
+    } catch { toast.error("Failed to add task"); }
   };
 
   const saveInfo = async () => {
@@ -662,6 +759,11 @@ export default function ClientDetails() {
                   Add Ticket
                 </NavLink>
               </Button>
+            ) : tab === "tasks" ? (
+              <Button onClick={() => setOpenAddTask(true)} size="sm" className="gap-2">
+                <Plus className="h-4 w-4" />
+                Add Task
+              </Button>
             ) : null}
           </div>
         </div>
@@ -828,6 +930,71 @@ export default function ClientDetails() {
             <DialogFooter>
               <Button variant="outline" onClick={() => setOpenAddEvent(false)}>Close</Button>
               <Button onClick={createEvent}>Save</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Task */}
+        <Dialog open={openAddTask} onOpenChange={setOpenAddTask}>
+          <DialogContent className="bg-card max-w-2xl" aria-describedby={undefined}>
+            <DialogHeader><DialogTitle>Add task</DialogTitle></DialogHeader>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1 sm:col-span-2">
+                <Label>Title</Label>
+                <Input value={taskForm.title} onChange={(e) => setTaskForm((p) => ({ ...p, title: e.target.value }))} placeholder="Task title" />
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <Label>Description</Label>
+                <Textarea value={taskForm.description} onChange={(e) => setTaskForm((p) => ({ ...p, description: e.target.value }))} placeholder="Task description" />
+              </div>
+              <div className="space-y-1">
+                <Label>Project</Label>
+                <Select value={taskForm.projectId || undefined} onValueChange={(v) => setTaskForm((p) => ({ ...p, projectId: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select project" /></SelectTrigger>
+                  <SelectContent>
+                    {projects.length === 0 ? (
+                      <SelectItem value="none" disabled>No projects</SelectItem>
+                    ) : (
+                      projects.map((p: any) => (
+                        <SelectItem key={String(p._id)} value={String(p._id)}>{p.title}</SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Status</Label>
+                <Select value={taskForm.status} onValueChange={(v) => setTaskForm((p) => ({ ...p, status: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todo">To Do</SelectItem>
+                    <SelectItem value="in-progress">In Progress</SelectItem>
+                    <SelectItem value="review">Review</SelectItem>
+                    <SelectItem value="done">Done</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Priority</Label>
+                <Select value={taskForm.priority} onValueChange={(v) => setTaskForm((p) => ({ ...p, priority: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select priority" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="urgent">Urgent</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Due Date</Label>
+                <DatePicker value={taskForm.dueDate} onChange={(v) => setTaskForm((p) => ({ ...p, dueDate: v }))} placeholder="Pick due date" />
+              </div>
+              <div className="sm:col-span-2 text-xs text-muted-foreground">Client: {client?.company || client?.person || "-"}</div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setOpenAddTask(false)}>Close</Button>
+              <Button onClick={createTask}>Save</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1360,54 +1527,104 @@ export default function ClientDetails() {
         {/* Contracts */}
         <TabsContent value="contracts">
           <Card className="p-0 overflow-hidden rounded-xl border">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/40">
-                  <TableHead>Title</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Contract date</TableHead>
-                  <TableHead>Valid until</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {contracts.map((c: any) => (
-                  <TableRow key={String(c._id)}>
-                    <TableCell className="whitespace-nowrap">{c.title}</TableCell>
-                    <TableCell className="whitespace-nowrap">{c.amount ? `PKR ${c.amount}` : 'PKR 0'}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{c.status || '-'}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{c.contractDate ? new Date(c.contractDate).toISOString().slice(0, 10) : '-'}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{c.validUntil ? new Date(c.validUntil).toISOString().slice(0, 10) : '-'}</TableCell>
+            <div className="p-4 border-b bg-muted/30 flex items-center justify-between">
+              <h3 className="font-semibold flex items-center gap-2">
+                <FileText className="h-4 w-4 text-primary" />
+                Contracts
+              </h3>
+              <Badge variant="secondary">{contracts.length} total</Badge>
+            </div>
+            {contracts.length === 0 ? (
+              <div className="p-12 text-center">
+                <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-4">
+                  <FileText className="h-8 w-8 text-muted-foreground" />
+                </div>
+                <h3 className="font-medium text-lg">No contracts yet</h3>
+                <p className="text-muted-foreground text-sm mt-1 mb-4">Contract documents will appear here</p>
+                <Button asChild size="sm">
+                  <NavLink to={`/sales/contracts`}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Contract
+                  </NavLink>
+                </Button>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/40">
+                    <TableHead>Title</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Contract date</TableHead>
+                    <TableHead>Valid until</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {contracts.map((c: any) => (
+                    <TableRow key={String(c._id)} className="cursor-pointer hover:bg-muted/20" onClick={() => navigate(`/sales/contracts/${c._id}`)}>
+                      <TableCell className="font-medium whitespace-nowrap">{c.title}</TableCell>
+                      <TableCell className="whitespace-nowrap">{c.amount ? `PKR ${c.amount.toLocaleString()}` : 'PKR 0'}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="capitalize">{c.status || '-'}</Badge>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-muted-foreground text-sm">{c.contractDate ? new Date(c.contractDate).toISOString().slice(0, 10) : '-'}</TableCell>
+                      <TableCell className="whitespace-nowrap text-muted-foreground text-sm">{c.validUntil ? new Date(c.validUntil).toISOString().slice(0, 10) : '-'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </Card>
         </TabsContent>
 
         {/* Proposals */}
         <TabsContent value="proposals">
           <Card className="p-0 overflow-hidden rounded-xl border">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/40">
-                  <TableHead>Title</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Proposal date</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {proposals.map((pr: any) => (
-                  <TableRow key={String(pr._id)}>
-                    <TableCell className="whitespace-nowrap">{pr.title}</TableCell>
-                    <TableCell className="whitespace-nowrap">{pr.amount ? `PKR ${pr.amount}` : 'PKR 0'}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{pr.status || '-'}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{pr.proposalDate ? new Date(pr.proposalDate).toISOString().slice(0, 10) : '-'}</TableCell>
+            <div className="p-4 border-b bg-muted/30 flex items-center justify-between">
+              <h3 className="font-semibold flex items-center gap-2">
+                <FileText className="h-4 w-4 text-primary" />
+                Proposals
+              </h3>
+              <Badge variant="secondary">{proposals.length} total</Badge>
+            </div>
+            {proposals.length === 0 ? (
+              <div className="p-12 text-center">
+                <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-4">
+                  <FileText className="h-8 w-8 text-muted-foreground" />
+                </div>
+                <h3 className="font-medium text-lg">No proposals yet</h3>
+                <p className="text-muted-foreground text-sm mt-1 mb-4">Project proposals will appear here</p>
+                <Button asChild size="sm">
+                  <NavLink to={`/prospects/proposals`}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Proposal
+                  </NavLink>
+                </Button>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/40">
+                    <TableHead>Title</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Proposal date</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {proposals.map((pr: any) => (
+                    <TableRow key={String(pr._id)} className="cursor-pointer hover:bg-muted/20" onClick={() => navigate(`/prospects/proposals/${pr._id}`)}>
+                      <TableCell className="font-medium whitespace-nowrap">{pr.title}</TableCell>
+                      <TableCell className="whitespace-nowrap">{pr.amount ? `PKR ${pr.amount.toLocaleString()}` : 'PKR 0'}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="capitalize">{pr.status || '-'}</Badge>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-muted-foreground text-sm">{pr.proposalDate ? new Date(pr.proposalDate).toISOString().slice(0, 10) : '-'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </Card>
         </TabsContent>
 

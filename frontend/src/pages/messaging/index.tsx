@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Search, MessageSquare, Users, Send, Paperclip, Smile, MoreVertical, Plus, Phone, Video, Info, Mic, Edit3, Trash2, Settings, Palette, Link as LinkIcon, StopCircle } from 'lucide-react';
-import { format } from 'date-fns';
+import { Search, MessageSquare, Users, Send, Paperclip, Smile, MoreVertical, Plus, Phone, Video, Info, Mic, Edit3, Trash2, Settings, Palette, Link as LinkIcon, StopCircle, Sparkles, Star, Pin, Check, CheckCheck } from 'lucide-react';
+import { format, isAfter, subHours } from 'date-fns';
 import { useMessaging } from '@/contexts/MessagingContext';
 import { NewConversation } from './components/NewConversation';
 import { useToast } from '@/components/ui/use-toast';
@@ -15,8 +15,11 @@ import { Separator } from '@/components/ui/separator';
 import EmojiPicker from 'emoji-picker-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { AudioPlayer } from './components/AudioPlayer';
+import { cn } from '@/lib/utils';
 import { uploadAttachment, editMessage as apiEditMessage, deleteMessage as apiDeleteMessage, deleteConversation as apiDeleteConversation } from '@/lib/api/messaging';
 import { API_BASE } from '@/lib/api/base';
+import { getAuthHeaders } from '@/lib/api/auth';
 
 const getStoredAuthUser = (): { id?: string; _id?: string; email?: string; role?: string } | null => {
   const raw = localStorage.getItem('auth_user') || sessionStorage.getItem('auth_user');
@@ -54,6 +57,10 @@ export default function Messaging() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [showStickers, setShowStickers] = useState(false);
+  const [projectTag, setProjectTag] = useState<string | null>(null);
+  const [progress, setProgress] = useState<number>(0);
+  const [projects, setProjectItems] = useState<any[]>([]);
   const [editText, setEditText] = useState('');
   const user = getStoredAuthUser();
   const userId = user?.id || user?._id;
@@ -102,6 +109,10 @@ export default function Messaging() {
     );
   }, [messages]);
 
+  const pinnedMessages = useMemo(() => {
+    return safeMessages.filter(m => m.isPinned);
+  }, [safeMessages]);
+
   const conversationIdFromUrl = useMemo(() => {
     const sp = new URLSearchParams(location.search || '');
     const v = sp.get('conversationId');
@@ -116,13 +127,50 @@ export default function Messaging() {
     }
   }, [conversationIdFromUrl, safeConversations, selectedConversation, selectConversation]);
 
-  // Handle sending a new message
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/projects`, { headers: getAuthHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          setProjectItems(Array.isArray(data) ? data : []);
+        }
+      } catch (e) {}
+    };
+    fetchProjects();
+  }, []);
+
+  const STICKERS = [
+    'https://cdn-icons-png.flaticon.com/512/2584/2584602.png',
+    'https://cdn-icons-png.flaticon.com/512/2584/2584606.png',
+    'https://cdn-icons-png.flaticon.com/512/2584/2584610.png',
+    'https://cdn-icons-png.flaticon.com/512/2584/2584614.png',
+    'https://cdn-icons-png.flaticon.com/512/2584/2584618.png',
+    'https://cdn-icons-png.flaticon.com/512/2584/2584622.png',
+  ];
+
+  const handleSendSticker = async (stickerUrl: string) => {
+    try {
+      await sendMessage('', [{ url: stickerUrl, name: 'sticker', type: 'image/png', size: 0, isSticker: true }]);
+      setShowStickers(false);
+    } catch (e) {}
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() && !selectedFile && !voiceBlob) return;
+    if (!newMessage.trim() && !selectedFile && !voiceBlob && !projectTag) return;
 
     try {
       const attachments: any[] = [];
+      if (projectTag) {
+        attachments.push({
+          type: 'project_tag',
+          projectId: projectTag,
+          progress: progress,
+          name: projects.find(p => p._id === projectTag)?.title || 'Project'
+        });
+      }
+
       if (selectedFile) {
         const uploaded = await uploadAttachment(selectedFile);
         attachments.push({
@@ -147,38 +195,17 @@ export default function Messaging() {
       await sendMessage(newMessage, attachments);
       setNewMessage('');
       setSelectedFile(null);
+      setProjectTag(null);
+      setProgress(0);
       stopVoicePreview();
       setShowEmojiPicker(false);
       scrollToBottom();
       toast({ title: 'Message sent' });
     } catch (error) {
-      // Fallback: some servers expect attachments as string[] and content required
-      const msg = String((error as any)?.message || '');
-      if (selectedFile && (msg.includes('Cast to [string]') || msg.toLowerCase().includes('content is required'))) {
-        try {
-          const attachmentsAsStrings: any[] = [];
-          // Use the already uploaded file URL from previous attempt if possible
-          // If upload failed earlier, try fresh upload now
-          if (!attachmentsAsStrings.length) {
-            const uploaded = await uploadAttachment(selectedFile);
-            attachmentsAsStrings.push(uploaded.url);
-          }
-          await sendMessage(newMessage || ' ', attachmentsAsStrings);
-          setNewMessage('');
-          setSelectedFile(null);
-          setShowEmojiPicker(false);
-          scrollToBottom();
-          return;
-        } catch (e2: any) {
-          toast({ title: 'Error', description: e2.message || 'Failed to send message', variant: 'destructive' });
-          return;
-        }
-      }
-      toast({ title: 'Error', description: msg || 'Failed to send message', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Failed to send message', variant: 'destructive' });
     }
   };
 
-  // Handle file selection
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -245,61 +272,17 @@ export default function Messaging() {
     return () => window.clearInterval(t);
   }, [isRecording]);
 
-  const meetingRoomId = useMemo(() => {
-    if (!selectedConversation?._id) return '';
-    return `healthspire-${selectedConversation._id}`;
-  }, [selectedConversation?._id]);
-
-  const createMeetingLink = useCallback(
-    (type: 'audio' | 'video') => {
-      if (!meetingRoomId) return '';
-      const base = `https://meet.jit.si/${encodeURIComponent(meetingRoomId)}`;
-      const params = new URLSearchParams();
-      if (type === 'audio') params.set('config.startWithVideoMuted', 'true');
-      return params.toString() ? `${base}#${params.toString()}` : base;
-    },
-    [meetingRoomId]
-  );
-
-  const openMeeting = useCallback(
-    (type: 'audio' | 'video') => {
-      if (!selectedConversation) {
-        toast({ title: 'Select a conversation first', variant: 'destructive' });
-        return;
-      }
-      const url = createMeetingLink(type);
-      if (!url) return;
-      window.open(url, '_blank', 'noopener,noreferrer');
-    },
-    [createMeetingLink, selectedConversation, toast]
-  );
-
-  const shareMeeting = useCallback(async () => {
-    if (!selectedConversation) {
-      toast({ title: 'Select a conversation first', variant: 'destructive' });
-      return;
-    }
-    const url = createMeetingLink('video');
-    try {
-      await navigator.clipboard.writeText(url);
-      toast({ title: 'Meeting link copied' });
-    } catch {
-      toast({ title: 'Meeting link', description: url });
-    }
-    try {
-      await sendMessage(`Meeting link: ${url}`, []);
-    } catch (e: any) {
-      toast({ title: 'Error', description: e?.message || 'Failed to send meeting link', variant: 'destructive' });
-    }
-  }, [createMeetingLink, selectedConversation, sendMessage, toast]);
-
-  // Handle emoji selection
   const handleEmojiSelect = (emoji: any) => {
     setNewMessage((prev) => prev + emoji.emoji);
     setShowEmojiPicker(false);
   };
 
   const handleStartEdit = (message: any) => {
+    const isWithinHour = isAfter(new Date(message.createdAt), subHours(new Date(), 1));
+    if (!isWithinHour) {
+      toast({ title: 'Cannot edit', description: 'Messages can only be edited within 1 hour.', variant: 'destructive' });
+      return;
+    }
     setEditingMessageId(message._id);
     setEditText(message.content || '');
   };
@@ -326,12 +309,17 @@ export default function Messaging() {
     }
   };
 
-  const handleDeleteMessage = async (messageId: string) => {
+  const handleDeleteMessage = async (message: any) => {
+    const isWithinHour = isAfter(new Date(message.createdAt), subHours(new Date(), 1));
+    if (!isWithinHour) {
+      toast({ title: 'Cannot delete', description: 'Messages can only be deleted within 1 hour.', variant: 'destructive' });
+      return;
+    }
     try {
-      await apiDeleteMessage(messageId);
+      await apiDeleteMessage(message._id);
       queryClient.setQueryData(['messages', selectedConversation?._id], (old: any) =>
         Array.isArray(old)
-          ? old.map((m) => (m._id === messageId ? { ...m, isDeleted: true, content: '' } : m))
+          ? old.map((m) => (m._id === message._id ? { ...m, isDeleted: true, content: '' } : m))
           : old
       );
       toast({ title: 'Message deleted' });
@@ -340,36 +328,59 @@ export default function Messaging() {
     }
   };
 
-  // Handle delete conversation with confirmation
+  const handleStarMessage = async (messageId: string, isStarred: boolean) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/messages/${messageId}`, {
+        method: 'PATCH',
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ isStarred: !isStarred })
+      });
+      if (res.ok) {
+        queryClient.invalidateQueries({ queryKey: ['messages', selectedConversation?._id] });
+        toast({ title: !isStarred ? 'Message starred' : 'Message unstarred' });
+      }
+    } catch (e) {}
+  };
+
+  const handlePinMessage = async (messageId: string, isPinned: boolean) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/messages/${messageId}`, {
+        method: 'PATCH',
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ isPinned: !isPinned })
+      });
+      if (res.ok) {
+        queryClient.invalidateQueries({ queryKey: ['messages', selectedConversation?._id] });
+        toast({ title: !isPinned ? 'Message pinned' : 'Message unpinned' });
+      }
+    } catch (e) {}
+  };
+
   const handleDeleteConversation = async () => {
     if (!selectedConversation?._id) return;
-    
-    // Show confirmation dialog
-    if (!window.confirm('Are you sure you want to delete this conversation? This action cannot be undone.')) {
-      return;
-    }
-
+    if (!window.confirm('Are you sure you want to delete this conversation? This action cannot be undone.')) return;
     try {
       await apiDeleteConversation(selectedConversation._id);
-      // Immediately remove deleted conversation from cache so it disappears from sidebar
       queryClient.setQueryData(['conversations'], (old: any) =>
         Array.isArray(old) ? old.filter((c: any) => c._id !== selectedConversation._id) : old
       );
-      // Immediately clear selected conversation and its messages from cache
       selectConversation('');
       queryClient.removeQueries({ queryKey: ['messages', selectedConversation._id] });
       toast({ title: 'Conversation deleted' });
     } catch (e: any) {
-      console.error('Delete conversation error:', e);
       toast({ title: 'Error', description: e.message || 'Failed to delete conversation', variant: 'destructive' });
     }
   };
 
-  // Handle conversation selection
-  const handleSelectConversation = (conversationId: string) => {
-    if (!conversationId) return;
-    selectConversation(conversationId);
-  };
+  const shareMeeting = useCallback(async () => {
+    if (!selectedConversation) return;
+    const url = `https://meet.jit.si/healthspire-${selectedConversation._id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({ title: 'Meeting link copied' });
+      await sendMessage(`Meeting link: ${url}`, []);
+    } catch (e) {}
+  }, [selectedConversation, sendMessage, toast]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -379,17 +390,14 @@ export default function Messaging() {
     scrollToBottom();
   }, [messages]);
 
-  // Get other participants in a conversation (excluding current user)
   const getOtherParticipants = useCallback((conversation: any) => {
     if (!conversation?.participants) return [];
     if (conversation.isGroup) {
       return (conversation.participants || []).filter(Boolean);
     }
-    // For 1:1 chats, return the other participant (not the current user)
     return (conversation.participants || []).filter((p: any) => p?._id !== userId);
   }, [userId]);
 
-  // Get conversation title
   const getConversationTitle = useCallback((conversation: any) => {
     if (conversation.isGroup) {
       const names = (conversation.participants || []).filter(Boolean).map((p: any) => p?.name).filter(Boolean);
@@ -437,10 +445,7 @@ export default function Messaging() {
   }, [chatTheme]);
 
   const chatBgStyle = useMemo(() => {
-    const lightSvg =
-      "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23000' fill-opacity='.04'%3E%3Cpath d='M19 18h8v8h-8zM69 54h10v10H69zM112 26h7v7h-7zM36 92h9v9h-9zM94 96h8v8h-8z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E";
-    const darkSvg =
-      "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23fff' fill-opacity='.06'%3E%3Cpath d='M19 18h8v8h-8zM69 54h10v10H69zM112 26h7v7h-7zM36 92h9v9h-9zM94 96h8v8h-8z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E";
+    const lightSvg = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23000' fill-opacity='.04'%3E%3Cpath d='M19 18h8v8h-8zM69 54h10v10H69zM112 26h7v7h-7zM36 92h9v9h-9zM94 96h8v8h-8z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E";
     return {
       backgroundImage: `url("${lightSvg}")`,
       backgroundSize: '180px 180px',
@@ -449,16 +454,12 @@ export default function Messaging() {
     } as React.CSSProperties;
   }, []);
 
-  // Get conversation avatar URL
   const getAvatarUrl = useCallback((conversation: any) => {
-    if (conversation.isGroup) {
-      return conversation.groupPhoto || '';
-    }
+    if (conversation.isGroup) return conversation.groupPhoto || '';
     const otherParticipants = getOtherParticipants(conversation);
     return otherParticipants[0]?.avatar || '';
   }, [getOtherParticipants]);
 
-  // Get fallback text for avatar
   const getAvatarFallback = useCallback((conversation: any) => {
     if (conversation.isGroup) {
       return conversation.groupName 
@@ -513,7 +514,6 @@ export default function Messaging() {
 
   return (
     <div className="flex h-[calc(100vh-7rem)] overflow-hidden bg-gradient-to-br from-slate-50 via-white to-emerald-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-emerald-950/10">
-      {/* New Conversation Dialog */}
       {role !== 'client' ? (
         <NewConversation 
           open={isNewConversationOpen} 
@@ -521,7 +521,6 @@ export default function Messaging() {
         />
       ) : null}
       
-      {/* Sidebar */}
       <div className={`w-80 border-r bg-background flex flex-col overflow-hidden ${themeTokens.sidebar}`}>
         <div className={`p-4 border-b ${themeTokens.header}`}>
           <div className="flex justify-between items-center mb-4">
@@ -563,85 +562,65 @@ export default function Messaging() {
           </div>
         </div>
         
-        {/* Conversation List */}
         <div className="flex-1 overflow-hidden">
           <ScrollArea className="h-full">
-          <div className="divide-y divide-border p-2">
-            {safeConversations.filter(conv => {
-              if (!searchQuery) return true;
-              const searchLower = searchQuery.toLowerCase();
-              const title = getConversationTitle(conv).toLowerCase();
-              const lastMessage = conv.lastMessage?.content?.toLowerCase() || '';
-              return title.includes(searchLower) || lastMessage.includes(searchLower);
-            }).map((conversation) => (
-              <div
-                key={conversation._id}
-                className={`p-3 hover:bg-muted/50 cursor-pointer transition-colors ${
-                  selectedConversation?._id === conversation._id ? 'bg-muted' : ''
-                }`}
-                onClick={() => handleSelectConversation(conversation._id)}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <Avatar className="h-12 w-12">
-                      <AvatarImage src={getAvatarUrl(conversation)} />
-                      <AvatarFallback className="text-sm font-medium">{getAvatarFallback(conversation)}</AvatarFallback>
-                    </Avatar>
-                    {selectedConversation?._id === conversation._id && (
-                      <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-primary rounded-full border-2 border-background"></div>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-center mb-1">
-                      <h3 className="font-medium truncate text-sm">{getConversationTitle(conversation)}</h3>
-                      <span className="text-xs text-muted-foreground ml-2">
-                        {format(new Date(conversation.updatedAt), 'p')}
-                      </span>
+            <div className="divide-y divide-border p-2">
+              {safeConversations.filter(conv => {
+                if (!searchQuery) return true;
+                const searchLower = searchQuery.toLowerCase();
+                const title = getConversationTitle(conv).toLowerCase();
+                const lastMessage = conv.lastMessage?.content?.toLowerCase() || '';
+                return title.includes(searchLower) || lastMessage.includes(searchLower);
+              }).map((conversation) => (
+                <div
+                  key={conversation._id}
+                  className={`p-3 hover:bg-muted/50 cursor-pointer transition-colors rounded-lg ${
+                    selectedConversation?._id === conversation._id ? 'bg-muted' : ''
+                  }`}
+                  onClick={() => selectConversation(conversation._id)}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <Avatar className="h-12 w-12">
+                        <AvatarImage src={getAvatarUrl(conversation)} />
+                        <AvatarFallback className="text-sm font-medium">{getAvatarFallback(conversation)}</AvatarFallback>
+                      </Avatar>
+                      {selectedConversation?._id === conversation._id && (
+                        <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-primary rounded-full border-2 border-background"></div>
+                      )}
                     </div>
-                    <div className="flex items-center gap-1">
-                      {conversation.lastMessage && (
-                        <p className="text-sm text-muted-foreground truncate flex-1">
-                          {conversation.lastMessage?.sender?._id === userId ? 'You: ' : ''}
-                          {conversation.lastMessage.content || 'Sent an attachment'}
-                        </p>
-                      )}
-                      {conversation.unreadCount > 0 && (
-                        <span className="bg-primary text-primary-foreground text-xs rounded-full h-5 min-w-[20px] flex items-center justify-center px-1.5">
-                          {conversation.unreadCount}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-center mb-1">
+                        <h3 className="font-medium truncate text-sm">{getConversationTitle(conversation)}</h3>
+                        <span className="text-xs text-muted-foreground ml-2">
+                          {format(new Date(conversation.updatedAt), 'p')}
                         </span>
-                      )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {conversation.lastMessage && (
+                          <p className="text-sm text-muted-foreground truncate flex-1">
+                            {conversation.lastMessage?.sender?._id === userId ? 'You: ' : ''}
+                            {conversation.lastMessage.content || 'Sent an attachment'}
+                          </p>
+                        )}
+                        {conversation.unreadCount > 0 && (
+                          <span className="bg-primary text-primary-foreground text-xs rounded-full h-5 min-w-[20px] flex items-center justify-center px-1.5">
+                            {conversation.unreadCount}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
-            
-            {safeConversations.length === 0 && !isLoading && (
-              <div className="p-8 text-center text-muted-foreground">
-                <MessageSquare className="mx-auto h-12 w-12 mb-4 opacity-50" />
-                <p className="mb-4">No conversations yet</p>
-                {role !== 'client' && (
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => setIsNewConversationOpen(true)}
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Start a new conversation
-                  </Button>
-                )}
-              </div>
-            )}
-          </div>
-        </ScrollArea>
+              ))}
+            </div>
+          </ScrollArea>
         </div>
       </div>
 
-      {/* Chat Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {selectedConversation ? (
           <>
-            {/* Chat Header */}
             <div className={`border-b px-4 py-3 flex items-center justify-between ${themeTokens.header}`}>
               <div className="flex items-center gap-3">
                 <div className="relative">
@@ -661,14 +640,11 @@ export default function Messaging() {
                 </div>
               </div>
               <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openMeeting('audio')}>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
                   <Phone className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openMeeting('video')}>
-                  <Video className="h-4 w-4" />
-                </Button>
                 <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <Info className="h-4 w-4" />
+                  <Video className="h-4 w-4" />
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -680,10 +656,7 @@ export default function Messaging() {
                     <DropdownMenuItem onClick={() => setIsNewConversationOpen(true)}>
                       <Users className="mr-2 h-4 w-4" /> New group
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={shareMeeting}>
-                      <LinkIcon className="mr-2 h-4 w-4" /> Align meeting
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleDeleteConversation} className="text-destructive focus:text-destructive">
+                    <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={handleDeleteConversation}>
                       <Trash2 className="mr-2 h-4 w-4" /> Delete conversation
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -691,29 +664,22 @@ export default function Messaging() {
               </div>
             </div>
 
-            {/* Messages */}
+            {pinnedMessages.length > 0 && (
+              <div className="px-4 py-2 bg-muted/50 border-b flex items-center gap-2 text-xs">
+                <Pin className="h-3 w-3 text-primary rotate-45" />
+                <span className="font-bold uppercase tracking-wider opacity-60">Pinned:</span>
+                <span className="truncate flex-1">{pinnedMessages[0].content || 'Attachment'}</span>
+                <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => handlePinMessage(pinnedMessages[0]._id, true)}>Unpin</Button>
+              </div>
+            )}
+
             <div className="flex-1 overflow-hidden relative" style={chatBgStyle}>
               <ScrollArea className="h-full">
                 <div className="p-4 space-y-3 min-h-0">
-                {messages.length === 0 ? (
-                  <div className="h-full flex items-center justify-center text-muted-foreground">
-                    <div className="text-center space-y-2">
-                      <div className={`mx-auto h-12 w-12 rounded-2xl ${themeTokens.accentSoft} flex items-center justify-center text-white shadow-lg`}>
-                        <MessageSquare className="h-6 w-6" />
-                      </div>
-                      <p className="text-sm">No messages yet</p>
-                      <p className="text-xs text-muted-foreground">Send a message to start the conversation.</p>
-                    </div>
-                  </div>
-                ) : (
-                  safeMessages.map((message) => {
+                  {safeMessages.map((message) => {
                     const isOwn = message.sender?._id === userId;
-                    const canModify = isOwn || (Array.isArray(selectedConversation?.admins) && selectedConversation.admins?.includes?.(userId));
                     return (
-                      <div
-                        key={message._id}
-                        className={`flex items-end gap-2 ${isOwn ? 'justify-end' : 'justify-start'}`}
-                      >
+                      <div key={message._id} className={`flex items-end gap-2 ${isOwn ? 'justify-end' : 'justify-start'}`}>
                         {!isOwn && (
                           <div className="flex-shrink-0">
                             <Avatar className="h-8 w-8">
@@ -722,215 +688,209 @@ export default function Messaging() {
                             </Avatar>
                           </div>
                         )}
-                        <div className="max-w-[72%]">
-                          {(!isOwn && selectedConversation.isGroup) && (
-                            <span className="text-xs text-muted-foreground block mb-1">
-                              {message.sender?.name || 'Unknown User'}
-                            </span>
-                          )}
-                          <div
-                            className={
-                              "px-4 py-2 shadow-sm border border-white/30 dark:border-white/10 " +
-                              (isOwn
-                                ? `${themeTokens.bubbleMine} rounded-2xl rounded-br-md`
-                                : `${themeTokens.bubbleTheirs} rounded-2xl rounded-bl-md`)
-                            }
-                          >
+                        <div className="max-w-[72%] group relative">
+                          <div className={cn(
+                            "px-4 py-2 shadow-sm border border-white/30 dark:border-white/10 relative",
+                            isOwn ? `${themeTokens.bubbleMine} rounded-2xl rounded-br-md` : `${themeTokens.bubbleTheirs} rounded-2xl rounded-bl-md`,
+                            message.isPinned && "ring-2 ring-primary/20"
+                          )}>
+                            {message.isStarred && <Star className="absolute -top-2 -right-2 h-4 w-4 text-amber-400 fill-current shadow-sm" />}
+                            {message.isPinned && <Pin className="absolute -top-2 -left-2 h-4 w-4 text-primary fill-current shadow-sm rotate-45" />}
+                            
                             {message.isDeleted ? (
-                              <p className={`italic text-xs ${isOwn ? 'text-primary-foreground/80' : 'text-foreground/70'}`}>Message deleted</p>
+                              <p className="italic text-xs opacity-70">Message deleted</p>
                             ) : editingMessageId === message._id ? (
                               <div className="flex items-center gap-2">
                                 <Input
                                   value={editText}
                                   onChange={(e) => setEditText(e.target.value)}
-                                  placeholder="Edit message..."
-                                  className={`${isOwn ? 'bg-primary/20 text-primary-foreground' : ''}`}
+                                  className="h-8 text-sm"
                                 />
-                                <Button size="sm" type="button" onClick={handleSaveEdit}>Save</Button>
-                                <Button size="sm" type="button" variant="ghost" onClick={handleCancelEdit}>Cancel</Button>
+                                <Button size="sm" onClick={handleSaveEdit}>Save</Button>
+                                <Button size="sm" variant="ghost" onClick={handleCancelEdit}>×</Button>
                               </div>
                             ) : (
-                              <p className="whitespace-pre-wrap break-words">{message.content}</p>
-                            )}
-                            {Array.isArray(message.attachments) && message.attachments.length > 0 && (
-                              <div className="mt-2 space-y-1">
-                                {message.attachments.map((att, idx) => {
-                                  const rawUrl = typeof att === 'string' ? att : att.url;
-                                  const url = rawUrl?.startsWith('http') ? rawUrl : `${API_BASE}${rawUrl || ''}`;
-                                  const label = typeof att === 'string'
-                                    ? (rawUrl?.split('/').pop() || 'attachment')
-                                    : (att.name || 'attachment');
-                                  return (
-                                    <a
-                                      key={idx}
-                                      href={url}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className={`inline-flex items-center gap-2 text-xs underline ${isOwn ? 'text-primary-foreground/90' : 'text-foreground/80'}`}
-                                    >
-                                      <Paperclip className="h-3 w-3" />
-                                      <span className="truncate max-w-[220px]">{label}</span>
-                                    </a>
-                                  );
+                              <div className="space-y-2">
+                                {message.content && <p className="whitespace-pre-wrap break-words">{message.content}</p>}
+                                {Array.isArray(message.attachments) && message.attachments.map((att: any, idx: number) => {
+                                  if (att.type?.startsWith('audio/')) {
+                                    return <AudioPlayer key={idx} url={att.url.startsWith('http') ? att.url : `${API_BASE}${att.url}`} />;
+                                  }
+                                  if (att.isSticker) {
+                                    return <img key={idx} src={att.url} alt="sticker" className="w-32 h-32 object-contain" />;
+                                  }
+                                  if (att.type === 'project_tag') {
+                                    return (
+                                      <div key={idx} className="bg-white/10 p-3 rounded-lg border border-white/20 space-y-2 min-w-[200px]">
+                                        <div className="flex items-center justify-between text-xs font-bold">
+                                          <span>PROJECT: {att.name}</span>
+                                          <span>{att.progress}%</span>
+                                        </div>
+                                        <div className="w-full bg-black/20 h-1.5 rounded-full overflow-hidden">
+                                          <div className="bg-white h-full transition-all" style={{ width: `${att.progress}%` }} />
+                                        </div>
+                                      </div>
+                                    );
+                                  }
+                                  return null;
                                 })}
                               </div>
                             )}
-                            <div className="flex items-center justify-between mt-1">
-                              {canModify && !message.isDeleted && (
-                                <div className="-ml-1">
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <Button variant="ghost" size="icon" className="h-7 w-7">
-                                        <MoreVertical className="h-4 w-4" />
-                                      </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align={isOwn ? 'start' : 'end'}>
-                                      <DropdownMenuItem onClick={() => handleStartEdit(message)}>
-                                        <Edit3 className="mr-2 h-4 w-4" /> Edit
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem onClick={() => handleDeleteMessage(message._id)}>
-                                        <Trash2 className="mr-2 h-4 w-4" /> Delete
-                                      </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
-                                </div>
-                              )}
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs opacity-70">
-                                  {format(new Date(message.createdAt), 'p')}
+                            <div className={`text-[10px] mt-1 flex items-center gap-1 ${isOwn ? 'text-white/70 justify-end' : 'text-muted-foreground'}`}>
+                              {format(new Date(message.createdAt), 'p')}
+                              {isOwn && (
+                                <span>
+                                  {message.readBy?.length > 1 ? <CheckCheck className="w-3 h-3" /> : <Check className="w-3 h-3" />}
                                 </span>
-                                {isOwn && (
-                                  <span className="text-xs">
-                                    {message.readBy && message.readBy.length > 1 ? '✓✓' : '✓'}
-                                  </span>
-                                )}
-                              </div>
+                              )}
                             </div>
                           </div>
-                        </div>
-                        {isOwn && (
-                          <div className="flex-shrink-0">
-                            <Avatar className="h-8 w-8">
-                              <AvatarImage src={message.sender.avatar} />
-                              <AvatarFallback>{message.sender.name?.charAt(0)}</AvatarFallback>
-                            </Avatar>
+
+                          <div className={cn(
+                            "absolute top-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1",
+                            isOwn ? "right-full mr-2" : "left-full ml-2"
+                          )}>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full bg-background/80 backdrop-blur shadow-sm">
+                                  <MoreVertical className="h-3 w-3" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent side="top">
+                                <DropdownMenuItem onClick={() => handleStarMessage(message._id, !!message.isStarred)}>
+                                  <Star className="mr-2 h-3 w-3" /> {message.isStarred ? 'Unstar' : 'Star'}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handlePinMessage(message._id, !!message.isPinned)}>
+                                  <Pin className="mr-2 h-3 w-3" /> {message.isPinned ? 'Unpin' : 'Pin'}
+                                </DropdownMenuItem>
+                                {isOwn && !message.isDeleted && (
+                                  <>
+                                    <DropdownMenuItem onClick={() => handleStartEdit(message)}>
+                                      <Edit3 className="mr-2 h-3 w-3" /> Edit
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleDeleteMessage(message)} className="text-destructive">
+                                      <Trash2 className="mr-2 h-3 w-3" /> Delete
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </div>
-                        )}
+                        </div>
                       </div>
                     );
-                  })
-                )}
-                <div ref={messagesEndRef} />
+                  })}
+                  <div ref={messagesEndRef} />
                 </div>
               </ScrollArea>
             </div>
 
-            {/* Message Input */}
-            <div className={`border-t p-4 ${themeTokens.header}`}>
-              {isRecording ? (
-                <div className="mb-3 p-2 bg-muted/50 rounded-lg flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Mic className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">Recording… {Math.ceil(recordingMs / 1000)}s</span>
+            <div className="p-4 border-t bg-background/80 backdrop-blur">
+              {projectTag && (
+                <div className="mb-2 p-2 bg-primary/10 rounded-lg flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="font-bold text-primary">PROJECT TAGGED:</span>
+                    <span className="font-medium">{projects.find((p: any) => p._id === projectTag)?.title}</span>
+                    <div className="flex items-center gap-1 border-l pl-2 ml-1">
+                      <Input 
+                        type="number" 
+                        min="0" max="100" 
+                        value={progress} 
+                        onChange={(e) => setProgress(Number(e.target.value))}
+                        className="w-14 h-6 p-1 text-[10px] bg-background"
+                      />
+                      <span>% Progress</span>
+                    </div>
                   </div>
-                  <Button type="button" variant="ghost" size="sm" onClick={stopRecording}>
-                    <StopCircle className="h-4 w-4" />
-                  </Button>
-                </div>
-              ) : null}
-
-              {voicePreviewUrl ? (
-                <div className="mb-3 p-2 bg-muted/50 rounded-lg flex items-center justify-between gap-3">
-                  <audio controls src={voicePreviewUrl} className="w-full" />
-                  <Button type="button" variant="ghost" size="sm" onClick={stopVoicePreview}>
-                    ×
-                  </Button>
-                </div>
-              ) : null}
-
-              {selectedFile && (
-                <div className="mb-3 p-2 bg-muted/50 rounded-lg flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Paperclip className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">{selectedFile.name}</span>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSelectedFile(null)}
-                  >
-                    ×
+                  <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => setProjectTag(null)}>
+                    <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               )}
               <form onSubmit={handleSendMessage} className="flex items-center gap-2">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  className="hidden"
-                  onChange={handleFileSelect}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => {
-                    if (isRecording) {
-                      stopRecording();
-                      return;
-                    }
-                    void startRecording();
-                  }}
-                  disabled={!selectedConversation}
-                  title="Voice message"
-                >
-                  {isRecording ? <StopCircle className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <Paperclip className="h-4 w-4" />
-                </Button>
-                <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
+                <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} />
+                
+                <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                      <Smile className="h-4 w-4" />
+                    <Button variant="ghost" size="icon" type="button" className="h-9 w-9 shrink-0">
+                      <Plus className="w-5 h-5" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <EmojiPicker onEmojiClick={(emoji) => handleEmojiSelect(emoji)} />
+                  <PopoverContent side="top" align="start" className="w-64 p-2">
+                    <p className="text-[10px] font-bold px-2 py-1 uppercase opacity-50">Tag Project</p>
+                    <div className="max-h-48 overflow-y-auto space-y-1">
+                      {projects.map((p: any) => (
+                        <Button key={p._id} variant="ghost" className="w-full justify-start text-xs h-9" onClick={() => setProjectTag(p._id)}>
+                          {p.title}
+                        </Button>
+                      ))}
+                    </div>
                   </PopoverContent>
                 </Popover>
+
+                <Button variant="ghost" size="icon" type="button" className="h-9 w-9 shrink-0" onClick={() => fileInputRef.current?.click()}>
+                  <Paperclip className="w-5 h-5" />
+                </Button>
+
                 <Input
-                  type="text"
-                  placeholder="Type a message..."
-                  className={`flex-1 rounded-full bg-muted/40 border-0 focus-visible:ring-2 ${themeTokens.ring}`}
+                  placeholder={isRecording ? "Recording..." : "Type a message..."}
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
+                  className="flex-1 h-10 bg-muted/30 border-0"
+                  disabled={isRecording}
                 />
-                <Button type="submit" size="icon" disabled={!newMessage.trim() && !selectedFile && !voiceBlob} className={`rounded-full ${themeTokens.accentSoft} hover:opacity-95 text-white`}>
-                  <Send className="h-4 w-4" />
-                </Button>
+
+                <Popover open={showStickers} onOpenChange={setShowStickers}>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="icon" type="button" className="h-9 w-9 shrink-0">
+                      <Sparkles className="w-5 h-5 text-amber-500" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent side="top" align="end" className="w-72 p-4">
+                    <div className="grid grid-cols-3 gap-3">
+                      {STICKERS.map((url, i) => (
+                        <button key={i} className="hover:scale-110 transition-all p-2 rounded-xl hover:bg-muted" onClick={() => handleSendSticker(url)}>
+                          <img src={url} alt="sticker" className="w-full h-full object-contain" />
+                        </button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="icon" type="button" className="h-9 w-9 shrink-0 text-amber-500">
+                      <Smile className="w-5 h-5" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent side="top" align="end" className="p-0 border-0 shadow-2xl">
+                    <EmojiPicker onEmojiClick={handleEmojiSelect} width={320} height={400} />
+                  </PopoverContent>
+                </Popover>
+
+                {newMessage.trim() || selectedFile || voiceBlob || projectTag ? (
+                  <Button type="submit" size="icon" className={cn("h-10 w-10 shrink-0", themeTokens.accent)}>
+                    <Send className="w-5 h-5" />
+                  </Button>
+                ) : (
+                  <Button type="button" size="icon" variant="ghost" onMouseDown={startRecording} onMouseUp={stopRecording} className={isRecording ? 'text-red-500 animate-pulse' : ''}>
+                    <Mic className="w-5 h-5" />
+                  </Button>
+                )}
               </form>
             </div>
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-            <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-xl font-semibold mb-2">No conversation selected</h3>
-            <p className="text-muted-foreground mb-6">
-              Select a conversation or start a new one
-            </p>
-            <Button onClick={() => setIsNewConversationOpen(true)}>
-              <MessageSquare className="mr-2 h-4 w-4" />
-              New message
-            </Button>
+          <div className="flex-1 flex items-center justify-center bg-muted/10">
+            <div className="text-center space-y-6 max-w-sm px-6">
+              <div className={cn("mx-auto h-24 w-24 rounded-3xl flex items-center justify-center text-white shadow-2xl", themeTokens.accentSoft)}>
+                <MessageSquare className="h-12 w-12" />
+              </div>
+              <h2 className="text-2xl font-bold tracking-tight">Your Messages</h2>
+              <Button onClick={() => setIsNewConversationOpen(true)} className={cn("w-full h-11", themeTokens.accent)}>
+                <Plus className="mr-2 h-4 w-4" /> New Message
+              </Button>
+            </div>
           </div>
         )}
       </div>

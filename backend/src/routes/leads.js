@@ -180,7 +180,8 @@ router.get("/", requirePermission("leads.read"), async (req, res) => {
       req.user.role === "finance" ||
       req.user.role === "finance_manager" ||
       req.user.role === "developer" ||
-      req.user.role === "project_manager"
+      req.user.role === "project_manager" ||
+      req.user.role === "team_member"
     ) {
       const myEmployeeId = await getMyEmployeeId(req);
       const orConditions = [{ createdByUserId: req.user._id }];
@@ -188,12 +189,12 @@ router.get("/", requirePermission("leads.read"), async (req, res) => {
         orConditions.push({ ownerId: myEmployeeId });
       }
       
+      filter.$and = filter.$and || [];
+      filter.$and.push({ $or: orConditions });
+
       // If filtering by owner specifically, ensure we only show those that match the search AND are accessible
       if (ownerId) {
         filter.ownerId = ownerId;
-        // The middleware or further logic will handle cross-referencing this with user access
-      } else {
-        filter.$or = orConditions;
       }
     } else {
       return res.status(403).json({ error: "Access denied" });

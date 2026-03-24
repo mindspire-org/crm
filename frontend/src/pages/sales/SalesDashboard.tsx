@@ -33,7 +33,9 @@ import {
   Users,
   Wallet,
   AlertTriangle,
+  Target,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { API_BASE } from "@/lib/api/base";
 import { getAuthHeaders } from "@/lib/api/auth";
@@ -81,6 +83,8 @@ type SubscriptionDoc = {
   currency?: string;
   status?: string;
   nextBillingDate?: string;
+  repeatEveryCount?: number;
+  repeatEveryUnit?: string;
 };
 
 function toIsoDate(input?: string) {
@@ -105,6 +109,7 @@ function normalizeToMonthly(amount: number, everyCount: number, unit: string) {
 }
 
 export default function SalesDashboard() {
+  const navigate = useNavigate();
   const [orders, setOrders] = useState<OrderDoc[]>([]);
   const [invoices, setInvoices] = useState<InvoiceDoc[]>([]);
   const [payments, setPayments] = useState<PaymentDoc[]>([]);
@@ -256,10 +261,20 @@ export default function SalesDashboard() {
           <div className="text-sm text-muted-foreground">Sales</div>
           <h1 className="text-2xl font-semibold tracking-tight">Sales Dashboard</h1>
         </div>
-        <Button variant="outline" onClick={reloadAll} disabled={loading}>
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            className="border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+            onClick={() => navigate("/performance/targets")}
+          >
+            <Target className="mr-2 h-4 w-4" />
+            My Targets
+          </Button>
+          <Button variant="outline" onClick={reloadAll} disabled={loading}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Key Metrics */}

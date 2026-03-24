@@ -1,26 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { toast } from "@/components/ui/sonner";
-import { ArrowLeft, Copy, CheckCircle2, XCircle, Send, Printer, Eye, FileDown, PenLine, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, List, ListOrdered, Link2, Code, ChevronDown, FileText, Table as TableIcon, Layout, Wand2, Percent, Calculator, Banknote, MessageSquare } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
+import { ArrowLeft, Copy, CheckCircle2, XCircle, Printer, Eye, FileDown, PenLine, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, List, ListOrdered, Link2, Code, ChevronDown, FileText, Table as TableIcon, Layout, Wand2, Star, Calendar, Banknote, MessageSquare, Plus, Search, Building2, RefreshCw, BarChart3, Loader2, Download } from "lucide-react";
 import { API_BASE } from "@/lib/api/base";
 import { getAuthHeaders } from "@/lib/api/auth";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { HMS_MODULES, FULL_PROPOSAL_TEMPLATE } from "./ProposalModules";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Label as UILabel } from "@/components/ui/label";
+import { Label } from "@/components/ui/label";
 import { HaroomPrintTemplate } from "@/components/print/HaroomPrintTemplate";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { AuthVerifyDialog } from "@/components/auth/AuthVerifyDialog";
 import { renderToStaticMarkup } from "react-dom/server";
 import { openWhatsappChat } from "@/lib/whatsapp";
+import { useSettings } from "@/hooks/useSettings";
+import html2pdf from "html2pdf.js";
 
 const COMPANY = {
   name: "Mindspire",
@@ -29,297 +36,121 @@ const COMPANY = {
   website: "www.mindspire.org",
 };
 
-type Proposal = {
-  _id: string;
-  id?: string;
-  number?: string;
-  title?: string;
-  client?: string;
-  clientId?: string;
-  amount?: number;
-  status?: string;
-  proposalDate?: string;
-  validUntil?: string;
-  leadId?: string;
-  contractId?: string;
-  phone?: string;
-  note?: string;
-  tax1?: number;
-  tax2?: number;
-  discount?: number;
-  advanceAmount?: number;
-  paymentTermsPercentage?: number;
-};
-
-type Project = {
-  id: string;
-  title?: string;
-  description?: string;
-  price?: number;
-  start?: string;
-  deadline?: string;
-};
-
-// Tasks related to this proposal (by leadId or project context)
-type TaskRow = { id: string; title: string; status: string; projectTitle?: string; deadline?: string; assignee?: string };
-
 export default function ProposalDetail() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams();
   const navigate = useNavigate();
-  const [p, setP] = useState<Proposal | null>(null);
+  const { settings } = useSettings();
+  const [p, setP] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
-  const [status, setStatus] = useState("draft");
-
-  const [outerTab, setOuterTab] = useState("details-outer");
-  const [innerTab, setInnerTab] = useState("items");
-
+  const [tab, setTab] = useState("items");
+  const [innerTab, setInnerTab] = useState("items"); 
+  const [outerTab, setOuterTab] = useState("details");
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
   const [title, setTitle] = useState("");
   const [client, setClient] = useState("");
   const [amount, setAmount] = useState("");
-  const openWhatsapp = (phoneRaw?: string, name?: string) => {
-    const msg = `Hello ${name || ""}, I'm following up regarding your inquiry.`;
-    const r = openWhatsappChat(phoneRaw, msg, { defaultCountryCode: "92" });
-    if (!r.ok) toast.error("Invalid or missing phone number");
-  };
+  const [status, setStatus] = useState("draft");
   const [proposalDate, setProposalDate] = useState("");
   const [validUntil, setValidUntil] = useState("");
-  const [note, setNote] = useState("");
   const [tax1, setTax1] = useState("0");
   const [tax2, setTax2] = useState("0");
   const [discount, setDiscount] = useState("0");
-  const [advanceAmount, setAdvanceAmount] = useState("0");
-  const [paymentTermsPercentage, setPaymentTermsPercentage] = useState("50");
-
   const [invoices, setInvoices] = useState<any[]>([]);
   const [invoicesLoading, setInvoicesLoading] = useState(false);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const [editorHtml, setEditorHtml] = useState("");
+  const [timeframe, setTimeframe] = useState("");
+  const [tfStartDate, setTfStartDate] = useState("");
+  const [tfDays, setTfDays] = useState(20);
+  const [selectedModules, setSelectedModules] = useState<string[]>([]);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState("");
+  const previewRef = useRef<HTMLIFrameElement>(null);
+  const [previewPrint, setPreviewPrint] = useState(false);
+  const [iframeLoading, setIframeLoading] = useState(true);
+  const [items, setItems] = useState<any[]>([]);
+  const [pickOpen, setPickOpen] = useState(false);
+  const [pickQuery, setPickQuery] = useState("");
+  const [pickItems, setPickItems] = useState<any[]>([]);
+  const [pickLoading, setPickLoading] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [moduleQuery, setModuleQuery] = useState("");
+  const [taskOpen, setTaskOpen] = useState(false);
+  const [newTask, setNewTask] = useState({ title: "", deadline: "", status: "Pending" });
+  const [invOpen, setInvOpen] = useState(false);
+  const [newInv, setNewInv] = useState({ amount: 0, status: "Draft" });
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [addModuleOpen, setAddModuleOpen] = useState(false);
+  const [newModule, setNewModule] = useState({ title: "", content: "" });
 
-  // Tasks state
-  const [tasks, setTasks] = useState<TaskRow[]>([]);
-  const [tasksLoading, setTasksLoading] = useState(false);
+  const [customModules, setCustomModules] = useState<any[]>([]);
+
+  const filteredModules = useMemo(() => {
+    const allModules = [...HMS_MODULES, ...customModules];
+    return allModules.filter(m => 
+      m.title.toLowerCase().includes(moduleQuery.toLowerCase()) || 
+      m.content.toLowerCase().includes(moduleQuery.toLowerCase())
+    );
+  }, [moduleQuery, customModules]);
+
+  const subTotal = useMemo(() => items.reduce((s, it) => s + it.qty * it.rate, 0), [items]);
+  const taxTotal = useMemo(() => subTotal * (Number(tax1 || 0) / 100) + subTotal * (Number(tax2 || 0) / 100), [subTotal, tax1, tax2]);
+  const grandTotal = useMemo(() => Math.max(0, subTotal + taxTotal - Number(discount || 0)), [subTotal, taxTotal, discount]);
+
+  const money = (v: any) => Number(v || 0).toLocaleString();
+
+  const CountUp = ({ value, prefix = "Rs." }: { value: number; prefix?: string }) => {
+    const [display, setDisplay] = useState(0);
+    useEffect(() => {
+      let start = display;
+      const end = value;
+      if (start === end) return;
+      const duration = 800;
+      const startTime = performance.now();
+      const animate = (currentTime: number) => {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const easeOutQuad = (t: number) => t * (2 - t);
+        const current = Math.floor(start + (end - start) * easeOutQuad(progress));
+        setDisplay(current);
+        if (progress < 1) requestAnimationFrame(animate);
+      };
+      requestAnimationFrame(animate);
+    }, [value]);
+    return <span>{prefix}{display.toLocaleString()}</span>;
+  };
+
+  const openWhatsapp = (phoneRaw: string, name: string) => {
+    const msg = `Hello ${name || ""}, I am following up regarding your inquiry.`;
+    const r = openWhatsappChat(phoneRaw, msg, { defaultCountryCode: "92" });
+    if (!r.ok) toast.error("Invalid or missing phone number");
+  };
 
   const loadInvoices = async () => {
     if (!id) return;
     try {
       setInvoicesLoading(true);
       const res = await fetch(`${API_BASE}/api/invoices?proposalId=${encodeURIComponent(id)}`, { headers: getAuthHeaders() });
+      if (res.ok) setInvoices(await res.json());
+    } catch (e) { console.error(e); }
+    finally { setInvoicesLoading(false); }
+  };
+
+  const loadTasks = async (leadId?: string) => {
+    setTasksLoading(true);
+    try {
+      if (!leadId) { setTasksLoading(false); return; }
+      const res = await fetch(`${API_BASE}/api/tasks?leadId=${encodeURIComponent(leadId)}`, { headers: getAuthHeaders() });
       if (res.ok) {
-        setInvoices(await res.json());
+        const data = await res.json();
+        setTasks(data.map((t: any) => ({ id: t._id, title: t.title, status: t.status, deadline: t.deadline, assignee: t.assignees?.[0]?.name })));
       }
-    } catch (e) {
-      console.error("Failed to load invoices", e);
-    } finally {
-      setInvoicesLoading(false);
-    }
-  };
-
-  const createInvoiceFromProposal = async () => {
-    if (!p) return;
-    if (!confirm("Create a new Invoice from this Proposal?")) return;
-    try {
-      const payload = {
-        proposalId: p.id,
-        clientId: p.clientId,
-        client: p.client,
-        amount: grandTotal,
-        status: "Draft",
-        issueDate: new Date().toISOString(),
-        items: items.map(it => ({
-          name: it.name,
-          quantity: it.qty,
-          rate: it.rate,
-          total: it.qty * it.rate
-        })),
-        tax1: Number(tax1),
-        tax2: Number(tax2),
-        discount: Number(discount),
-        advanceAmount: Number(advanceAmount),
-        note: `Generated from Proposal #${p.number || p.id}`
-      };
-      const res = await fetch(`${API_BASE}/api/invoices`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-        body: JSON.stringify(payload)
-      });
-      if (res.ok) {
-        toast.success("Invoice created successfully");
-        loadInvoices();
-        setOuterTab("invoices-outer");
-      } else {
-        const error = await res.json();
-        throw new Error(error.message || "Failed to create invoice");
-      }
-    } catch (e: any) {
-      toast.error(e.message || "Failed to create invoice");
-    }
-  };
-
-  const editorRef = useRef<HTMLDivElement | null>(null);
-  const [editorHtml, setEditorHtml] = useState<string>("");
-  const [project, setProject] = useState<Project | null>(null);
-  const [selectedModules, setSelectedModules] = useState<string[]>([]);
-
-  const toggleModule = (modId: string) => {
-    setSelectedModules(prev => {
-      const next = prev.includes(modId) ? prev.filter(id => id !== modId) : [...prev, modId];
-      
-      // Auto-generate content based on selection
-      const content = next.map(id => {
-        const mod = HMS_MODULES.find(m => m.id === id);
-        if (!mod) return "";
-        return `<div class="mb-6"><h3 style="font-weight:bold;text-decoration:underline;color:#1e3a8a;font-size:16px;margin-bottom:8px;">${mod.title}</h3><p style="font-size:14px;line-height:1.6;color:#374151;">${mod.content}</p></div>`;
-      }).join("");
-      
-      setEditorHtml(content);
-      if (editorRef.current) {
-        editorRef.current.innerHTML = content;
-      }
-      return next;
-    });
-  };
-
-  const useFullTemplate = () => {
-    if (!confirm("This will replace current content with the professional template. Continue?")) return;
-    setEditorHtml(FULL_PROPOSAL_TEMPLATE);
-    if (editorRef.current) {
-      editorRef.current.innerHTML = FULL_PROPOSAL_TEMPLATE;
-    }
-    setSelectedModules([]);
-  };
-  useEffect(() => {
-    try {
-      const url = new URL(window.location.href);
-      const pid = url.searchParams.get("projectId") || localStorage.getItem("current_project_id") || "";
-      if (!pid) return;
-      (async () => {
-        try {
-          const res = await fetch(`${API_BASE}/api/projects/${pid}`, { headers: getAuthHeaders() });
-          if (!res.ok) return;
-          const d = await res.json();
-          setProject({
-            id: String(d._id || pid),
-            title: d.title || "",
-            description: d.description || "",
-            price: typeof d.price === 'number' ? d.price : undefined,
-            start: d.start ? new Date(d.start).toISOString().slice(0,10) : undefined,
-            deadline: d.deadline ? new Date(d.deadline).toISOString().slice(0,10) : undefined,
-          });
-        } catch {}
-      })();
-    } catch {}
-  }, []);
-
-  // Utility: strip HTML to plain English text for previews
-  const stripHtml = (html: string) => {
-    try {
-      const div = document.createElement("div");
-      div.innerHTML = html || "";
-      return (div.textContent || div.innerText || "").trim();
-    } catch { return html; }
-  };
-  const noteEnglish = useMemo(() => stripHtml(editorHtml || p?.note || ""), [editorHtml, p]);
-
-  // Preview overlay (same tab)
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewHtml, setPreviewHtml] = useState<string>("");
-  const previewRef = useRef<HTMLIFrameElement | null>(null);
-  const [previewPrint, setPreviewPrint] = useState(false);
-  const [iframeLoading, setIframeLoading] = useState(true);
-  const [previewAutoDownload, setPreviewAutoDownload] = useState(false);
-
-  // Manual print trigger for the already-loaded iframe
-  const triggerPrintNow = () => {
-    try { previewRef.current?.contentWindow?.focus(); previewRef.current?.contentWindow?.print(); } catch {}
-  };
-
-  type Item = { id: string; name: string; qty: number; rate: number };
-  const [items, setItems] = useState<Item[]>([]);
-  const subTotal = useMemo(() => items.reduce((s, it) => s + it.qty * it.rate, 0), [items]);
-  const taxTotal = useMemo(() => subTotal * (Number(tax1||0)/100) + subTotal * (Number(tax2||0)/100), [subTotal, tax1, tax2]);
-  const grandTotal = useMemo(() => Math.max(0, subTotal + taxTotal - Number(discount || 0)), [subTotal, taxTotal, discount]);
-  const calculatedAdvance = useMemo(() => (grandTotal * Number(paymentTermsPercentage || 0)) / 100, [grandTotal, paymentTermsPercentage]);
-
-  const proposalStatus = useMemo(() => {
-    const s = String(p?.status || "draft").toLowerCase();
-    if (s === "accepted") return { label: "Accepted", className: "bg-emerald-600 text-white border-emerald-600" };
-    if (s === "declined" || s === "rejected") return { label: "Declined", className: "bg-rose-600 text-white border-rose-600" };
-    if (s === "sent") return { label: "Sent", className: "bg-sky-600 text-white border-sky-600" };
-    return { label: "Draft", className: "bg-muted text-foreground border-border" };
-  }, [p?.status]);
-
-  const money = (v: any) => Number(v || 0).toLocaleString();
-
-  // Items picker (fetch from Items page)
-  type CatalogItem = { id: string; title: string; rate?: number; unit?: string; description?: string };
-  const [pickOpen, setPickOpen] = useState(false);
-  const [pickQuery, setPickQuery] = useState("");
-  const [pickItems, setPickItems] = useState<CatalogItem[]>([]);
-  const [pickLoading, setPickLoading] = useState(false);
-  // create new item inside picker
-  const [newTitle, setNewTitle] = useState("");
-  const [newRate, setNewRate] = useState("");
-  const [newUnit, setNewUnit] = useState("");
-  const [newDesc, setNewDesc] = useState("");
-  const [newSaving, setNewSaving] = useState(false);
-
-  useEffect(() => {
-    if (!pickOpen) return;
-    const ctrl = new AbortController();
-    (async () => {
-      try {
-        setPickLoading(true);
-        const url = `${API_BASE}/api/items${pickQuery ? `?q=${encodeURIComponent(pickQuery)}` : ""}`;
-        const r = await fetch(url, { signal: ctrl.signal, headers: getAuthHeaders() });
-        if (!r.ok) { setPickItems([]); return; }
-        const data = await r.json();
-        const list: CatalogItem[] = (Array.isArray(data) ? data : [])
-          .map((d:any) => ({ id: String(d._id || ""), title: d.title || "-", rate: typeof d.rate === 'number' ? d.rate : undefined, unit: d.unit || undefined, description: d.description || undefined }))
-          .filter((x:any) => x.id);
-        setPickItems(list);
-      } catch {}
-      finally { setPickLoading(false); }
-    })();
-    return () => ctrl.abort();
-  }, [pickOpen, pickQuery]);
-
-  const addFromCatalog = (ci: CatalogItem) => {
-    setItems(prev => ([...prev, { id: Math.random().toString(36).slice(2), name: ci.title, qty: 1, rate: Number(ci.rate || 0) }]));
-    setPickOpen(false);
-  };
-
-  const createNewItem = async () => {
-    if (!newTitle.trim()) { toast.error("Title is required"); return; }
-    try {
-      setNewSaving(true);
-      const payload: any = {
-        title: newTitle.trim(),
-        description: newDesc || undefined,
-        category: "general",
-        unit: newUnit || undefined,
-        rate: Number(newRate || 0),
-        showInClientPortal: false,
-        image: "",
-      };
-      const r = await fetch(`${API_BASE}/api/items`, { method: "POST", headers: getAuthHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(payload) });
-      if (!r.ok) {
-        let msg = "Failed to create item";
-        try { const e = await r.json(); if (e?.error) msg = String(e.error); } catch {}
-        throw new Error(msg);
-      }
-      const created = await r.json();
-      const ci: CatalogItem = { id: String(created._id || ""), title: created.title || newTitle.trim(), rate: created.rate, unit: created.unit, description: created.description };
-      // add to proposal items immediately
-      addFromCatalog(ci);
-      // also update picker list for next time
-      setPickItems(prev => [{ id: ci.id, title: ci.title, rate: ci.rate, unit: ci.unit, description: ci.description }, ...prev]);
-      // reset form
-      setNewTitle(""); setNewRate(""); setNewUnit(""); setNewDesc("");
-      toast.success("Item created");
-    } catch (e:any) {
-      toast.error(e?.message || "Failed to create item");
-    } finally {
-      setNewSaving(false);
-    }
+    } catch (e) { console.error(e); }
+    finally { setTasksLoading(false); }
   };
 
   const load = async () => {
@@ -328,1171 +159,1167 @@ export default function ProposalDetail() {
       setLoading(true);
       const res = await fetch(`${API_BASE}/api/proposals/${id}`, { headers: getAuthHeaders() });
       const d = await res.json();
-      if (!res.ok) throw new Error(d?.error || "Failed to load proposal");
-      const mapped: Proposal = {
-        _id: String(d._id || id),
-        id: String(d._id || id),
-        title: d.title || "-",
-        client: d.client || "-",
-        amount: Number(d.amount || 0),
-        status: d.status || "draft",
-        proposalDate: d.proposalDate ? new Date(d.proposalDate).toISOString().slice(0, 10) : undefined,
-        validUntil: d.validUntil ? new Date(d.validUntil).toISOString().slice(0, 10) : undefined,
-        note: d.note || "",
-        number: typeof d.number === 'number' ? d.number : undefined,
-        tax1: typeof d.tax1 === 'number' ? d.tax1 : 0,
-        tax2: typeof d.tax2 === 'number' ? d.tax2 : 0,
-        leadId: d.leadId ? String(d.leadId) : undefined,
-        clientId: d.clientId ? String(d.clientId) : undefined,
-        contractId: d.contractId ? String(d.contractId) : undefined,
-        phone: d.phone || ""
-      };
-      setP(mapped);
-      setTax1(String(mapped.tax1 ?? 0));
-      setTax2(String(mapped.tax2 ?? 0));
-      setDiscount(String(mapped.discount ?? 0));
-      setAdvanceAmount(String(mapped.advanceAmount ?? 0));
-      setPaymentTermsPercentage(String(mapped.paymentTermsPercentage ?? 50));
-      setEditorHtml(mapped.note || "");
-      try {
-        const list = Array.isArray(d.items) ? d.items : [];
-        setItems(list.map((it: any) => ({
-          id: Math.random().toString(36).slice(2),
-          name: String(it?.name || ""),
-          qty: Number(it?.qty ?? 1) || 0,
-          rate: Number(it?.rate ?? 0) || 0,
-        })).filter((x: any) => x.name));
-      } catch {
-        setItems([]);
+      if (!res.ok) throw new Error(d?.error || "Failed");
+      setP(d);
+      setTitle(d.title || "");
+      setClient(d.client || "");
+      setAmount(String(d.amount || 0));
+      setStatus(d.status || "draft");
+      setProposalDate(d.proposalDate ? new Date(d.proposalDate).toISOString().slice(0, 10) : "");
+      setValidUntil(d.validUntil ? new Date(d.validUntil).toISOString().slice(0, 10) : "");
+      setTax1(String(d.tax1 || 0));
+      setTax2(String(d.tax2 || 0));
+      setDiscount(String(d.discount || 0));
+      setEditorHtml(d.note || "");
+      setTimeframe(d.timeframe || "");
+      setTfStartDate(d.timeframeStartDate ? new Date(d.timeframeStartDate).toISOString().slice(0, 10) : "");
+      setTfDays(d.timeframeDays || 20);
+      if (Array.isArray(d.items)) {
+        setItems(d.items.map((it: any) => ({ id: Math.random().toString(36).slice(2), name: it.name, qty: it.qty, rate: it.rate })));
       }
-    } catch (e: any) {
-      toast.error(e?.message || "Failed to load proposal");
-    } finally {
-      setLoading(false);
-    }
+      if (d.leadId) loadTasks(d.leadId);
+    } catch (e: any) { toast.error(e.message); }
+    finally { setLoading(false); }
   };
 
-  const loadTasks = async (leadId?: string, projectId?: string) => {
-    setTasksLoading(true);
-    setTasks([]);
-    try {
-      let url: string | null = null;
-      const valid = (v?: string) => !!v && v !== "-" && v !== "undefined";
-      if (valid(leadId)) url = `${API_BASE}/api/tasks?leadId=${encodeURIComponent(String(leadId))}`;
-      else if (valid(projectId)) url = `${API_BASE}/api/tasks?projectId=${encodeURIComponent(String(projectId))}`;
-      if (!url) { setTasksLoading(false); return; }
-      const r = await fetch(url, { headers: getAuthHeaders() });
-      const data = await r.json().catch(()=>[]);
-      if (!r.ok) throw new Error(data?.error || "Failed to load tasks");
-      const list: TaskRow[] = (Array.isArray(data) ? data : []).map((t:any) => ({
-        id: String(t._id || ""),
-        title: t.title || "-",
-        status: t.status || "-",
-        projectTitle: t.projectTitle || undefined,
-        deadline: t.deadline ? new Date(t.deadline).toISOString().slice(0,10) : undefined,
-        assignee: Array.isArray(t.assignees) && t.assignees[0]?.name ? String(t.assignees[0].name) : undefined,
-      })).filter(x=>x.id);
-      setTasks(list);
-    } catch (e:any) {
-      toast.error(e?.message || "Failed to load tasks");
-    } finally { setTasksLoading(false); }
-  };
+  useEffect(() => { load(); loadInvoices(); }, [id]);
 
-  const buildPreviewDocument = () => {
-    const proposalNo = p?.number ?? p?.id ?? "-";
-    const proposalDateText = p?.proposalDate ? new Date(p.proposalDate).toLocaleDateString() : "-";
-    const expiryDateText = p?.validUntil ? new Date(p.validUntil).toLocaleDateString() : "-";
-    
-    const sub = Number(subTotal || 0);
-    const t1p = Number(tax1 || 0);
-    const t2p = Number(tax2 || 0);
-    const t1 = sub * (t1p / 100);
-    const t2 = sub * (t2p / 100);
-    const total = sub + t1 + t2;
-
-    const viewBrand = {
-      name: "HealthSpire",
-      email: "info@healthspire.org",
-      phone: "+92 312 7231875",
-      address: "761/D2 Shah Jelani Rd Township Lahore",
-      website: "www.healthspire.org",
-      logoSrc: "/HealthSpire%20logo.png",
-    };
-
-    const totals: { label: string; value: string; bold?: boolean }[] = [
-      { label: "Sub Total", value: `Rs.${sub.toLocaleString()}` }
-    ];
-    if (t1 > 0) totals.push({ label: `Tax (${t1p}%)`, value: `Rs.${t1.toLocaleString()}` });
-    if (t2 > 0) totals.push({ label: `Tax (${t2p}%)`, value: `Rs.${t2.toLocaleString()}` });
-    if (Number(discount || 0) > 0) totals.push({ label: "Discount", value: `-Rs.${Number(discount).toLocaleString()}` });
-    totals.push({ label: "Total Amount", value: `Rs.${total.toLocaleString()}`, bold: true });
-    if (Number(advanceAmount || 0) > 0) totals.push({ label: "Advance Received", value: `Rs.${Number(advanceAmount).toLocaleString()}` });
-    if (Number(paymentTermsPercentage || 0) > 0) totals.push({ label: `Payment Terms (${paymentTermsPercentage}%)`, value: `Rs.${calculatedAdvance.toLocaleString()}` });
-
-    const sections = [
-      { heading: "PROJECT OVERVIEW", content: project?.description || "" },
-      { heading: "PROPOSAL CONTENT", content: stripHtml(editorHtml || p?.note || "") }
-    ];
-
-    const templateProps = {
-      title: "PROJECT PROPOSAL",
-      brand: viewBrand,
-      clientName: p?.client || "-",
-      clientAddress: "", // Add if available
-      docNumber: String(proposalNo),
-      date: proposalDateText,
-      items: items.map(it => ({
-        description: it.name,
-        qty: it.qty,
-        price: it.rate,
-        total: it.qty * it.rate
-      })),
-      totals,
-      sections,
-      signatureData: {
-        companyName: "Health Spire (Pvt) Ltd",
-        companySignatory: "Mr. Qutaibah Talat",
-        companyDesignation: "CEO",
-        clientName: p?.client || "Client Name"
-      }
-    };
-
-    const contentHtml = renderToStaticMarkup(<HaroomPrintTemplate {...templateProps} />);
-
-    return `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>Proposal #${proposalNo}</title>
-  <style>
-    body { margin: 0; padding: 0; background: #f3f4f6; }
-    .pdf-mode { background: white; }
-    @media print {
-      body { background: white; }
-    }
-  </style>
-</head>
-<body class="\${previewAutoDownload ? 'pdf-mode' : ''}">
-  \${contentHtml}
-  \${previewAutoDownload ? \`
-  <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
-  <script>
-    window.onload = function() {
-      const el = document.querySelector('.haroom-print-root');
-      html2pdf().set({
-        margin: 0,
-        filename: 'proposal-\${proposalNo}.pdf',
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'], avoid: ['tr', 'table'] }
-      }).from(el).save().then(() => {
-        window.parent.postMessage({ type: 'proposal-pdf-done' }, '*');
-      });
-    };
-  </script>
-  \` : ''}
-</body>
-</html>`;
-  };
-
-  useEffect(() => { 
-    load(); 
-    loadInvoices();
-  }, [id]);
-
-  // Fetch tasks once we have the proposal with leadId or a project context
   useEffect(() => {
-    if (p?.leadId || project?.id) loadTasks(p?.leadId, project?.id);
-    else setTasks([]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [p?.leadId, project?.id]);
-
-  const openEdit = () => {
-    if (!p) return;
-    setTitle(p.title || "");
-    setClient(p.client || "");
-    setAmount(String(p.amount || 0));
-    setStatus(p.status || "draft");
-    setProposalDate(p.proposalDate || "");
-    setValidUntil(p.validUntil || "");
-    setNote(p.note || "");
-    setTax1(String(p.tax1 ?? 0));
-    setTax2(String(p.tax2 ?? 0));
-    setEditorHtml(p.note || "");
-    setEditOpen(true);
-  };
+    const down = (e: KeyboardEvent) => {
+      if (e.key === "s" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        save();
+      }
+      if (e.key === "n" && (e.altKey)) {
+        e.preventDefault();
+        setItems(prev => [...prev, { id: Math.random().toString(36).slice(2), name: "", qty: 1, rate: 0 }]);
+        setTab("items");
+      }
+    };
+    document.addEventListener("keydown", down);
+    return () => document.removeEventListener("keydown", down);
+  }, [title, client, items, grandTotal, status, proposalDate, validUntil, editorHtml, timeframe, tfStartDate, tfDays]);
 
   const save = async () => {
-    if (!id) return;
     try {
-      const normalizedItems = (items || []).map((it) => ({ name: it.name || "", qty: Number(it.qty || 0), rate: Number(it.rate || 0) })).filter((x) => String(x.name || "").trim());
-      const payload: any = {
-        title,
-        client,
-        amount: Number(amount || 0),
-        status,
-        proposalDate,
-        validUntil,
-        note: editorRef.current?.innerHTML || editorHtml || "",
-        tax1: Number(tax1),
-        tax2: Number(tax2),
-        discount: Number(discount),
-        advanceAmount: Number(advanceAmount),
-        paymentTermsPercentage: Number(paymentTermsPercentage),
+      const content = editorRef.current?.innerHTML || editorHtml || "";
+      const payload = {
+        title, client, amount: grandTotal, status, proposalDate, validUntil,
+        note: content,
+        timeframe,
+        timeframeStartDate: tfStartDate || undefined,
+        timeframeDays: tfDays,
+        tax1: Number(tax1), tax2: Number(tax2), discount: Number(discount),
+        items: items.map(it => ({ name: it.name, qty: it.qty, rate: it.rate }))
       };
       const res = await fetch(`${API_BASE}/api/proposals/${id}`, {
         method: "PATCH",
         headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(payload),
       });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || "Failed to save");
-      setP({
-        ...d,
-        _id: d._id || d.id,
-        id: d._id || d.id,
-        title: d.title,
-        client: d.client,
-        amount: d.amount,
-        status: d.status,
-        proposalDate: d.proposalDate,
-        validUntil: d.validUntil,
-        note: d.note,
-        number: d.number,
-        tax1: d.tax1,
-        tax2: d.tax2,
-        leadId: d.leadId || "",
-        clientId: d.clientId || "",
-        contractId: d.contractId || ""
-      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(d?.error || "Failed to sync proposal nodes");
+
+      setP(d);
       setEditOpen(false);
-      toast.success("Proposal updated");
+      setLastSaved(new Date());
+      toast.success("Proposal Synchronized");
+      load(); // Refresh state from server to ensure parity
     } catch (e: any) {
-      toast.error(e.message || "Failed to save");
+      toast.error(e?.message || "Sync failure");
     }
   };
 
-  const updateStatus = async (s: string) => {
-    if (!id) return;
+  const exec = (cmd: string, val?: any) => {
     try {
-      const normalizedItems = (items || []).map((it) => ({ name: it.name || "", qty: Number(it.qty || 0), rate: Number(it.rate || 0) })).filter((x) => String(x.name || "").trim());
-      const body: any = {
-        status: s,
-        tax1: Number(tax1 || 0),
-        tax2: Number(tax2 || 0),
-        items: normalizedItems,
-        amount: normalizedItems.length ? Number(subTotal || 0) : (amount ? Number(amount) : 0),
-        note: (editorRef.current?.innerHTML ?? editorHtml ?? note) || "",
-      };
-      const res = await fetch(`${API_BASE}/api/proposals/${id}`, { method: "PUT", headers: getAuthHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(body) });
-      if (res.ok) { toast.success("Status updated"); load(); }
+      editorRef.current?.focus();
+      document.execCommand(cmd, false, val);
+      setEditorHtml(editorRef.current?.innerHTML || "");
     } catch {}
   };
 
-  const cloneProposal = async () => {
+  const toggleModule = (modId: string) => {
+    setSelectedModules(prev => {
+      const next = prev.includes(modId) ? prev.filter(i => i !== modId) : [...prev, modId];
+      updateEditorFromModules(next);
+      return next;
+    });
+  };
+
+  const updateEditorFromModules = (moduleIds: string[]) => {
+    const allModules = [...HMS_MODULES, ...customModules];
+    const content = moduleIds.map(mid => {
+      const mod = allModules.find(m => m.id === mid);
+      return mod ? `<div class='module-item mb-8 p-6 bg-slate-50/50 border border-slate-100 rounded-2xl'><h3 class='text-indigo-600 font-black uppercase tracking-tight mb-2'>${mod.title}</h3><p class='text-slate-600 leading-relaxed'>${mod.content}</p></div>` : "";
+    }).join("");
+    setEditorHtml(content);
+    if (editorRef.current) editorRef.current.innerHTML = content;
+  };
+
+  const selectAllModules = () => {
+    const allModules = [...HMS_MODULES, ...customModules];
+    const allIds = allModules.map(m => m.id);
+    setSelectedModules(allIds);
+    updateEditorFromModules(allIds);
+  };
+
+  const handleAddModule = () => {
+    if (!newModule.title || !newModule.content) return;
+    const mod = {
+      id: `custom-${Math.random().toString(36).slice(2)}`,
+      title: newModule.title,
+      content: newModule.content
+    };
+    setCustomModules([...customModules, mod]);
+    setNewModule({ title: "", content: "" });
+    setAddModuleOpen(false);
+    toast.success("Custom Module Added");
+  };
+
+  const clearModules = () => {
+    setSelectedModules([]);
+    updateEditorFromModules([]);
+  };
+
+  const buildPreviewDocument = () => {
+    const viewBrand = { 
+      name: settings?.general?.companyName || "Haroom (Pvt) Ltd", 
+      email: settings?.general?.companyEmail || "info@haroom.org", 
+      phone: settings?.general?.companyPhone || "+92 300 0000000", 
+      address: settings?.general?.addressLine1 || "Islamabad, Pakistan", 
+      website: settings?.general?.domain || "www.haroom.org", 
+      logoSrc: settings?.general?.logoUrl || "/HealthSpire%20logo.png" 
+    };
+    
+    const totals = [
+      { label: "Sub Total", value: `Rs.${subTotal.toLocaleString()}` },
+      ...(Number(tax1) > 0 ? [{ label: `Tax (${tax1}%)`, value: `Rs.${(subTotal * Number(tax1) / 100).toLocaleString()}` }] : []),
+      ...(Number(tax2) > 0 ? [{ label: `Tax (${tax2}%)`, value: `Rs.${(subTotal * Number(tax2) / 100).toLocaleString()}` }] : []),
+      ...(Number(discount) > 0 ? [{ label: "Discount", value: `-Rs.${Number(discount).toLocaleString()}` }] : []),
+      { label: "Total Amount", value: `Rs.${grandTotal.toLocaleString()}`, bold: true }
+    ];
+
+    const sections = [
+      { heading: "Project Scope & Technical Architecture", content: editorHtml || p?.note || "Detailed scope of work and technical specifications for the enterprise solution." }
+    ];
+    
+    const displayDateStr = p?.proposalDate ? new Date(p.proposalDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) : "-";
+
+    const props = { 
+      title: p?.title?.toUpperCase() || "PROJECT PROPOSAL", 
+      brand: viewBrand, 
+      clientName: p?.client || "-", 
+      clientAddress: p?.clientAddress || p?.address || "",
+      docNumber: p?.number || (p?._id ? p._id.slice(-6).toUpperCase() : "-"), 
+      date: displayDateStr, 
+      items: items.map((it: any) => ({ description: it.name, qty: it.qty, price: it.rate, total: it.qty * it.rate })), 
+      totals, 
+      timeframe,
+      timeframeStartDate: tfStartDate,
+      timeframeDays: tfDays,
+      sections,
+      paymentInformation: "• 50% Upfront Advance Payment to initiate architectural setup.\n• 30% Upon completion of core module integration.\n• 20% Final settlement upon official handover and sync.",
+      termsText: "1. Validity: This technical proposal remains valid for 15 operational days.\n2. Support: Post-deployment hypercare is included for 30 cycles.\n3. Confidentiality: Both parties agree to maintain strict node confidentiality.\n4. Intellectual Property: All custom code remains property of Haroom until final settlement.",
+      signatureData: { 
+        companyName: settings?.general?.companyName || "Haroom (Pvt) Ltd", 
+        companySignatory: settings?.general?.companyName || "Mr. Qutaibah Talat",
+        companyDesignation: "CEO",
+        clientName: p?.client || "Authorized Entity Representative" 
+      } 
+    };
+    const html = renderToStaticMarkup(<HaroomPrintTemplate {...props} />);
+    return `<!doctype html><html><body style='margin:0;'>${html}</body></html>`;
+  };
+
+  const preview = () => { setPreviewHtml(buildPreviewDocument()); setPreviewOpen(true); setIframeLoading(true); };
+  const triggerPrintNow = () => { try { previewRef.current?.contentWindow?.print(); } catch {} };
+
+  const downloadPdf = async () => {
+    setPdfLoading(true);
+    const element = document.createElement("div");
+    element.innerHTML = previewHtml;
+    document.body.appendChild(element);
+    
+    const opt = {
+      margin: 0,
+      filename: `Proposal-${title || id}.pdf`,
+      image: { type: 'jpeg' as const, quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, logging: false },
+      jsPDF: { unit: 'mm' as const, format: 'a4', orientation: 'portrait' as const }
+    };
+
+    try {
+      await html2pdf().set(opt).from(element).save();
+      toast.success("PDF Synchronized");
+    } catch (e) {
+      toast.error("Export failed");
+    } finally {
+      document.body.removeChild(element);
+      setPdfLoading(false);
+    }
+  };
+
+  const getProposalStatus = (s?: string) => {
+    const st = String(s || "draft").toLowerCase();
+    if (st === "accepted") return { label: "Accepted", className: "bg-emerald-500 text-white" };
+    if (st === "declined") return { label: "Declined", className: "bg-rose-500 text-white" };
+    return { label: "Draft", className: "bg-slate-500 text-white" };
+  };
+
+  const openEdit = () => { if (!p) return; setTitle(p.title || ""); setClient(p.client || ""); setAmount(String(p.amount || 0)); setStatus(p.status || "draft"); setProposalDate(p.proposalDate || ""); setValidUntil(p.validUntil || ""); setEditOpen(true); };
+  const cloneProposal = async () => { setAuthOpen(true); };
+  const saveAsTemplate = async () => {
+    try {
+      const content = editorRef.current?.innerHTML || editorHtml || "";
+      const payload = {
+        title: `${title || 'Proposal'} Template`,
+        content: content,
+        type: 'proposal'
+      };
+      
+      const res = await fetch(`${API_BASE}/api/templates`, { 
+        method: "POST", 
+        headers: getAuthHeaders({ "Content-Type": "application/json" }), 
+        body: JSON.stringify(payload) 
+      });
+      
+      if (!res.ok) throw new Error("Failed to save template");
+      
+      toast.success("Saved as Template successfully");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to save template");
+    }
+  };
+
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<string | null>(null);
+  const [analysisOpen, setAnalysisOpen] = useState(false);
+
+  const analyzeAgreement = async () => {
+    setIsAnalyzing(true);
+    setAnalysisOpen(true);
+    setAnalysisResult(null);
+    
+    // Simulate AI analysis delay
+    setTimeout(() => {
+      const complexity = items.length > 5 ? "High" : items.length > 2 ? "Medium" : "Low";
+      const riskLevel = !validUntil ? "Elevated (No Expiry Date)" : "Standard";
+      
+      const result = `
+        <div class="space-y-4">
+          <div>
+            <h4 class="text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-1">Architecture Complexity</h4>
+            <p class="text-sm font-medium text-slate-700">${complexity} Complexity based on ${items.length} service units.</p>
+          </div>
+          <div>
+            <h4 class="text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-1">Risk Assessment</h4>
+            <p class="text-sm font-medium text-slate-700">${riskLevel}</p>
+          </div>
+          <div class="p-3 bg-indigo-50 rounded-xl border border-indigo-100 mt-4">
+            <p class="text-xs font-bold text-indigo-800">Neural Suggestion: ${complexity === "High" ? "This enterprise-grade scope requires strict phased delivery and upfront infrastructure budget." : "Standard implementation cycles are recommended."}</p>
+          </div>
+        </div>
+      `;
+      setAnalysisResult(result);
+      setIsAnalyzing(false);
+    }, 2000);
+  };
+
+  const handleAuthSuccess = async () => {
     if (!p) return;
     try {
-      const normalizedItems = (items || []).map((it) => ({ name: it.name || "", qty: Number(it.qty || 0), rate: Number(it.rate || 0) })).filter((x) => String(x.name || "").trim());
-      const payload = {
-        title: p.title,
-        client: p.client,
-        amount: normalizedItems.length ? Number(subTotal || 0) : p.amount,
-        status: p.status,
-        proposalDate: p.proposalDate ? new Date(p.proposalDate).toISOString() : undefined,
-        validUntil: p.validUntil ? new Date(p.validUntil).toISOString() : undefined,
-        note: p.note,
-        tax1: Number(p.tax1 || 0),
-        tax2: Number(p.tax2 || 0),
-        items: normalizedItems,
+      const payload = { 
+        title: p.title + " (Copy)", 
+        client: p.client, 
+        amount: subTotal, 
+        status: "draft", 
+        proposalDate: new Date().toISOString(), 
+        items: items.map(it => ({ name: it.name, qty: it.qty, rate: it.rate })), 
+        note: editorHtml,
+        timeframe,
+        timeframeStartDate: tfStartDate,
+        timeframeDays: tfDays
       };
       const res = await fetch(`${API_BASE}/api/proposals`, { method: "POST", headers: getAuthHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(payload) });
       const d = await res.json();
-      if (!res.ok) throw new Error(d?.error || "Failed to clone");
-      toast.success("Cloned");
-      navigate(`/prospects/proposals/${d._id}`);
-    } catch (e: any) { toast.error(e?.message || "Failed to clone"); }
+      if (res.ok) { toast.success("Proposal Replicated"); navigate(`/prospects/proposals/${d._id}`); }
+    } catch (e: any) { toast.error(e.message); }
   };
-
-  const openPreviewOverlay = (opts?: { print?: boolean; download?: boolean }) => {
-    const html = buildPreviewDocument();
-    setPreviewHtml(html);
-    setPreviewOpen(true);
-    setPreviewPrint(!!opts?.print);
-    setPreviewAutoDownload(!!opts?.download);
-    setIframeLoading(true);
-  };
-
-  const preview = () => { openPreviewOverlay(); };
-  const downloadPdf = () => { openPreviewOverlay({ download: true }); };
-  const printProposal = () => { openPreviewOverlay({ print: true }); };
-
-  useEffect(() => {
-    const onMsg = (e: MessageEvent) => {
-      try {
-        if (e?.data?.type === 'proposal-pdf-done') {
-          setPreviewAutoDownload(false);
-          setPreviewOpen(false);
-        }
-      } catch {}
-    };
-    window.addEventListener('message', onMsg);
-    return () => window.removeEventListener('message', onMsg);
-  }, []);
-
-  const [tableRows, setTableRows] = useState("3");
-  const [tableCols, setTableCols] = useState("3");
-  const [tableDialogOpen, setTableDialogOpen] = useState(false);
-
-  const exec = (cmd: string, value?: string) => {
+  const updateStatus = async (s: string) => { if (!id) return; try { const res = await fetch(`${API_BASE}/api/proposals/${id}`, { method: "PATCH", headers: getAuthHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ status: s }) }); if (res.ok) { toast.success("Status updated"); load(); } } catch {} };
+  const useFullTemplate = () => { setConfirmOpen(true); };
+  const handleConfirmTemplate = () => { setEditorHtml(FULL_PROPOSAL_TEMPLATE); if (editorRef.current) editorRef.current.innerHTML = FULL_PROPOSAL_TEMPLATE; setConfirmOpen(false); };
+  const addFromCatalog = (ci: any) => { setItems([...items, { id: Math.random().toString(36).slice(2), name: ci.title, qty: 1, rate: ci.rate || 0 }]); setPickOpen(false); };
+  
+  const addTask = async () => {
+    if (!newTask.title || !p?.leadId) return;
     try {
-      editorRef.current?.focus();
-      document.execCommand(cmd, false, value);
-      setEditorHtml(editorRef.current?.innerHTML ?? "");
-    } catch {}
+      const res = await fetch(`${API_BASE}/api/tasks`, {
+        method: "POST",
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ ...newTask, leadId: p.leadId, proposalId: id })
+      });
+      if (res.ok) { toast.success("Task Synchronized"); setTaskOpen(false); loadTasks(p.leadId); }
+    } catch (e) {}
   };
 
-  const insertHtml = (html: string) => {
-    const map: Record<string, string> = {
-      "{PROPOSAL_ID}": String(p?.number ?? p?.id ?? "-"),
-      "{PROPOSAL_DATE}": String(p?.proposalDate ?? "-"),
-      "{PROPOSAL_EXPIRY_DATE}": String(p?.validUntil ?? "-"),
-      "{PROJECT_TITLE}": String(project?.title ?? "-"),
-      "{PROJECT_DESCRIPTION}": String(project?.description ?? "-"),
-      "{PROJECT_PRICE}": project?.price != null ? Number(project.price).toLocaleString() : "-",
-      "{PROJECT_START}": String(project?.start ?? "-"),
-      "{PROJECT_DEADLINE}": String(project?.deadline ?? "-"),
-    };
-    let out = html;
-    Object.entries(map).forEach(([k, v]) => { out = out.split(k).join(v); });
-    exec("insertHTML", out);
+  const addInvoice = async () => {
+    if (!id || !p?.clientId) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/invoices`, {
+        method: "POST",
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ ...newInv, proposalId: id, clientId: p.clientId, items: items.map(it => ({ name: it.name, qty: it.qty, rate: it.rate })) })
+      });
+      if (res.ok) { toast.success("Ledger Entry Created"); setInvOpen(false); loadInvoices(); }
+    } catch (e) {}
   };
 
-  const insertTable = () => {
-    let table = '<table style="width:100%; border-collapse:collapse; margin:10px 0; font-family:\'Poppins\',sans-serif;">';
-    for(let r=0; r<parseInt(tableRows); r++) {
-      table += '<tr>';
-      for(let c=0; c<parseInt(tableCols); c++) {
-        table += '<td style="border:1px solid #e5e7eb; padding:8px;">Cell</td>';
-      }
-      table += '</tr>';
+  const createInvoiceFromProposal = async () => { if (!p) return; try { const res = await fetch(`${API_BASE}/api/invoices`, { method: "POST", headers: getAuthHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ proposalId: p._id, clientId: p.clientId, items: items.map(it => ({ name: it.name, qty: it.qty, rate: it.rate })) }) }); if (res.ok) { toast.success("Invoice created"); loadInvoices(); } } catch {} };
+  const printProposal = () => { preview(); setPreviewPrint(true); };
+
+  const displayDate = (dateStr: string) => {
+    if (!dateStr || dateStr === "-") return "-";
+    try {
+      return new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    } catch {
+      return dateStr;
     }
-    table += '</table>';
-    insertHtml(table);
-    setTableDialogOpen(false);
   };
 
-  const insertSection = (heading: string, contentHtml: string) => {
-    insertHtml(`
-      <h2 style="margin:22px 0 8px; font-size:18px; font-weight:700;">${heading}</h2>
-      <div style="color:#374151; font-size:14px; line-height:1.8;">${contentHtml}</div>
-    `);
-  };
-
-  const insertFullTemplate = () => {
-    const titleText = p?.title || "Project Proposal";
-    const clientText = p?.client || "Client";
-    const numText = p?.number ?? p?.id ?? "-";
-    insertHtml(`
-      <div style="text-align:center; margin-top: 40px;">
-        <div style="font-size:34px; font-weight:800;">${titleText}</div>
-        <div style="margin-top:10px; color:#6b7280;">Prepared for: <b>${clientText}</b></div>
-        <div style="margin-top:4px; color:#6b7280;">Proposal #${numText}</div>
-      </div>
-      <hr style="margin:26px 0; border:none; border-top:1px solid #e5e7eb;" />
-      <p style="color:#374151; line-height:1.8; font-size:14px;">
-        Thank you for the opportunity to submit this proposal. This document outlines the scope, timeline, deliverables, pricing, and terms for the project.
-      </p>
-      <h2 style="margin:22px 0 8px; font-size:18px; font-weight:700;">Project Overview</h2>
-      <p style="color:#374151; line-height:1.8; font-size:14px;">{PROJECT_DESCRIPTION}</p>
-      <h2 style="margin:22px 0 8px; font-size:18px; font-weight:700;">Scope of Work</h2>
-      <ul style="line-height:1.9; font-size:14px; color:#374151;">
-        <li>Discovery & requirements gathering</li>
-        <li>UI/UX design</li>
-        <li>Development & implementation</li>
-        <li>Testing & QA</li>
-        <li>Deployment & handover</li>
-      </ul>
-      <h2 style="margin:22px 0 8px; font-size:18px; font-weight:700;">Timeline</h2>
-      <p style="color:#374151; line-height:1.8; font-size:14px;">Estimated start: {PROJECT_START}. Estimated deadline: {PROJECT_DEADLINE}.</p>
-      <h2 style="margin:22px 0 8px; font-size:18px; font-weight:700;">Deliverables</h2>
-      <ul style="line-height:1.9; font-size:14px; color:#374151;">
-        <li>Deliverable 1</li>
-        <li>Deliverable 2</li>
-        <li>Documentation & handover</li>
-      </ul>
-      <h2 style="margin:22px 0 8px; font-size:18px; font-weight:700;">Pricing</h2>
-      <p style="color:#374151; line-height:1.8; font-size:14px;">Total project price: <b>{PROJECT_PRICE}</b></p>
-      <p style="color:#374151; line-height:1.8; font-size:14px;">Payment terms: 50% upfront, 50% on completion (editable).</p>
-      <h2 style="margin:22px 0 8px; font-size:18px; font-weight:700;">Terms & Conditions</h2>
-      <ul style="line-height:1.9; font-size:14px; color:#374151;">
-        <li>Proposal valid until {PROPOSAL_EXPIRY_DATE}</li>
-        <li>2 revision rounds included (editable)</li>
-        <li>Support & maintenance options available</li>
-      </ul>
-      <hr style="margin:26px 0; border:none; border-top:1px solid #e5e7eb;" />
-      <p style="color:#6b7280;font-size:12px">Client signature: ______________________</p>
-    `);
-  };
-
-  const saveAndShow = async () => {
-    await save();
-    setOuterTab("details-outer");
-    setInnerTab("preview");
-  };
-
-  if (loading) return <div>Loading...</div>;
-  if (!p) return <div>Not found</div>;
+  if (loading || !p) return <div className='p-8 text-center'>Loading...</div>;
 
   return (
-    <div className="space-y-4">
-      <Card className="overflow-hidden">
-        <CardContent className="p-5 sm:p-6">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div className="flex items-start gap-3 min-w-[260px]">
-              <Button variant="outline" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="w-4 h-4"/></Button>
-              <div>
-                <div className="text-xs text-muted-foreground">Proposal</div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h1 className="text-lg font-semibold leading-tight">{p.title || `Proposal #${p.number ?? p.id}`}</h1>
-                  <Badge variant="outline" className={proposalStatus.className}>{proposalStatus.label}</Badge>
-                  {p.phone && (
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="h-7 gap-1.5 text-emerald-600 border-emerald-200 hover:bg-emerald-50"
-                      onClick={() => openWhatsapp(p.phone, p.client)}
-                    >
-                      <MessageSquare className="w-3.5 h-3.5" />
-                      WhatsApp
-                    </Button>
-                  )}
-                </div>
-                <div className="text-sm text-muted-foreground mt-1">
-                  For <span className="text-foreground font-medium">{p.client}</span>
-                  <span className="mx-2">•</span>
-                  #{p.number ?? p.id}
-                </div>
+    <div className='min-h-screen bg-[#fcfdfe] selection:bg-indigo-100 selection:text-indigo-900'>
+      {/* Dynamic Header: Ultra-slim and high-impact */}
+      <div className='sticky top-0 z-40 bg-white/60 backdrop-blur-2xl border-b border-slate-100/50'>
+        <div className='max-w-[1800px] mx-auto px-6 py-3 flex items-center justify-between'>
+          <div className='flex items-center gap-6'>
+            <Button variant='ghost' size='icon' onClick={() => navigate(-1)} className='rounded-full hover:bg-slate-100/80 transition-all'>
+              <ArrowLeft className='w-4 h-4 text-slate-500' />
+            </Button>
+            <div className='flex flex-col'>
+              <div className='flex items-center gap-3'>
+                <span className='text-[10px] font-black uppercase tracking-[0.3em] text-indigo-500/50 bg-indigo-50 px-2 py-0.5 rounded'>Authority Node</span>
+                <h1 className='text-sm font-black text-slate-900 tracking-tight uppercase leading-none'>
+                  {p.title || "Proposal Details"} <span className='text-slate-300 ml-1'>/</span> <span className='text-slate-400'>#{p.number || (p._id ? p._id.slice(-6).toUpperCase() : "---")}</span>
+                </h1>
               </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <div className="hidden sm:block text-right mr-1">
-                <div className="text-xs text-muted-foreground">Total</div>
-                <div className="text-lg font-semibold">Rs.{money(grandTotal || p.amount || 0)}</div>
-              </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="success">Actions <ChevronDown className="w-4 h-4 ml-1"/></Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={preview}><Eye className="w-4 h-4 mr-2"/>Proposal preview</DropdownMenuItem>
-                  <DropdownMenuItem onClick={printProposal}><Printer className="w-4 h-4 mr-2"/>Print proposal</DropdownMenuItem>
-                  <DropdownMenuItem onClick={downloadPdf}><FileDown className="w-4 h-4 mr-2"/>Download PDF</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  {p.contractId ? (
-                    <DropdownMenuItem onClick={() => navigate(`/sales/contracts/${p.contractId}`)}><Eye className="w-4 h-4 mr-2"/>View contract</DropdownMenuItem>
-                  ) : null}
-                  <DropdownMenuItem onClick={() => { setOuterTab("details-outer"); setInnerTab("editor"); }}><PenLine className="w-4 h-4 mr-2"/>Edit proposal</DropdownMenuItem>
-                  <DropdownMenuItem onClick={openEdit}><PenLine className="w-4 h-4 mr-2"/>Edit proposal info</DropdownMenuItem>
-                  <DropdownMenuItem onClick={cloneProposal}><Copy className="w-4 h-4 mr-2"/>Clone proposal</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => updateStatus('accepted')}><CheckCircle2 className="w-4 h-4 mr-2"/>Mark as Accepted</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => updateStatus('declined')}><XCircle className="w-4 h-4 mr-2"/>Mark as Rejected</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => updateStatus('sent')}><Send className="w-4 h-4 mr-2"/>Mark as Sent</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => {
-                    const subject = `Proposal #${p.number ?? p.id}`;
-                    const body = `Please review the proposal here: ${window.location.href}`;
-                    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-                  }}><Send className="w-4 h-4 mr-2"/>Send to client</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
             </div>
           </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-4 lg:grid-cols-6">
-            <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">Sub total</div>
-              <div className="mt-1 font-semibold">Rs.{money(subTotal || p.amount || 0)}</div>
-            </div>
-            <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">Discount</div>
-              <div className="mt-1 font-semibold text-rose-600">-Rs.{money(discount)}</div>
-            </div>
-            <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">Tax Total</div>
-              <div className="mt-1 font-semibold">Rs.{money(taxTotal)}</div>
-              <div className="text-[11px] text-muted-foreground mt-0.5">{Number(tax1||0) + Number(tax2||0)}%</div>
-            </div>
-            <div className="rounded-lg border p-3 bg-primary/5 border-primary/20">
-              <div className="text-xs text-primary font-bold">Total Payable</div>
-              <div className="mt-1 font-bold text-primary">Rs.{money(grandTotal)}</div>
-            </div>
-            <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">Advance Needed</div>
-              <div className="mt-1 font-semibold text-amber-600">Rs.{money(calculatedAdvance)}</div>
-              <div className="text-[11px] text-muted-foreground mt-0.5">{paymentTermsPercentage}% Upfront</div>
-            </div>
-            <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">Valid until</div>
-              <div className="mt-1 font-semibold">{p.validUntil ?? "-"}</div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-4 lg:grid-cols-12">
-        <div className="lg:col-span-8 space-y-4">
-          <Card>
-            <CardContent className="p-4">
-              {/* Outer tabs like in reference: Details | Tasks */}
-              <Tabs value={outerTab} onValueChange={setOuterTab}>
-                <TabsList>
-                  <TabsTrigger value="details-outer">Details</TabsTrigger>
-                  <TabsTrigger value="invoices-outer">Invoices</TabsTrigger>
-                  <TabsTrigger value="tasks-outer">Tasks</TabsTrigger>
-                </TabsList>
-
-                {/* DETAILS */}
-                <TabsContent value="details-outer" className="mt-4">
-                  {/* Inner tabs: Proposal items | Proposal editor | Preview */}
-                  <Tabs value={innerTab} onValueChange={setInnerTab}>
-                    <TabsList>
-                      <TabsTrigger value="items">Proposal items</TabsTrigger>
-                      <TabsTrigger value="editor">Proposal editor</TabsTrigger>
-                      <TabsTrigger value="preview">Preview</TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="items" className="mt-4">
-                      <Card className="max-w-5xl mx-auto overflow-hidden">
-                        <CardContent className="p-0">
-                          <div className="p-5 sm:p-6 flex items-start justify-between gap-4 flex-wrap">
-                            <div className="text-sm">
-                              <div className="font-semibold">{COMPANY.name}</div>
-                              <div className="text-muted-foreground">{COMPANY.address}</div>
-                              <div className="text-muted-foreground">Email: {COMPANY.email}</div>
-                              <div className="text-muted-foreground">Website: {COMPANY.website}</div>
-                            </div>
-                            <div className="text-sm text-right">
-                              <div className="text-xs text-muted-foreground">Proposal to</div>
-                              <div className="font-medium">{p.client}</div>
-                              <div className="mt-2 flex items-center justify-end gap-2">
-                                <Badge variant="outline">PROPOSAL #{p.number ?? p.id}</Badge>
-                                <Badge variant="outline" className={proposalStatus.className}>{proposalStatus.label}</Badge>
-                              </div>
-                              <div className="mt-2 text-muted-foreground">Proposal date: {p.proposalDate ?? '-'}</div>
-                              <div className="text-muted-foreground">Valid until: {p.validUntil ?? '-'}</div>
-                            </div>
-                          </div>
-
-                          <div className="border-t">
-                            <Table>
-                              <TableHeader>
-                                <TableRow className="bg-muted/40">
-                                  <TableHead className="w-[55%]">Item</TableHead>
-                                  <TableHead className="text-right w-[15%]">Quantity</TableHead>
-                                  <TableHead className="text-right w-[15%]">Rate</TableHead>
-                                  <TableHead className="text-right w-[15%]">Total</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {items.length ? (
-                                  items.map((it) => (
-                                    <TableRow key={it.id}>
-                                      <TableCell>
-                                        <Input value={it.name} onChange={(e)=>setItems(p=>p.map(x=>x.id===it.id?{...x,name:e.target.value}:x))} />
-                                      </TableCell>
-                                      <TableCell className="text-right">
-                                        <Input className="text-right" type="number" value={it.qty} onChange={(e)=>setItems(p=>p.map(x=>x.id===it.id?{...x,qty:Number(e.target.value)}:x))} />
-                                      </TableCell>
-                                      <TableCell className="text-right">
-                                        <Input className="text-right" type="number" value={it.rate} onChange={(e)=>setItems(p=>p.map(x=>x.id===it.id?{...x,rate:Number(e.target.value)}:x))} />
-                                      </TableCell>
-                                      <TableCell className="text-right whitespace-nowrap">{money(it.qty * it.rate)}</TableCell>
-                                    </TableRow>
-                                  ))
-                                ) : (
-                                  <TableRow>
-                                    <TableCell colSpan={4} className="py-10 text-center text-sm text-muted-foreground">No record found.</TableCell>
-                                  </TableRow>
-                                )}
-                              </TableBody>
-                            </Table>
-                          </div>
-
-                          <div className="p-5 sm:p-6 border-t flex items-start justify-between gap-4 flex-wrap">
-                            <div>
-                              <Button variant="outline" onClick={()=>setPickOpen(true)}>Add item</Button>
-                            </div>
-                            <div className="w-full sm:w-80 text-sm">
-                              <div className="flex justify-between py-1"><span className="text-muted-foreground">Sub Total</span><span>Rs.{money(subTotal)}</span></div>
-                              <div className="flex justify-between items-center gap-2 py-1">
-                                <span className="text-muted-foreground">Tax</span>
-                                <span className="flex items-center gap-1">
-                                  <Input className="w-16" type="number" value={tax1} onChange={(e)=>setTax1(e.target.value)} />
-                                  +
-                                  <Input className="w-16" type="number" value={tax2} onChange={(e)=>setTax2(e.target.value)} />%
-                                </span>
-                              </div>
-                              <div className="flex justify-between font-semibold pt-1"><span>Total</span><span>Rs.{money(grandTotal)}</span></div>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </TabsContent>
-
-                    <TabsContent value="editor" className="mt-4">
-                      <div className="max-w-6xl mx-auto grid gap-4 lg:grid-cols-12">
-                        <div className="lg:col-span-9 border rounded-lg bg-background overflow-hidden flex flex-col h-[72vh]">
-                          <div className="px-4 py-3 border-b flex items-center justify-between sticky top-0 bg-background z-10">
-                            <div className="flex items-center gap-2">
-                              <Button variant="outline" size="sm" onClick={() => toast.message("Templates coming soon")}>Change template</Button>
-                              <Button variant="outline" size="sm" onClick={insertFullTemplate}>Insert full template</Button>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Button size="sm" onClick={save}>Save</Button>
-                              <Button size="sm" variant="secondary" onClick={saveAndShow}>Save &amp; show</Button>
-                            </div>
-                          </div>
-
-                          <div className="px-3 py-2 border-b flex items-center gap-1 flex-wrap sticky top-[52px] bg-background z-10">
-                            <Button type="button" size="icon" variant="ghost" onClick={() => exec("bold")}><Bold className="w-4 h-4"/></Button>
-                            <Button type="button" size="icon" variant="ghost" onClick={() => exec("italic")}><Italic className="w-4 h-4"/></Button>
-                            <Button type="button" size="icon" variant="ghost" onClick={() => exec("underline")}><Underline className="w-4 h-4"/></Button>
-                            <div className="w-px h-5 bg-border mx-1" />
-                            <Button type="button" size="icon" variant="ghost" onClick={() => exec("justifyLeft")}><AlignLeft className="w-4 h-4"/></Button>
-                            <Button type="button" size="icon" variant="ghost" onClick={() => exec("justifyCenter")}><AlignCenter className="w-4 h-4"/></Button>
-                            <Button type="button" size="icon" variant="ghost" onClick={() => exec("justifyRight")}><AlignRight className="w-4 h-4"/></Button>
-                            <div className="w-px h-5 bg-border mx-1" />
-                            <Button type="button" size="icon" variant="ghost" onClick={() => exec("insertUnorderedList")}><List className="w-4 h-4"/></Button>
-                            <Button variant="ghost" size="sm" onClick={() => exec("insertOrderedList")} title="Numbered List"><ListOrdered className="w-4 h-4"/></Button>
-                            <Button variant="ghost" size="sm" onClick={() => setTableDialogOpen(true)} title="Insert Table"><TableIcon className="w-4 h-4"/></Button>
-                            <div className="h-4 w-[1px] bg-border mx-1" />
-                            <select 
-                              className="text-xs bg-transparent border-none outline-none cursor-pointer"
-                              onChange={(e) => exec("fontName", e.target.value)}
-                              defaultValue="Poppins"
-                            >
-                              <option value="Poppins">Poppins</option>
-                              <option value="Arial">Arial</option>
-                              <option value="Times New Roman">Times New Roman</option>
-                              <option value="Courier New">Courier New</option>
-                            </select>
-                            <Button type="button" size="icon" variant="ghost" onClick={() => exec("formatBlock", "<h2>")}><Code className="w-4 h-4"/></Button>
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => {
-                                const url = window.prompt("Enter link URL");
-                                if (url) exec("createLink", url);
-                              }}
-                            >
-                              <Link2 className="w-4 h-4"/>
-                            </Button>
-                          </div>
-
-                          <div className="flex-1 overflow-auto bg-muted/20 p-6">
-                            <div className="bg-white border rounded-md shadow-sm min-h-[900px]">
-                              <div
-                                ref={editorRef}
-                                contentEditable
-                                suppressContentEditableWarning
-                                className="outline-none p-10 text-[15px] leading-7 min-h-[900px]"
-                                onInput={() => setEditorHtml(editorRef.current?.innerHTML ?? "")}
-                                dangerouslySetInnerHTML={{ __html: editorHtml || "<div style='text-align:center;font-size:34px;font-weight:800;margin-top:120px;font-family:\"Poppins\",sans-serif;'>Project Proposal</div><div style='text-align:center;color:#6b7280;margin-top:10px;font-family:\"Poppins\",sans-serif;'>Start writing your proposal…</div>" }}
-                                style={{ fontFamily: '"Poppins", sans-serif' }}
-                              />
-                            </div>
-                          </div>
-
-                          <div className="px-4 py-3 border-t text-[11px] text-muted-foreground">
-                            Available variables: {`{PROPOSAL_ID}, {PROPOSAL_DATE}, {PROPOSAL_EXPIRY_DATE}, {PROJECT_TITLE}, {PROJECT_DESCRIPTION}, {PROJECT_PRICE}, {PROJECT_START}, {PROJECT_DEADLINE}`}
-                          </div>
-                        </div>
-
-                        <div className="lg:col-span-3 border rounded-lg bg-background overflow-hidden h-[72vh] flex flex-col">
-                          <div className="px-4 py-3 border-b font-medium">Insert</div>
-                          <div className="p-3 overflow-auto space-y-3">
-                            <div className="text-xs text-muted-foreground">Sections</div>
-                            <div className="grid gap-2">
-                              <Button variant="outline" size="sm" onClick={() => insertSection("Project Overview", "<p>{PROJECT_DESCRIPTION}</p>")}>Project overview</Button>
-                              <Button variant="outline" size="sm" onClick={() => insertSection("Objectives", "<ul><li>Objective 1</li><li>Objective 2</li></ul>")}>Objectives</Button>
-                              <Button variant="outline" size="sm" onClick={() => insertSection("Scope of Work", "<ul><li>Discovery</li><li>Design</li><li>Development</li><li>Testing</li><li>Deployment</li></ul>")}>Scope of work</Button>
-                              <Button variant="outline" size="sm" onClick={() => insertSection("Deliverables", "<ul><li>Deliverable 1</li><li>Deliverable 2</li></ul>")}>Deliverables</Button>
-                              <Button variant="outline" size="sm" onClick={() => insertSection("Timeline", "<p>Start: {PROJECT_START} — Deadline: {PROJECT_DEADLINE}</p>")}>Timeline</Button>
-                              <Button variant="outline" size="sm" onClick={() => insertSection("Pricing", "<p>Total: <b>{PROJECT_PRICE}</b></p><p>Payment terms: 50% upfront, 50% on completion.</p>")}>Pricing</Button>
-                              <Button variant="outline" size="sm" onClick={() => insertSection("Terms & Conditions", "<ul><li>Proposal valid until {PROPOSAL_EXPIRY_DATE}</li><li>2 revisions included</li></ul>")}>Terms & conditions</Button>
-                            </div>
-
-                            <div className="pt-2">
-                              <div className="text-xs text-muted-foreground mb-2">Hospital Modules</div>
-                              <Button variant="success" size="sm" className="w-full mb-4 gap-2" onClick={useFullTemplate}>
-                                <FileText className="w-4 h-4" />
-                                Use Full Template
-                              </Button>
-                              
-                              <div className="space-y-4">
-                                {["Hospital", "Lab", "Pharmacy", "Clinic", "General"].map((cat) => (
-                                  <div key={cat} className="space-y-2">
-                                    <div className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider border-b pb-1">{cat}</div>
-                                    <div className="space-y-1">
-                                      {HMS_MODULES.filter(m => m.category === cat).map(mod => (
-                                        <div key={mod.id} className="flex items-start gap-2 p-1.5 rounded-md hover:bg-muted/50 transition-colors group">
-                                          <Checkbox 
-                                            id={`mod-${mod.id}`} 
-                                            checked={selectedModules.includes(mod.id)}
-                                            onCheckedChange={() => toggleModule(mod.id)}
-                                            className="mt-1"
-                                          />
-                                          <div className="flex-1 min-w-0">
-                                            <UILabel htmlFor={`mod-${mod.id}`} className="text-[11px] leading-tight cursor-pointer block font-medium group-hover:text-primary transition-colors">
-                                              {mod.title}
-                                            </UILabel>
-                                            {mod.description && (
-                                              <p className="text-[9px] text-muted-foreground leading-tight mt-0.5 line-clamp-1 group-hover:line-clamp-none">
-                                                {mod.description}
-                                              </p>
-                                            )}
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-
-                            <div className="pt-2">
-                              <div className="text-xs text-muted-foreground">Variables</div>
-                              <div className="grid gap-2 mt-2">
-                                <Button variant="secondary" size="sm" onClick={() => insertHtml("{PROPOSAL_ID} ")}>{`{PROPOSAL_ID}`}</Button>
-                                <Button variant="secondary" size="sm" onClick={() => insertHtml("{PROPOSAL_DATE} ")}>{`{PROPOSAL_DATE}`}</Button>
-                                <Button variant="secondary" size="sm" onClick={() => insertHtml("{PROPOSAL_EXPIRY_DATE} ")}>{`{PROPOSAL_EXPIRY_DATE}`}</Button>
-                                <Button variant="secondary" size="sm" onClick={() => insertHtml("{PROJECT_TITLE} ")}>{`{PROJECT_TITLE}`}</Button>
-                                <Button variant="secondary" size="sm" onClick={() => insertHtml("{PROJECT_DESCRIPTION} ")}>{`{PROJECT_DESCRIPTION}`}</Button>
-                                <Button variant="secondary" size="sm" onClick={() => insertHtml("{PROJECT_PRICE} ")}>{`{PROJECT_PRICE}`}</Button>
-                              </div>
-                            </div>
-
-                            <div className="pt-2">
-                              <div className="text-xs text-muted-foreground">Quick blocks</div>
-                              <div className="grid gap-2 mt-2">
-                                <Button variant="outline" size="sm" onClick={() => insertHtml("<hr style='margin:22px 0; border:none; border-top:1px solid #e5e7eb;' />")}>Divider</Button>
-                                <Button variant="outline" size="sm" onClick={() => insertHtml("<p style='color:#6b7280;font-size:12px'>Client signature: ______________________</p>")}>Signature line</Button>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
+          <div className='flex items-center gap-3'>
+            <div className='hidden md:flex items-center gap-4 mr-4 px-4 py-1.5 bg-white/50 backdrop-blur-sm rounded-full border border-slate-100 shadow-sm'>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className='flex items-center gap-1.5 cursor-help'>
+                      <div className='w-4 h-4 rounded-full bg-emerald-500/10 flex items-center justify-center'>
+                        <CheckCircle2 className='w-2.5 h-2.5 text-emerald-600' />
                       </div>
-                    </TabsContent>
+                      <span className='text-[8px] font-black uppercase text-emerald-600 tracking-widest'>Certified Assessment</span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent className='bg-slate-900 text-white border-0 rounded-xl px-4 py-2 text-[10px] font-bold uppercase tracking-widest'>
+                    Validated by system audit
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
 
-                    <TabsContent value="preview" className="mt-4">
-                      <div className="max-w-4xl mx-auto">
-                        <div className="bg-muted/20 p-6 rounded-lg border">
-                          <div className="bg-white border rounded-md shadow-sm p-10">
-                            <div className="text-xs text-muted-foreground leading-6 max-w-[520px]" dangerouslySetInnerHTML={{ __html: (editorRef.current?.innerHTML ?? editorHtml ?? p.note ?? "") || "" }} />
+              <div className='w-[1px] h-6 bg-slate-200' />
 
-                            <div className="text-center mt-8">
-                              <div className="text-base tracking-[0.22em] font-semibold text-muted-foreground">PROPOSAL #{p.number ?? p.id}</div>
-                              <div className="h-[3px] w-12 bg-amber-500 rounded-full mx-auto mt-3" />
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-8 text-sm">
-                              <div>
-                                <div className="text-xs text-muted-foreground">Proposal Date</div>
-                                <div className="mt-1">{p.proposalDate ?? '-'}</div>
-                                <div className="h-3" />
-                                <div className="text-xs text-muted-foreground">Expiry Date</div>
-                                <div className="mt-1">{p.validUntil ?? '-'}</div>
-                              </div>
-                              <div>
-                                <div className="text-xs text-muted-foreground">Proposal For</div>
-                                <div className="mt-1">{p.client}</div>
-                                <div className="text-xs text-muted-foreground mt-1">USA</div>
-                              </div>
-                              <div className="md:text-right">
-                                <div className="text-xs text-muted-foreground">Proposal From</div>
-                                <div className="mt-1">{COMPANY.name}</div>
-                                <div className="text-xs text-muted-foreground mt-1">{COMPANY.address}</div>
-                                <div className="text-xs text-muted-foreground">Email: {COMPANY.email}</div>
-                                <div className="text-xs text-muted-foreground">Website: {COMPANY.website}</div>
-                              </div>
-                            </div>
-
-                            <div className="text-center mt-14">
-                              <div className="text-lg font-medium text-muted-foreground">Our Best Offer</div>
-                              <div className="h-[3px] w-12 bg-amber-500 rounded-full mx-auto mt-3" />
-                              <div className="text-xs text-muted-foreground mt-4 max-w-[620px] mx-auto leading-6">
-                                In consideration of your unique needs and aspirations, we are pleased to present our best offer, crafted with meticulous attention to detail and driven by a commitment to delivering exceptional value.
-                              </div>
-                            </div>
-
-                            <div className="mt-8">
-                              <div className="grid grid-cols-12 bg-black text-white text-xs font-semibold px-3 py-2 rounded-t">
-                                <div className="col-span-6">Item</div>
-                                <div className="col-span-2 text-right">Quantity</div>
-                                <div className="col-span-2 text-right">Rate</div>
-                                <div className="col-span-2 text-right">Total</div>
-                              </div>
-                              <div className="border border-t-0 rounded-b overflow-hidden">
-                                {items.length ? (
-                                  items.map((it) => (
-                                    <div key={it.id} className="grid grid-cols-12 px-3 py-2 text-sm border-t">
-                                      <div className="col-span-6">{it.name || '-'}</div>
-                                      <div className="col-span-2 text-right">{it.qty}</div>
-                                      <div className="col-span-2 text-right">{it.rate}</div>
-                                      <div className="col-span-2 text-right">{(it.qty * it.rate).toLocaleString()}</div>
-                                    </div>
-                                  ))
-                                ) : (
-                                  <div className="px-3 py-6 text-center text-sm text-muted-foreground">No record found.</div>
-                                )}
-                              </div>
-
-                              <div className="mt-3 w-72 ml-auto text-sm">
-                                <div className="flex justify-between border px-3 py-2"><span className="text-muted-foreground">Sub Total</span><span>{Number(subTotal || 0).toLocaleString()}</span></div>
-                                <div className="flex justify-between bg-black text-white font-semibold px-3 py-2"><span>Total</span><span>{Number(grandTotal || 0).toLocaleString()}</span></div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </TabsContent>
-                  </Tabs>
-                </TabsContent>
-
-                {/* INVOICES */}
-                <TabsContent value="invoices-outer" className="mt-4">
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-sm font-semibold">Linked Invoices</h3>
-                        <Button size="sm" onClick={createInvoiceFromProposal}>Create Invoice from Proposal</Button>
-                      </div>
-                      
-                      {invoicesLoading ? (
-                        <div className="text-sm text-muted-foreground py-10 text-center">Loading invoices...</div>
-                      ) : invoices.length > 0 ? (
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="bg-muted/40">
-                              <TableHead>Invoice #</TableHead>
-                              <TableHead>Status</TableHead>
-                              <TableHead>Amount</TableHead>
-                              <TableHead>Date</TableHead>
-                              <TableHead className="text-right">Action</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {invoices.map((inv) => (
-                              <TableRow key={inv._id}>
-                                <TableCell className="font-medium">#{inv.number}</TableCell>
-                                <TableCell>
-                                  <Badge variant={inv.status === 'Paid' ? 'success' : 'outline'}>{inv.status}</Badge>
-                                </TableCell>
-                                <TableCell>Rs.{Number(inv.amount || 0).toLocaleString()}</TableCell>
-                                <TableCell>{inv.issueDate ? new Date(inv.issueDate).toLocaleDateString() : '-'}</TableCell>
-                                <TableCell className="text-right">
-                                  <Button variant="ghost" size="sm" onClick={() => navigate(`/invoices/${inv._id}`)}>View</Button>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      ) : (
-                        <div className="text-sm text-muted-foreground py-10 text-center border-2 border-dashed rounded-lg">
-                          No invoices linked to this proposal yet.
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-
-                {/* TASKS */}
-                <TabsContent value="tasks-outer" className="mt-4">
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="text-sm text-muted-foreground">
-                          {p?.leadId ? "Tasks linked to this proposal's lead" : project?.id ? "Tasks from the current project context" : "Tasks"}
-                        </div>
-                        <div>
-                          <Button variant="outline" size="sm" onClick={()=>loadTasks(p?.leadId, project?.id)}>Refresh</Button>
-                        </div>
-                      </div>
-                      {tasksLoading ? (
-                        <div className="text-sm text-muted-foreground">Loading…</div>
-                      ) : tasks.length ? (
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="bg-muted/40">
-                              <TableHead>Title</TableHead>
-                              <TableHead>Status</TableHead>
-                              <TableHead>Project</TableHead>
-                              <TableHead>Assignee</TableHead>
-                              <TableHead>Deadline</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {tasks.map(t => (
-                              <TableRow key={t.id}>
-                                <TableCell className="whitespace-nowrap">{t.title}</TableCell>
-                                <TableCell className="whitespace-nowrap">{t.status}</TableCell>
-                                <TableCell className="whitespace-nowrap">{t.projectTitle || '-'}</TableCell>
-                                <TableCell className="whitespace-nowrap">{t.assignee || '-'}</TableCell>
-                                <TableCell className="whitespace-nowrap">{t.deadline || '-'}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      ) : (
-                        <div className="text-sm text-muted-foreground">No tasks found.</div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="lg:col-span-4 space-y-4">
-          <Card>
-            <CardContent className="p-4 space-y-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-xs text-muted-foreground">Client</div>
-                  <div className="font-medium">{p.client}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-xs text-muted-foreground">Status</div>
-                  <Badge variant="outline" className={proposalStatus.className}>{proposalStatus.label}</Badge>
-                </div>
+              <div className='flex flex-col items-end'>
+                <span className='text-[8px] font-black uppercase text-slate-400 tracking-widest'>Net Valuation</span>
+                <span className='text-xs font-black text-slate-900'><CountUp value={grandTotal} /></span>
               </div>
+              <div className='w-[1px] h-6 bg-slate-200' />
+              <Badge className={cn("font-black uppercase text-[8px] px-2.5 py-0.5 tracking-widest shadow-none border-0", getProposalStatus(p.status).className)}>
+                {getProposalStatus(p.status).label}
+              </Badge>
+            </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-md border p-3">
-                  <div className="text-xs text-muted-foreground">Proposal #</div>
-                  <div className="font-medium">#{p.number ?? p.id}</div>
-                </div>
-                <div className="rounded-md border p-3">
-                  <div className="text-xs text-muted-foreground">Total</div>
-                  <div className="font-medium">Rs.{money(grandTotal || p.amount || 0)}</div>
-                </div>
-              </div>
+            <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
+              <Button onClick={save} className='rounded-full bg-gradient-to-r from-indigo-600 to-blue-600 text-white uppercase font-black text-[9px] tracking-[0.2em] px-6 h-10 hover:shadow-lg hover:shadow-indigo-200 transition-all'>
+                Save Document
+              </Button>
+            </motion.div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-md border p-3">
-                  <div className="text-xs text-muted-foreground">Proposal date</div>
-                  <div className="font-medium">{p.proposalDate ?? '-'}</div>
-                </div>
-                <div className="rounded-md border p-3">
-                  <div className="text-xs text-muted-foreground">Valid until</div>
-                  <div className="font-medium">{p.validUntil ?? '-'}</div>
-                </div>
-              </div>
-
-              {project?.id ? (
-                <div className="rounded-md border p-3">
-                  <div className="text-xs text-muted-foreground">Project context</div>
-                  <div className="font-medium">{project.title || '-'}</div>
-                  {project.deadline ? <div className="text-xs text-muted-foreground mt-1">Deadline: {project.deadline}</div> : null}
-                </div>
-              ) : null}
-
-              {p.contractId ? (
-                <Button variant="outline" className="w-full" onClick={() => navigate(`/sales/contracts/${p.contractId}`)}>
-                  <Eye className="w-4 h-4 mr-2" /> View linked contract
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant='outline' size='icon' className='rounded-full border-slate-200 h-9 w-9 hover:bg-slate-50 transition-all'>
+                  <ChevronDown className='w-4 h-4 text-slate-400' />
                 </Button>
-              ) : null}
-
-              <div className="rounded-md border p-3">
-                <div className="text-xs text-muted-foreground">Activity</div>
-                <div className="text-sm text-muted-foreground mt-1">Last email sent: Never</div>
-                <div className="text-sm text-muted-foreground">Last email seen: -</div>
-                <div className="text-sm text-muted-foreground">Last preview seen: -</div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 space-y-2">
-              <div className="text-sm font-medium">Reminders</div>
-              <div className="text-sm text-muted-foreground">No record found.</div>
-            </CardContent>
-          </Card>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align='end' className='rounded-2xl p-2 border-slate-100 shadow-2xl min-w-[220px]'>
+                <DropdownMenuItem className='rounded-xl p-3 font-bold uppercase text-[9px] tracking-widest hover:bg-indigo-50 transition-colors' onClick={preview}>
+                  <Eye className='w-4 h-4 mr-3 text-indigo-500' /> Preview Document
+                </DropdownMenuItem>
+                <DropdownMenuItem className='rounded-xl p-3 font-bold uppercase text-[9px] tracking-widest hover:bg-indigo-50 transition-colors' onClick={saveAsTemplate}>
+                  <Star className='w-4 h-4 mr-3 text-amber-500' /> Save as Template
+                </DropdownMenuItem>
+                <DropdownMenuItem className='rounded-xl p-3 font-bold uppercase text-[9px] tracking-widest hover:bg-indigo-50 transition-colors' onClick={printProposal}>
+                  <Printer className='w-4 h-4 mr-3 text-indigo-500' /> Print Authority
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className='rounded-xl p-3 font-bold uppercase text-[9px] tracking-widest text-emerald-600 hover:bg-emerald-50 transition-colors' onClick={() => updateStatus("accepted")}>
+                  <CheckCircle2 className='w-4 h-4 mr-3' /> Authorize Accepted
+                </DropdownMenuItem>
+                <DropdownMenuItem className='rounded-xl p-3 font-bold uppercase text-[9px] tracking-widest text-rose-600 hover:bg-rose-50 transition-colors' onClick={() => updateStatus("declined")}>
+                  <XCircle className='w-4 h-4 mr-3' /> Terminate Proposal
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
 
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="bg-card max-w-2xl">
-          <DialogHeader><DialogTitle>Edit proposal</DialogTitle></DialogHeader>
-          <div className="grid gap-3 sm:grid-cols-12">
-            <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Title</div>
-            <div className="sm:col-span-9"><Input value={title} onChange={(e)=>setTitle(e.target.value)} placeholder="Title" /></div>
-
-            <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Client</div>
-            <div className="sm:col-span-9"><Input value={client} onChange={(e)=>setClient(e.target.value)} placeholder="Client" /></div>
-
-            <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Amount</div>
-            <div className="sm:col-span-9"><Input type="number" value={amount} onChange={(e)=>setAmount(e.target.value)} placeholder="Amount" /></div>
-
-            <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Status</div>
-            <div className="sm:col-span-9">
-              <Select value={status} onValueChange={setStatus}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="sent">Sent</SelectItem>
-                  <SelectItem value="accepted">Accepted</SelectItem>
-                  <SelectItem value="declined">Declined</SelectItem>
-                </SelectContent>
-              </Select>
+      <div className='max-w-[1800px] mx-auto px-4 py-4'>
+        <div className='grid grid-cols-12 gap-4 items-start'>
+          
+          {/* Column 1: Control (Left) */}
+          <div className="hidden xl:flex xl:col-span-2 flex-col gap-4 sticky top-[60px]">
+            <div className="space-y-1">
+              <h3 className="text-[9px] font-black uppercase text-slate-400 tracking-[0.2em] mb-2 ml-2">Workflow</h3>
+              {[
+                { id: 'details', label: 'Proposal', icon: Layout, tab: 'details' },
+                { id: 'financials', label: 'Ledger', icon: Banknote, tab: 'financials' },
+                { id: 'operations', label: 'Execution', icon: CheckCircle2, tab: 'operations' },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => setOuterTab(item.tab)}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all",
+                    outerTab === item.tab 
+                      ? "bg-indigo-50 text-indigo-600 border border-indigo-100 shadow-sm translate-x-1" 
+                      : "text-slate-500 hover:bg-slate-100"
+                  )}
+                >
+                  <item.icon className={cn("w-3.5 h-3.5", outerTab === item.tab ? "text-indigo-600" : "text-slate-400")} />
+                  {item.label}
+                </button>
+              ))}
             </div>
 
-            <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Proposal date</div>
-            <div className="sm:col-span-9"><DatePicker value={proposalDate} onChange={setProposalDate} placeholder="Pick proposal date" /></div>
-
-            <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Valid until</div>
-            <div className="sm:col-span-9"><DatePicker value={validUntil} onChange={setValidUntil} placeholder="Pick valid until" /></div>
-
-            <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Notes (English)</div>
-            <div className="sm:col-span-9">
-              <Textarea value={noteEnglish} readOnly placeholder="English summary of proposal content" className="min-h-[96px]" />
-              <div className="text-[11px] text-muted-foreground mt-1">Edit full content in the Proposal editor tab.</div>
+            <div className="mt-4 space-y-2">
+              <h3 className="text-[9px] font-black uppercase text-slate-400 tracking-[0.2em] ml-2">Actions</h3>
+              <Button 
+                variant='outline' 
+                onClick={openEdit}
+                className='w-full justify-start rounded-xl border-slate-100 h-10 px-3 text-[8px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all shadow-sm bg-white'
+              >
+                <PenLine className='w-3.5 h-3.5 mr-2 text-slate-400' /> Metadata
+              </Button>
+              <Button 
+                variant='outline' 
+                onClick={cloneProposal}
+                className='w-full justify-start rounded-xl border-slate-100 h-10 px-3 text-[8px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all shadow-sm bg-white'
+              >
+                <Copy className='w-3.5 h-3.5 mr-2 text-slate-400' /> Replicate
+              </Button>
+              {p.phone && (
+                <Button 
+                  onClick={() => openWhatsapp(p.phone!, p.client || "")}
+                  className='w-full justify-start rounded-xl bg-emerald-50 text-emerald-600 border-emerald-100 h-10 px-3 text-[8px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all shadow-sm'
+                >
+                  <MessageSquare className='w-3.5 h-3.5 mr-2' /> WhatsApp
+                </Button>
+              )}
             </div>
 
-            <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Tax (%)</div>
-            <div className="sm:col-span-4"><Input type="number" value={tax1} onChange={(e)=>setTax1(e.target.value)} /></div>
-            <div className="sm:col-span-2 text-center pt-2 text-sm text-muted-foreground">+</div>
-            <div className="sm:col-span-3"><Input type="number" value={tax2} onChange={(e)=>setTax2(e.target.value)} /></div>
-
-            <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Discount (Rs.)</div>
-            <div className="sm:col-span-9"><Input type="number" value={discount} onChange={(e)=>setDiscount(e.target.value)} placeholder="0" /></div>
-
-            <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Advance Amount (Rs.)</div>
-            <div className="sm:col-span-9"><Input type="number" value={advanceAmount} onChange={(e)=>setAdvanceAmount(e.target.value)} placeholder="0" /></div>
-
-            <div className="sm:col-span-3 sm:text-right sm:pt-2 text-sm text-muted-foreground">Payment Terms (%)</div>
-            <div className="sm:col-span-9">
-              <Select value={paymentTermsPercentage} onValueChange={setPaymentTermsPercentage}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="25">25% Upfront</SelectItem>
-                  <SelectItem value="30">30% Upfront</SelectItem>
-                  <SelectItem value="50">50% Upfront</SelectItem>
-                  <SelectItem value="70">70% Upfront</SelectItem>
-                  <SelectItem value="100">100% Upfront</SelectItem>
-                </SelectContent>
-              </Select>
-              <div className="text-[10px] text-muted-foreground mt-1">Calculated Advance: Rs.{calculatedAdvance.toLocaleString()}</div>
+            <div className="mt-auto p-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-900 relative overflow-hidden group shadow-sm">
+              <div className="absolute -right-2 -top-2 w-16 h-16 bg-indigo-500/5 rounded-full blur-xl group-hover:scale-150 transition-transform duration-700" />
+              <p className="text-[7px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">Lifecycle</p>
+              <div className="space-y-2">
+                <div>
+                  <p className="text-[6px] font-black uppercase tracking-widest text-slate-400">Initiated</p>
+                  <p className="text-[10px] font-black text-indigo-600">{displayDate(p.proposalDate)}</p>
+                </div>
+                <div>
+                  <p className="text-[6px] font-black uppercase tracking-widest text-slate-400">Expiration</p>
+                  <p className="text-[10px] font-black text-rose-500">{displayDate(p.validUntil)}</p>
+                </div>
+              </div>
             </div>
           </div>
-          <DialogFooter>
-            <div className="w-full flex items-center justify-end gap-2">
-              <Button variant="outline" onClick={()=>setEditOpen(false)}>Close</Button>
-              <Button onClick={save}>Save</Button>
+
+          {/* Column 2: Workspace (Center) */}
+          <div className='col-span-12 lg:col-span-8 xl:col-span-7'>
+            <Tabs value={outerTab} onValueChange={setOuterTab} className='w-full'>
+              <TabsContent value="details" className="mt-0 space-y-4 focus-visible:ring-0">
+                <Tabs value={tab} onValueChange={setTab} className='w-full'>
+                  <Card className='shadow-sm rounded-[1.5rem] overflow-hidden bg-white min-h-[800px] flex flex-col border border-slate-100'>
+                    <div className='bg-slate-50/80 backdrop-blur-md px-6 py-2 flex items-center justify-between sticky top-[50px] z-20 border-b border-slate-100'>
+                      <TabsList className='bg-slate-200/50 p-1 rounded-xl border border-slate-200/50 h-auto flex gap-1'>
+                        {[
+                          { value: 'items', label: 'Structure' },
+                          { value: 'timeframe', label: 'Timeline' },
+                          { value: 'editor', label: 'Manifesto' }
+                        ].map((t) => (
+                          <TabsTrigger 
+                            key={t.value}
+                            value={t.value} 
+                            className='relative rounded-lg font-black uppercase text-[8px] tracking-widest py-2 px-6 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-lg data-[state=active]:shadow-indigo-100/50 text-slate-400 transition-all duration-300'
+                          >
+                            {tab === t.value && (
+                              <motion.div 
+                                layoutId="activeTab"
+                                className="absolute inset-0 bg-white rounded-lg shadow-sm -z-10"
+                                transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                              />
+                            )}
+                            {t.label}
+                          </TabsTrigger>
+                        ))}
+                      </TabsList>
+                      <div className='flex items-center gap-2'>
+                        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                          <Button variant='ghost' size='sm' onClick={() => setAddModuleOpen(true)} className='h-8 rounded-lg text-[8px] font-black uppercase tracking-widest text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 transition-all'>
+                            <Plus className='w-3.5 h-3.5 mr-2' /> Add Module
+                          </Button>
+                        </motion.div>
+                        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                          <Button variant='ghost' size='sm' onClick={useFullTemplate} className='h-8 rounded-lg text-[8px] font-black uppercase tracking-widest text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 transition-all'>
+                            <Wand2 className='w-3.5 h-3.5 mr-2' /> Full Template
+                          </Button>
+                        </motion.div>
+                      </div>
+                    </div>
+
+                    <div className='flex-1 flex flex-col'>
+                      <TabsContent value='items' className='p-4 m-0 focus-visible:ring-0'>
+                        <div className='rounded-xl border border-slate-100 overflow-hidden mb-4'>
+                          <Table>
+                            <TableHeader className='bg-slate-50/50'>
+                              <TableRow className='border-0 hover:bg-transparent'>
+                                <TableHead className='font-black uppercase text-[8px] tracking-[0.1em] text-slate-400 py-3 pl-4'>Service Unit</TableHead>
+                                <TableHead className='font-black uppercase text-[8px] tracking-[0.1em] text-slate-400 py-3 text-center w-16'>Qty</TableHead>
+                                <TableHead className='font-black uppercase text-[8px] tracking-[0.1em] text-slate-400 py-3 text-center w-32'>Rate</TableHead>
+                                <TableHead className='font-black uppercase text-[8px] tracking-[0.1em] text-slate-400 py-3 text-right pr-4 w-32'>Total</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {items.map((it, idx) => (
+                                <TableRow key={it.id} className='border-b border-slate-50 last:border-0 hover:bg-slate-50/30 transition-colors group'>
+                                  <TableCell className='py-3 pl-4'>
+                                    <Input 
+                                      value={it.name} 
+                                      onChange={e => setItems(items.map(x => x.id === it.id ? { ...x, name: e.target.value } : x))} 
+                                      className='border-0 shadow-none bg-transparent focus-visible:ring-0 p-0 font-bold text-xs text-slate-700 h-auto mb-1' 
+                                      placeholder='Service description...' 
+                                    />
+                                    <div className='flex items-center gap-2'>
+                                      <Badge variant="outline" className='text-[7px] font-black uppercase tracking-widest px-1.5 py-0 h-4 border-slate-200 text-slate-400'>
+                                        Active
+                                      </Badge>
+                                      <span className='text-[8px] font-bold text-slate-300 uppercase tracking-widest'>Last Sync: Just now</span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className='py-3'>
+                                    <Input 
+                                      type='number' 
+                                      value={it.qty} 
+                                      onChange={e => setItems(items.map(x => x.id === it.id ? { ...x, qty: Number(e.target.value) } : x))} 
+                                      className='text-center border-0 shadow-none bg-transparent focus-visible:ring-0 p-0 font-black text-xs tabular-nums h-auto' 
+                                    />
+                                  </TableCell>
+                                  <TableCell className='py-3'>
+                                    <Input 
+                                      type='number' 
+                                      value={it.rate} 
+                                      onChange={e => setItems(items.map(x => x.id === it.id ? { ...x, rate: Number(e.target.value) } : x))} 
+                                      className='text-center border-0 shadow-none bg-transparent focus-visible:ring-0 p-0 font-black text-xs tabular-nums h-auto' 
+                                    />
+                                  </TableCell>
+                                  <TableCell className='py-3 text-right pr-4'>
+                                    <div className='flex items-center justify-end gap-2'>
+                                      <span className='font-black text-xs text-indigo-600 tabular-nums'>Rs.{money(it.qty * it.rate)}</span>
+                                      <Button 
+                                        variant='ghost' 
+                                        size='icon' 
+                                        onClick={() => setItems(items.filter(x => x.id !== it.id))}
+                                        className='h-6 w-6 opacity-0 group-hover:opacity-100 rounded-full text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-all'
+                                      >
+                                        <XCircle className='w-3 h-3' />
+                                      </Button>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                              <TableRow className='hover:bg-transparent'>
+                                <TableCell colSpan={4} className='py-4 px-4'>
+                                  <div className='flex flex-wrap gap-2'>
+                                    <Button variant='outline' onClick={() => setItems([...items, { id: Math.random().toString(36).slice(2), name: "", qty: 1, rate: 0 }])} className='rounded-lg h-8 px-4 uppercase font-black tracking-widest text-[7px] border-slate-100 bg-slate-50 hover:bg-slate-100 text-slate-600 transition-all active:scale-95'>
+                                      <Plus className='w-3 h-3 mr-2' /> Add Line Item
+                                    </Button>
+                                    <Button variant='outline' onClick={() => setPickOpen(true)} className='rounded-lg h-8 px-4 uppercase font-black tracking-widest text-[7px] border-indigo-100 bg-indigo-50/30 hover:bg-indigo-50 text-indigo-600 transition-all active:scale-95'>
+                                      <Search className='w-3 h-3 mr-2' /> Inventory Pull
+                                    </Button>
+                                    <div className='flex-1' />
+                                    <Button variant='ghost' className='rounded-lg h-8 px-4 uppercase font-black tracking-widest text-[7px] text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all'>
+                                      <RefreshCw className='w-3 h-3 mr-2' /> Auto Optimize
+                                    </Button>
+                                    <Button variant='ghost' className='rounded-lg h-8 px-4 uppercase font-black tracking-widest text-[7px] text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all'>
+                                      <BarChart3 className='w-3 h-3 mr-2' /> View Breakdown
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            </TableBody>
+                          </Table>
+                        </div>
+
+                        <div className='mt-auto p-8 bg-white border border-slate-100 rounded-3xl text-slate-900 flex items-center justify-between overflow-hidden relative group shadow-xl shadow-slate-100/50'>
+                          <div className='absolute -left-10 -bottom-10 w-40 h-40 bg-indigo-500/5 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-1000' />
+                          <div className='absolute right-0 top-0 w-full h-full bg-gradient-to-br from-transparent via-transparent to-indigo-50/30 opacity-0 group-hover:opacity-100 transition-opacity duration-500' />
+                          
+                          <div className='relative z-10'>
+                            <p className='text-[8px] font-black uppercase tracking-[0.4em] text-indigo-500/60 mb-2'>Total Authorized Budget</p>
+                            <div className='flex items-baseline gap-1 mb-4'>
+                              <h2 className='text-4xl font-black tracking-tighter text-slate-900 group-hover:text-indigo-600 transition-colors duration-500'>
+                                <CountUp value={grandTotal} />
+                              </h2>
+                              <div className='w-2 h-2 rounded-full bg-emerald-500 animate-pulse' />
+                            </div>
+
+                            <div className='w-full max-w-[300px] space-y-1.5'>
+                              <div className='flex justify-between items-center'>
+                                <span className='text-[7px] font-black uppercase tracking-widest text-slate-400'>Budget Utilization</span>
+                                <span className='text-[8px] font-black text-indigo-600'>100% (Allocated)</span>
+                              </div>
+                              <div className='h-1.5 w-full bg-slate-100 rounded-full overflow-hidden'>
+                                <motion.div 
+                                  initial={{ width: 0 }}
+                                  animate={{ width: "100%" }}
+                                  transition={{ duration: 1.5, ease: "easeOut" }}
+                                  className='h-full bg-gradient-to-r from-indigo-500 to-blue-500'
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className='flex items-center gap-4 relative z-10'>
+                            <div className='hidden sm:flex flex-col items-end mr-4'>
+                              <span className='text-[7px] font-black uppercase tracking-widest text-slate-400'>Auto-Save Status</span>
+                              <span className='text-[9px] font-bold text-emerald-600 flex items-center gap-1'>
+                                <CheckCircle2 className='w-2.5 h-2.5' /> {lastSaved ? `Saved ${Math.floor((new Date().getTime() - lastSaved.getTime()) / 1000)}s ago` : 'Standby'}
+                              </span>
+                            </div>
+                            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                              <Button onClick={save} className='rounded-2xl bg-indigo-600 text-white uppercase font-black text-[10px] tracking-[0.2em] px-8 h-12 hover:bg-indigo-700 shadow-2xl shadow-indigo-200 transition-all'>
+                                Finalize Document
+                              </Button>
+                            </motion.div>
+                          </div>
+                        </div>
+                      </TabsContent>
+
+                      <TabsContent value='timeframe' className='p-6 m-0 focus-visible:ring-0'>
+                        <div className='space-y-6'>
+                          <div className='grid grid-cols-2 gap-4'>
+                            <div className='p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2'>
+                              <Label className='text-[8px] font-black uppercase tracking-widest text-slate-400'>Project Commencement</Label>
+                              <DatePicker value={tfStartDate} onChange={setTfStartDate} />
+                            </div>
+                            <div className='p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2'>
+                              <Label className='text-[8px] font-black uppercase tracking-widest text-slate-400'>Operational Duration</Label>
+                              <Select value={String(tfDays)} onValueChange={(v) => setTfDays(Number(v))}>
+                                <SelectTrigger className='h-10 rounded-xl border-slate-200 bg-white font-black px-3 text-xs'>
+                                  <SelectValue placeholder="Select" />
+                                </SelectTrigger>
+                                <SelectContent className='rounded-xl border-slate-100 shadow-2xl p-1'>
+                                  {[5, 10, 15, 20, 25, 30, 45, 60].map(d => (
+                                    <SelectItem key={d} value={String(d)} className='rounded-lg p-2 font-bold text-[10px] uppercase tracking-widest'>
+                                      {d} Working Days {d === 20 && "(Std)"}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          <div className='p-6 bg-slate-50 rounded-2xl border border-slate-100 space-y-3'>
+                            <Label className='text-[8px] font-black uppercase tracking-widest text-slate-400 ml-1'>Phase Breakdown</Label>
+                            <Textarea 
+                              value={timeframe} 
+                              onChange={(e) => setTimeframe(e.target.value)} 
+                              placeholder="Define phases..." 
+                              className='min-h-[400px] border-0 bg-transparent focus-visible:ring-0 text-slate-700 font-medium leading-relaxed resize-none text-sm p-0'
+                            />
+                          </div>
+                        </div>
+                      </TabsContent>
+
+                      <TabsContent value='editor' className='flex-1 m-0 focus-visible:ring-0'>
+                        <div className='flex flex-col h-full bg-slate-50/20'>
+                          <div className='px-6 py-2 bg-white border-b border-slate-100 flex items-center justify-between sticky top-[95px] z-20'>
+                            <div className='flex gap-0.5'>
+                              <Button size='icon' variant='ghost' className='h-7 w-7 rounded-md' onClick={() => exec("bold")}><Bold className="w-3 h-3" /></Button>
+                              <Button size='icon' variant='ghost' className='h-7 w-7 rounded-md' onClick={() => exec("italic")}><Italic className="w-3 h-3" /></Button>
+                              <div className='w-[1px] h-3 bg-slate-200 mx-1 self-center' />
+                              <Button size='icon' variant='ghost' className='h-7 w-7 rounded-md' onClick={() => exec("insertUnorderedList")}><List className="w-3 h-3" /></Button>
+                            </div>
+                            <div className='text-[7px] font-black uppercase text-slate-300 tracking-[0.2em] flex items-center gap-1.5'>
+                              <div className='w-1 h-1 rounded-full bg-indigo-400' /> Protocol Active
+                            </div>
+                          </div>
+                          
+                          <div className='flex-1 overflow-auto p-4'>
+                            <div className='bg-white shadow-sm min-h-[900px] max-w-[750px] mx-auto p-12 rounded-lg border border-slate-100 relative'>
+                              <div ref={editorRef} contentEditable suppressContentEditableWarning className='outline-none prose prose-sm prose-slate max-w-none min-h-full text-xs leading-relaxed' onInput={() => setEditorHtml(editorRef.current?.innerHTML || "")} dangerouslySetInnerHTML={{ __html: editorHtml }} />
+                            </div>
+                          </div>
+                        </div>
+                      </TabsContent>
+                    </div>
+                  </Card>
+                </Tabs>
+              </TabsContent>
+
+              <TabsContent value="financials" className="mt-0">
+                <Card className='shadow-sm rounded-[1.5rem] p-10 bg-white min-h-[700px] border border-slate-100'>
+                  <div className='flex items-center justify-between mb-10'>
+                    <div className='space-y-1'>
+                      <h3 className='text-xl font-black uppercase tracking-tight text-slate-900'>Financial <span className='text-indigo-600'>Ledger</span></h3>
+                      <p className='text-[9px] font-black uppercase tracking-widest text-slate-400'>Settlement history and pending obligations</p>
+                    </div>
+                    <Button onClick={() => setInvOpen(true)} className='rounded-2xl h-12 px-8 uppercase font-black tracking-widest text-[9px] bg-slate-900 text-white hover:bg-slate-800 transition-all active:scale-95 shadow-lg shadow-slate-200'>Initialize Entry</Button>
+                  </div>
+                  
+                  {invoicesLoading ? <div className='text-center py-20 font-black uppercase tracking-widest text-slate-200 animate-pulse'>Querying Ledger...</div> : (
+                    <div className='rounded-3xl border border-slate-100 overflow-hidden bg-white'>
+                      <Table>
+                        <TableHeader className='bg-slate-50/50'>
+                          <TableRow className='border-0'>
+                            <TableHead className='font-black uppercase text-[9px] tracking-[0.2em] text-slate-400 py-6 pl-8'>Node Reference</TableHead>
+                            <TableHead className='font-black uppercase text-[9px] tracking-[0.2em] text-slate-400 py-6'>Sync Status</TableHead>
+                            <TableHead className='font-black uppercase text-[9px] tracking-[0.2em] text-slate-400 py-6'>Allocation Date</TableHead>
+                            <TableHead className='font-black uppercase text-[9px] tracking-[0.2em] text-slate-400 py-6 text-right pr-8'>Valuation</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {invoices.map(inv => (
+                            <TableRow key={inv._id} onClick={() => navigate(`/invoices/${inv._id}`)} className='cursor-pointer hover:bg-slate-50/50 transition-all group border-b border-slate-50 last:border-0'>
+                              <TableCell className='py-6 pl-8'>
+                                <div className='font-black text-xs text-indigo-600'>#{inv.number}</div>
+                                <div className='text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5'>Digital Record</div>
+                              </TableCell>
+                              <TableCell className='py-6'>
+                                <Badge className={cn(
+                                  "rounded-lg uppercase font-black px-3 py-1 border-0 text-[8px] tracking-widest",
+                                  inv.status?.toLowerCase() === 'paid' ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-600"
+                                )}>
+                                  {inv.status}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className='py-6 text-[10px] font-bold text-slate-500 uppercase tracking-tighter'>
+                                {displayDate(inv.issueDate || inv.createdAt)}
+                              </TableCell>
+                              <TableCell className='py-6 text-right pr-8'>
+                                <div className='font-black text-sm text-slate-900 tabular-nums'>Rs.{money(inv.amount)}</div>
+                                <div className='text-[8px] font-bold text-slate-400 uppercase tracking-widest'>Net Aggregate</div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          {invoices.length === 0 && (
+                            <TableRow><TableCell colSpan={4} className='py-32 text-center'>
+                              <div className='flex flex-col items-center gap-4 opacity-20'>
+                                <Banknote className='w-12 h-12' />
+                                <span className='font-black uppercase tracking-[0.3em] text-[10px]'>Zero financial sync history</span>
+                              </div>
+                            </TableCell></TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="operations" className="mt-0">
+                <Card className='shadow-sm rounded-[1.5rem] p-10 bg-white min-h-[700px] border border-slate-100'>
+                  <div className='flex items-center justify-between mb-10'>
+                    <div className='space-y-1'>
+                      <h3 className='text-xl font-black uppercase tracking-tight text-slate-900'>Execution <span className='text-indigo-600'>Queue</span></h3>
+                      <p className='text-[9px] font-black uppercase tracking-widest text-slate-400'>Operational pipeline and tracking cycles</p>
+                    </div>
+                    <Button onClick={() => setTaskOpen(true)} className='rounded-2xl h-12 px-8 uppercase font-black tracking-widest text-[9px] bg-slate-900 text-white hover:bg-slate-800 transition-all active:scale-95 shadow-lg shadow-slate-200'>New Sync Point</Button>
+                  </div>
+
+                  {tasksLoading ? <div className='text-center py-20 font-black uppercase tracking-widest text-slate-200 animate-pulse'>Syncing Pipeline...</div> : (
+                    <div className='rounded-3xl border border-slate-100 overflow-hidden bg-white'>
+                      <Table>
+                        <TableHeader className='bg-slate-50/50'>
+                          <TableRow className='border-0'>
+                            <TableHead className='font-black uppercase text-[9px] tracking-[0.2em] text-slate-400 py-6 pl-8'>Execution Node</TableHead>
+                            <TableHead className='font-black uppercase text-[9px] tracking-[0.2em] text-slate-400 py-6'>Node Status</TableHead>
+                            <TableHead className='font-black uppercase text-[9px] tracking-[0.2em] text-slate-400 py-6'>Operator</TableHead>
+                            <TableHead className='font-black uppercase text-[9px] tracking-[0.2em] text-slate-400 py-6 text-right pr-8'>Deadline</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {tasks.map(t => (
+                            <TableRow key={t.id} className='border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-all group'>
+                              <TableCell className='py-6 pl-8'>
+                                <div className='font-black uppercase text-xs tracking-tight text-slate-700'>{t.title}</div>
+                                <div className='text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5'>Operational Cycle</div>
+                              </TableCell>
+                              <TableCell className='py-6'>
+                                <Badge className={cn(
+                                  "rounded-lg uppercase font-black px-3 py-1 border-0 text-[8px] tracking-widest",
+                                  t.status?.toLowerCase() === 'completed' ? "bg-emerald-500 text-white" : "bg-indigo-50 text-indigo-600"
+                                )}>
+                                  {t.status}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className='py-6'>
+                                <div className='flex items-center gap-2'>
+                                  <div className='w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-500 border border-slate-200'>
+                                    {t.assignee?.[0] || 'S'}
+                                  </div>
+                                  <span className='text-[10px] font-black uppercase text-slate-600'>{t.assignee || 'System'}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell className='py-6 text-right pr-8'>
+                                <div className='font-black text-xs text-slate-900 tabular-nums'>{displayDate(t.deadline)}</div>
+                                <div className='text-[8px] font-bold text-rose-400 uppercase tracking-widest mt-0.5'>Threshold</div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          {tasks.length === 0 && (
+                            <TableRow><TableCell colSpan={4} className='py-32 text-center'>
+                              <div className='flex flex-col items-center gap-4 opacity-20'>
+                                <CheckCircle2 className='w-12 h-12' />
+                                <span className='font-black uppercase tracking-[0.3em] text-[10px]'>Execution queue vacant</span>
+                              </div>
+                            </TableCell></TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </Card>
+              </TabsContent>
+            </Tabs>
+          </div>
+
+          {/* Column 3: Contextual Sidebar (Right) */}
+          <div className='hidden lg:flex lg:col-span-4 xl:col-span-3 flex-col gap-4 sticky top-[60px]'>
+            {/* Hospital Summary Card */}
+            <Card className='shadow-sm rounded-3xl overflow-hidden bg-gradient-to-br from-slate-900 to-indigo-950 text-white border border-slate-800 group'>
+              <CardContent className='p-6 relative overflow-hidden'>
+                <div className='absolute -right-10 -top-10 w-32 h-32 bg-indigo-500/20 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-1000' />
+                <div className='flex items-center gap-4 mb-6 relative z-10'>
+                  <div className='w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/10'>
+                    <Building2 className='w-6 h-6 text-indigo-300' />
+                  </div>
+                  <div>
+                    <h3 className='text-xs font-black uppercase tracking-[0.1em] text-white/90'>{p.client || "Hospital Entity"}</h3>
+                    <div className='flex items-center gap-2 mt-1'>
+                      <div className='w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse' />
+                      <span className='text-[7px] font-black uppercase tracking-widest text-emerald-400'>System Active</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className='grid grid-cols-2 gap-4 mb-6 relative z-10'>
+                  <div className='p-3 bg-white/5 rounded-2xl border border-white/5'>
+                    <p className='text-[7px] font-black uppercase tracking-widest text-white/40 mb-1'>Active Modules</p>
+                    <p className='text-sm font-black text-white'>{selectedModules.length} / {HMS_MODULES.length}</p>
+                  </div>
+                  <div className='p-3 bg-white/5 rounded-2xl border border-white/5'>
+                    <p className='text-[7px] font-black uppercase tracking-widest text-white/40 mb-1'>Operational</p>
+                    <p className='text-sm font-black text-white'>{p.status === "accepted" ? "Ready" : "Pending"}</p>
+                  </div>
+                </div>
+
+                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                  <Button onClick={() => navigate(`/prospects/leads/${p.leadId || p.lead}`)} className='w-full rounded-2xl bg-white text-slate-900 uppercase font-black text-[9px] tracking-[0.2em] h-10 hover:bg-slate-50 transition-all shadow-xl shadow-black/20'>
+                    Inspect Full Profile
+                  </Button>
+                </motion.div>
+              </CardContent>
+            </Card>
+
+            {/* HMS Module Integration */}
+            <Card className='shadow-sm rounded-3xl overflow-hidden bg-white border border-slate-100'>
+              <div className='p-6 pb-2 border-b border-slate-50 flex flex-col gap-4'>
+                <div className='flex items-center justify-between'>
+                  <div className='space-y-0.5'>
+                    <h3 className='text-[9px] font-black uppercase text-slate-400 tracking-[0.2em]'>Module Repository</h3>
+                    <p className='text-[7px] font-bold text-slate-300 uppercase tracking-widest'>Select to integrate</p>
+                  </div>
+                  <div className='flex gap-1'>
+                    <Button variant="ghost" size="sm" onClick={selectAllModules} className="h-6 px-2 text-[7px] font-black uppercase text-indigo-600 hover:bg-indigo-50 rounded-lg">Full Stack</Button>
+                    <Button variant="ghost" size="sm" onClick={clearModules} className="h-6 px-2 text-[7px] font-black uppercase text-rose-600 hover:bg-rose-50 rounded-lg">Reset</Button>
+                  </div>
+                </div>
+                <div className='relative'>
+                  <Search className='absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400' />
+                  <Input 
+                    value={moduleQuery}
+                    onChange={(e) => setModuleQuery(e.target.value)}
+                    placeholder="Search modules..." 
+                    className='h-8 pl-8 rounded-xl bg-slate-50 border-0 text-[10px] font-bold focus:ring-1 ring-indigo-500 transition-all'
+                  />
+                </div>
+              </div>
+              <CardContent className='p-3 max-h-[400px] overflow-auto custom-scrollbar space-y-1'>
+                {filteredModules.map(m => (
+                  <motion.div 
+                    key={m.id} 
+                    whileHover={{ x: 4 }}
+                    className={cn(
+                      "flex items-center gap-3 p-3 border rounded-2xl transition-all cursor-pointer group relative overflow-hidden",
+                      selectedModules.includes(m.id) 
+                        ? "border-indigo-600 bg-indigo-50/50 shadow-sm" 
+                        : "bg-white border-slate-100 hover:border-indigo-200"
+                    )} 
+                    onClick={() => toggleModule(m.id)}
+                  >
+                    <div className={cn(
+                      "w-4 h-4 rounded-md border flex items-center justify-center transition-all duration-300",
+                      selectedModules.includes(m.id) ? "bg-indigo-600 border-indigo-600 scale-110 shadow-lg shadow-indigo-200" : "bg-white border-slate-200"
+                    )}>
+                      <AnimatePresence>
+                        {selectedModules.includes(m.id) && (
+                          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
+                            <CheckCircle2 className="w-2.5 h-2.5 text-white" />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                    <div className='flex-1 overflow-hidden'>
+                      <span className={cn(
+                        "text-[9px] font-black uppercase tracking-tight truncate block",
+                        selectedModules.includes(m.id) ? "text-indigo-900" : "text-slate-500 group-hover:text-slate-900"
+                      )}>{m.title}</span>
+                      {selectedModules.includes(m.id) && (
+                        <motion.span 
+                          initial={{ opacity: 0, y: 5 }} 
+                          animate={{ opacity: 1, y: 0 }} 
+                          className='text-[7px] font-bold text-indigo-400 uppercase tracking-widest'
+                        >
+                          Integrated
+                        </motion.span>
+                      )}
+                    </div>
+                    {/* Cost per module on hover (simulated) */}
+                    <div className='opacity-0 group-hover:opacity-100 transition-opacity'>
+                      <span className='text-[8px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg'>Rs.5,000+</span>
+                    </div>
+                  </motion.div>
+                ))}
+              </CardContent>
+            </Card>
+
+            {/* AI Assistant Bonus */}
+            <Card className='shadow-sm rounded-3xl overflow-hidden bg-indigo-50/50 border border-indigo-100 group'>
+              <CardContent className='p-6'>
+                <div className='flex items-center gap-3 mb-4'>
+                  <div className='w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-200'>
+                    <Wand2 className='w-4 h-4 text-white' />
+                  </div>
+                  <h3 className='text-[10px] font-black uppercase tracking-widest text-indigo-900'>Neural Architect</h3>
+                </div>
+                <p className='text-[9px] font-bold text-indigo-600/70 leading-relaxed mb-4'>
+                  "Suggest optimal hospital setup based on budget"
+                </p>
+                <Button variant='outline' onClick={analyzeAgreement} className='w-full rounded-xl bg-white border-indigo-100 text-indigo-600 font-black text-[8px] uppercase tracking-widest h-9 hover:bg-indigo-600 hover:text-white transition-all'>
+                  Launch Analysis
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+
+      {/* Modals & Dialogs remain largely the same but with rounded-3xl/2xl */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className='max-w-xl rounded-[3rem] p-12 bg-white border-0 shadow-3xl'>
+          <DialogHeader className='mb-8'>
+            <DialogTitle className='text-3xl font-black uppercase tracking-tighter'>Modify <span className='text-indigo-600'>Structure</span></DialogTitle>
+            <p className='text-slate-400 font-bold uppercase tracking-widest text-[10px] mt-2'>Update the core parameters of this proposal document</p>
+          </DialogHeader>
+          <div className='space-y-8'>
+            <div className='space-y-2'>
+              <Label className='text-[11px] font-black uppercase tracking-widest text-slate-400 ml-2'>Project Title</Label>
+              <Input value={title} onChange={e => setTitle(e.target.value)} className='h-14 rounded-2xl bg-slate-50 border-0 focus:ring-2 ring-indigo-500 font-bold px-6' />
             </div>
+            <div className='space-y-2'>
+              <Label className='text-[11px] font-black uppercase tracking-widest text-slate-400 ml-2'>Client Entity</Label>
+              <Input value={client} onChange={e => setClient(e.target.value)} className='h-14 rounded-2xl bg-slate-50 border-0 focus:ring-2 ring-indigo-500 font-bold px-6' />
+            </div>
+          </div>
+          <DialogFooter className='mt-10 gap-4'>
+            <Button variant='ghost' onClick={() => setEditOpen(false)} className='rounded-xl uppercase font-black tracking-widest text-[10px] h-12 px-8'>Cancel</Button>
+            <Button onClick={save} className='bg-indigo-600 text-white rounded-2xl uppercase font-black tracking-widest text-[10px] h-14 px-10 shadow-xl shadow-indigo-100'>Apply Changes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Items picker dialog */}
-      <Dialog open={pickOpen} onOpenChange={setPickOpen}>
-        <DialogContent className="bg-card max-w-2xl">
-          <DialogHeader><DialogTitle>Choose item</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <Input placeholder="Search items" value={pickQuery} onChange={(e)=>setPickQuery(e.target.value)} />
-            <div className="max-h-[360px] overflow-auto border rounded-md">
-              {pickLoading ? (
-                <div className="p-4 text-sm text-muted-foreground">Loading...</div>
-              ) : pickItems.length ? (
-                <div className="divide-y">
-                  {pickItems.map(ci => (
-                    <div key={ci.id} className="p-3 flex items-center justify-between gap-3 hover:bg-muted/40">
-                      <div>
-                        <div className="font-medium text-sm">{ci.title}</div>
-                        <div className="text-xs text-muted-foreground">{ci.description || ''}</div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-sm text-muted-foreground">Rate: {Number(ci.rate || 0).toLocaleString()}</div>
-                        <Button size="sm" onClick={()=>addFromCatalog(ci)}>Add</Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="p-4 text-sm text-muted-foreground">No items found.</div>
-              )}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className='max-w-[1000px] w-[90vw] h-[90vh] p-0 overflow-hidden bg-[#0f172a] border-0 rounded-[2.5rem] shadow-3xl flex flex-col'>
+          <div className='flex items-center justify-between px-8 py-4 bg-slate-900/40 backdrop-blur-xl border-b border-white/5 z-10'>
+            <div className='flex items-center gap-4'>
+              <div className='w-10 h-10 rounded-2xl bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20'>
+                <Eye className='w-5 h-5 text-indigo-400' />
+              </div>
+              <div>
+                <h3 className='text-sm font-black text-white uppercase tracking-tight'>Authority <span className='text-indigo-400'>Preview</span></h3>
+                <p className='text-[9px] font-bold text-slate-500 uppercase tracking-widest'>Document Synchronization</p>
+              </div>
             </div>
+            <div className='flex items-center gap-2'>
+              <Button variant='ghost' onClick={triggerPrintNow} className='h-10 px-5 rounded-xl bg-white/5 hover:bg-white/10 text-white border border-white/5 text-[9px] font-black uppercase tracking-widest transition-all'>
+                <Printer className='w-3.5 h-3.5 mr-2' /> Print
+              </Button>
+              <Button onClick={downloadPdf} disabled={pdfLoading} className='h-10 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-[9px] font-black uppercase tracking-widest transition-all shadow-lg shadow-indigo-500/20'>
+                {pdfLoading ? <Loader2 className='w-3.5 h-3.5 animate-spin mr-2' /> : <Download className='w-3.5 h-3.5 mr-2' />}
+                Export PDF
+              </Button>
+              <div className='w-[1px] h-6 bg-white/10 mx-2' />
+              <Button variant='ghost' size='icon' onClick={() => setPreviewOpen(false)} className='h-10 w-10 rounded-xl hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 transition-all'>
+                <XCircle className='w-5 h-5' />
+              </Button>
+            </div>
+          </div>
 
-            <div className="pt-2">
-              <div className="text-xs text-muted-foreground mb-2">Create new item</div>
-              <div className="grid gap-2 sm:grid-cols-12">
-                <div className="sm:col-span-9"><Input placeholder="Title" value={newTitle} onChange={(e)=>setNewTitle(e.target.value)} /></div>
-                <div className="sm:col-span-3"><Input placeholder="Unit (hrs, pc, etc.)" value={newUnit} onChange={(e)=>setNewUnit(e.target.value)} /></div>
-                <div className="sm:col-span-4"><Input type="number" placeholder="Rate" value={newRate} onChange={(e)=>setNewRate(e.target.value)} /></div>
-                <div className="sm:col-span-8"><Input placeholder="Short description" value={newDesc} onChange={(e)=>setNewDesc(e.target.value)} /></div>
-              </div>
-              <div className="mt-2 flex items-center justify-end gap-2">
-                <Button variant="outline" onClick={()=>{ setNewTitle(''); setNewRate(''); setNewUnit(''); setNewDesc(''); }}>Clear</Button>
-                <Button onClick={createNewItem} disabled={newSaving || !newTitle.trim()}>{newSaving ? 'Saving…' : 'Save & add'}</Button>
-              </div>
+          <div className='flex-1 relative bg-slate-800/50 p-8 overflow-auto custom-scrollbar flex justify-center'>
+            <div className='relative shadow-[0_0_100px_rgba(0,0,0,0.5)] rounded-sm overflow-hidden transform-gpu origin-top'>
+              <iframe
+                ref={previewRef}
+                srcDoc={previewHtml}
+                className='w-[210mm] h-[297mm] border-0 bg-white rounded-sm'
+                title="Preview"
+                onLoad={() => setIframeLoading(false)}
+              />
+              {iframeLoading && (
+                <div className='absolute inset-0 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm z-20'>
+                  <div className='flex flex-col items-center gap-4'>
+                    <div className='w-12 h-12 rounded-2xl border-2 border-indigo-500/30 border-t-indigo-500 animate-spin' />
+                    <span className='text-[10px] font-black text-indigo-400 uppercase tracking-[0.3em]'>Syncing Nodes...</span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-[96vw] w-[96vw] h-[88vh] p-0 overflow-hidden">
-          <div className="h-full flex flex-col">
-            <div className="p-3 border-b flex items-center justify-between">
-              <div className="font-medium">Proposal preview</div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={triggerPrintNow}>Print</Button>
-                <Button size="sm" onClick={() => setPreviewOpen(false)}>Close</Button>
-              </div>
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        onConfirm={handleConfirmTemplate}
+        title="Apply Template?"
+        description="This will replace all current document content with the professional HMS template. This action cannot be undone."
+        confirmText="Apply Template"
+        variant="warning"
+      />
+
+      <AuthVerifyDialog
+        open={authOpen}
+        onOpenChange={setAuthOpen}
+        onSuccess={handleAuthSuccess}
+        title="Verify Replicate Action"
+        description="Cloning a proposal is a protected administrative action. Please verify your identity to proceed."
+      />
+
+      {/* NEW: Minimal Popups for Ledger and Execution */}
+      <Dialog open={taskOpen} onOpenChange={setTaskOpen}>
+        <DialogContent className='max-w-md rounded-[2.5rem] p-10 bg-white border-0 shadow-3xl'>
+          <DialogHeader className='mb-6'>
+            <DialogTitle className='text-2xl font-black uppercase tracking-tighter'>Sync <span className='text-indigo-600'>Point</span></DialogTitle>
+            <p className='text-slate-400 font-bold uppercase tracking-widest text-[9px] mt-1'>Initialize a new operational execution cycle</p>
+          </DialogHeader>
+          <div className='space-y-6'>
+            <div className='space-y-2'>
+              <Label className='text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1'>Cycle Objective</Label>
+              <Input placeholder="e.g. Infrastructure Setup" value={newTask.title} onChange={e => setNewTask({...newTask, title: e.target.value})} className='h-12 rounded-xl bg-slate-50 border-0 focus:ring-2 ring-indigo-500 font-bold px-4 text-xs' />
             </div>
-            <div className="relative flex-1">
-              <iframe
-                ref={previewRef}
-                srcDoc={previewHtml}
-                onLoad={() => {
-                  setIframeLoading(false);
-                  if (previewPrint) {
-                    try { previewRef.current?.contentWindow?.focus(); previewRef.current?.contentWindow?.print(); } catch {}
-                    setPreviewPrint(false);
-                  }
-                  if (previewAutoDownload) {
-                    try {
-                      const w = previewRef.current?.contentWindow as any;
-                      const d = w?.document as Document;
-                      const s = d.createElement('script');
-                      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-                      s.onload = () => {
-                        try {
-                          const target = d.querySelector('.sheet') || d.body;
-                          // @ts-ignore
-                          w.html2pdf().set({ margin: 0, filename: `Proposal-${p?.number ?? p?.id ?? 'document'}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } }).from(target).save().then(() => {
-                            window.postMessage({ type: 'proposal-pdf-done' }, '*');
-                          });
-                        } catch {}
-                      };
-                      d.body.appendChild(s);
-                    } catch {}
-                  }
-                }}
-                className="absolute inset-0 w-full h-full bg-muted/20"
-              />
-              {iframeLoading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-background/50">
-                  <div className="px-4 py-2 text-sm rounded-md border bg-background shadow-sm animate-pulse">Loading preview…</div>
-                </div>
-              )}
+            <div className='space-y-2'>
+              <Label className='text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1'>Operational Threshold</Label>
+              <Input type="date" value={newTask.deadline} onChange={e => setNewTask({...newTask, deadline: e.target.value})} className='h-12 rounded-xl bg-slate-50 border-0 focus:ring-2 ring-indigo-500 font-bold px-4 text-xs' />
             </div>
           </div>
+          <DialogFooter className='mt-8 gap-3'>
+            <Button variant='ghost' onClick={() => setTaskOpen(false)} className='rounded-xl uppercase font-black tracking-widest text-[9px] h-10 px-6'>Abort</Button>
+            <Button onClick={addTask} className='bg-indigo-600 text-white rounded-xl uppercase font-black tracking-widest text-[9px] h-12 px-8 shadow-lg shadow-indigo-100'>Deploy Cycle</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={invOpen} onOpenChange={setInvOpen}>
+        <DialogContent className='max-w-md rounded-[2.5rem] p-10 bg-white border-0 shadow-3xl'>
+          <DialogHeader className='mb-6'>
+            <DialogTitle className='text-2xl font-black uppercase tracking-tighter'>Ledger <span className='text-indigo-600'>Initiation</span></DialogTitle>
+            <p className='text-slate-400 font-bold uppercase tracking-widest text-[9px] mt-1'>Authorize a new fiscal valuation record</p>
+          </DialogHeader>
+          <div className='space-y-6'>
+            <div className='p-6 bg-indigo-50 rounded-2xl border border-indigo-100 flex flex-col items-center justify-center text-center'>
+              <span className='text-[8px] font-black uppercase tracking-[0.3em] text-indigo-400 mb-1'>Aggregated Value</span>
+              <span className='text-3xl font-black text-indigo-900 tabular-nums'>Rs.{money(grandTotal)}</span>
+            </div>
+            <div className='space-y-2'>
+              <Label className='text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1'>Fiscal Status</Label>
+              <Select value={newInv.status} onValueChange={v => setNewInv({...newInv, status: v})}>
+                <SelectTrigger className='h-12 rounded-xl bg-slate-50 border-0 focus:ring-2 ring-indigo-500 font-bold px-4 text-xs'>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className='rounded-xl border-slate-100 shadow-2xl'>
+                  <SelectItem value="Draft" className='font-bold text-[10px] uppercase tracking-widest'>Draft Record</SelectItem>
+                  <SelectItem value="Pending" className='font-bold text-[10px] uppercase tracking-widest'>Pending Sync</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter className='mt-8 gap-3'>
+            <Button variant='ghost' onClick={() => setInvOpen(false)} className='rounded-xl uppercase font-black tracking-widest text-[9px] h-10 px-6'>Cancel</Button>
+            <Button onClick={addInvoice} className='bg-slate-900 text-white rounded-xl uppercase font-black tracking-widest text-[9px] h-12 px-8 shadow-lg shadow-slate-200'>Commit to Ledger</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={addModuleOpen} onOpenChange={setAddModuleOpen}>
+        <DialogContent className='max-w-md rounded-[2.5rem] p-10 bg-white border-0 shadow-3xl'>
+          <DialogHeader className='mb-6'>
+            <DialogTitle className='text-2xl font-black uppercase tracking-tighter'>Add <span className='text-indigo-600'>Module</span></DialogTitle>
+            <p className='text-slate-400 font-bold uppercase tracking-widest text-[9px] mt-1'>Create a custom proposal module</p>
+          </DialogHeader>
+          <div className='space-y-6'>
+            <div className='space-y-2'>
+              <Label className='text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1'>Module Title</Label>
+              <Input placeholder="e.g. Cybersecurity Protocol" value={newModule.title} onChange={e => setNewModule({...newModule, title: e.target.value})} className='h-12 rounded-xl bg-slate-50 border-0 focus:ring-2 ring-indigo-500 font-bold px-4 text-xs' />
+            </div>
+            <div className='space-y-2'>
+              <Label className='text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1'>Module Content</Label>
+              <Textarea placeholder="Module content..." value={newModule.content} onChange={e => setNewModule({...newModule, content: e.target.value})} className='min-h-[150px] rounded-xl bg-slate-50 border-0 focus:ring-2 ring-indigo-500 font-medium p-4 text-xs' />
+            </div>
+          </div>
+          <DialogFooter className='mt-8 gap-3'>
+            <Button variant='ghost' onClick={() => setAddModuleOpen(false)} className='rounded-xl uppercase font-black tracking-widest text-[9px] h-10 px-6'>Cancel</Button>
+            <Button onClick={handleAddModule} className='bg-indigo-600 text-white rounded-xl uppercase font-black tracking-widest text-[9px] h-12 px-8 shadow-lg shadow-indigo-100'>Add Module</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={analysisOpen} onOpenChange={setAnalysisOpen}>
+        <DialogContent className='max-w-md rounded-[2.5rem] p-10 bg-white border-0 shadow-3xl'>
+          <DialogHeader className='mb-6'>
+            <DialogTitle className='text-2xl font-black uppercase tracking-tighter'>Neural <span className='text-indigo-600'>Architect</span></DialogTitle>
+            <p className='text-slate-400 font-bold uppercase tracking-widest text-[9px] mt-1'>AI-Powered Proposal Analysis</p>
+          </DialogHeader>
+          <div className='space-y-6'>
+            {isAnalyzing ? (
+              <div className='flex flex-col items-center justify-center py-10'>
+                <div className='w-12 h-12 rounded-2xl border-4 border-indigo-500/30 border-t-indigo-500 animate-spin mb-4' />
+                <span className='text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em] animate-pulse'>Analyzing Nodes...</span>
+              </div>
+            ) : (
+              <div dangerouslySetInnerHTML={{ __html: analysisResult || "" }} />
+            )}
+          </div>
+          <DialogFooter className='mt-8'>
+            <Button variant='ghost' onClick={() => setAnalysisOpen(false)} className='w-full rounded-xl uppercase font-black tracking-widest text-[9px] h-12 bg-slate-50 hover:bg-slate-100 text-slate-600'>Close Analysis</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

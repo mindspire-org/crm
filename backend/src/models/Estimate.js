@@ -20,7 +20,7 @@ const EstimateSchema = new mongoose.Schema(
     leadId: { type: mongoose.Schema.Types.ObjectId, ref: "Lead" },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     createdByRole: { type: String, default: "" },
-    approvalStatus: { type: String, enum: ["Pending", "Approved", "Rejected"], default: "Approved" },
+    approvalStatus: { type: String, enum: ["Pending", "Approved", "Rejected"], default: "Pending" },
     approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     approvedAt: { type: Date },
     rejectedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },

@@ -64,206 +64,92 @@ router.get('/conversations', authenticate, async (req, res) => {
   }
 });
 
-// Get or create conversation with a user
+// Get or create conversation
 router.post('/conversations', authenticate, async (req, res) => {
   try {
     const { participantIds, projectId } = req.body || {};
 
-    // Client project-scoped conversation
     if (projectId) {
       const project = await Project.findById(projectId).lean();
       if (!project) return res.status(404).json({ error: 'Project not found' });
 
       const requesterRole = String(req.user?.role || '').toLowerCase();
-
       if (requesterRole === 'client') {
         const clientId = req.user.clientId ? String(req.user.clientId) : '';
         if (!clientId || String(project.clientId || '') !== clientId) {
-          return res.status(403).json({ error: 'Access denied: project does not belong to client' });
-        }
-      } else if (requesterRole !== 'admin') {
-        // For non-admin internal users, only allow access if they are the assigned employee for this project.
-        const email = String(req.user?.email || '').toLowerCase().trim();
-        const myEmp = email ? await Employee.findOne({ email }).select('_id').lean() : null;
-        const myEmpId = myEmp?._id ? String(myEmp._id) : '';
-        const assignedEmpId = project.employeeId ? String(project.employeeId) : '';
-        if (!myEmpId || !assignedEmpId || myEmpId !== assignedEmpId) {
           return res.status(403).json({ error: 'Access denied' });
         }
       }
 
-      // Single conversation per project (prevents mixing/duplicates)
       const existing = await Conversation.findOne({ projectId })
         .populate('participants', 'name email avatar')
         .populate('lastMessage');
 
       if (existing) {
-        const isAdmin = requesterRole === 'admin';
-        if (!isAdmin && !hasParticipant(existing, req.user._id)) {
+        if (requesterRole !== 'admin' && !hasParticipant(existing, req.user._id)) {
           return res.status(403).json({ error: 'Access denied' });
         }
         return res.json(existing);
       }
 
       const participantSet = new Set([req.user._id.toString()]);
-
-      // Add assigned staff (project.employeeId -> Employee -> User via email)
-      if (project.employeeId) {
-        const emp = await Employee.findById(project.employeeId).lean();
-        const email = String(emp?.email || '').toLowerCase().trim();
-        if (email) {
-          const staffUser = await User.findOneAndUpdate(
-            { email },
-            {
-              $setOnInsert: {
-                email,
-                username: email,
-                role: 'staff',
-                status: 'active',
-                createdBy: 'project-employee-sync',
-              },
-              $set: {
-                name: emp?.name || `${emp?.firstName || ''} ${emp?.lastName || ''}`.trim(),
-                avatar: emp?.avatar || '',
-              },
-            },
-            { new: true, upsert: true }
-          );
-          if (staffUser?._id) participantSet.add(staffUser._id.toString());
-        }
-      }
-
-      // Add admins so the client can always reach an admin
       const admins = await User.find({ role: 'admin', status: 'active' }).select('_id').lean();
-      for (const a of admins) {
-        if (a?._id) participantSet.add(String(a._id));
-      }
+      admins.forEach(a => participantSet.add(String(a._id)));
 
-      const allParticipants = Array.from(participantSet);
       const conversation = await Conversation.create({
         projectId,
-        participants: allParticipants,
-        isGroup: allParticipants.length > 2,
-        groupName: String(project.title || '').trim() || 'Project Chat',
+        participants: Array.from(participantSet),
+        isGroup: true,
+        groupName: String(project.title || 'Project Chat'),
         createdBy: req.user._id,
-        admins: admins.map((a) => a._id),
+        admins: admins.map(a => a._id),
       });
 
-      const populatedConvo = await Conversation.findById(conversation._id)
-        .populate('participants', 'name email avatar')
-        .populate('lastMessage');
-
-      return res.status(201).json(populatedConvo);
+      const populated = await Conversation.findById(conversation._id).populate('participants', 'name email avatar');
+      return res.status(201).json(populated);
     }
 
-    // Clients must use project-scoped conversations only
-    if (req.user.role === 'client') {
-      return res.status(400).json({ error: 'projectId is required for client conversations' });
-    }
-    
-    if (!participantIds || !Array.isArray(participantIds) || participantIds.length === 0) {
-      return res.status(400).json({ error: 'At least one participant is required' });
-    }
-
-    // Add current user to participants if not already included
-    const allParticipants = [...new Set([...participantIds, req.user._id.toString()])];
-
-    // Validate participant ids
-    for (const pid of allParticipants) {
-      if (!mongoose.Types.ObjectId.isValid(String(pid))) {
-        return res.status(400).json({ error: 'Invalid participant id' });
-      }
-    }
-
-    // Enforce internal messaging permissions
-    const allowed = allowedRolesForConversationCreate(req.user.role);
-    if (!allowed.size) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    const users = await User.find({ _id: { $in: allParticipants } }).select('_id role status').lean();
-    const byId = new Map(users.map((u) => [String(u._id), u]));
-    for (const pid of allParticipants) {
-      const u = byId.get(String(pid));
-      if (!u) return res.status(400).json({ error: 'Participant not found' });
-      if (String(u.status || '').toLowerCase() === 'inactive') {
-        return res.status(400).json({ error: 'Participant is inactive' });
-      }
-      const pr = String(u.role || '').toLowerCase();
-      if (pr === 'client') {
-        return res.status(400).json({ error: 'Clients can only chat via project conversations' });
-      }
-      if (!allowed.has(pr)) {
-        return res.status(403).json({ error: 'Access denied' });
-      }
-    }
-    
-    // For 1:1 chat, check if conversation already exists
+    const allParticipants = [...new Set([...(participantIds || []), req.user._id.toString()])];
     if (allParticipants.length === 2) {
-      const existingConvo = await Conversation.findOne({
+      const existing = await Conversation.findOne({
         projectId: { $exists: false },
-        participants: { $all: allParticipants, $size: allParticipants.length }
-      })
-        .populate('participants', 'name email avatar')
-        .populate('lastMessage');
-
-      if (existingConvo) {
-        return res.json(existingConvo);
-      }
+        participants: { $all: allParticipants, $size: 2 }
+      }).populate('participants', 'name email avatar').populate('lastMessage');
+      if (existing) return res.json(existing);
     }
 
-    // Create new conversation
     const conversation = await Conversation.create({
-      projectId: undefined,
       participants: allParticipants,
       isGroup: allParticipants.length > 2,
       createdBy: req.user._id,
       admins: [req.user._id]
     });
 
-    const populatedConvo = await Conversation.findById(conversation._id)
-      .populate('participants', 'name email avatar');
-
-    res.status(201).json(populatedConvo);
+    const populated = await Conversation.findById(conversation._id).populate('participants', 'name email avatar');
+    res.status(201).json(populated);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// Get messages in a conversation
+// Get messages
 router.get('/conversations/:conversationId/messages', authenticate, async (req, res) => {
   try {
     const { conversationId } = req.params;
-    const { before, limit = 50 } = req.query;
-
-    // Verify user is participant in this conversation
     const conversation = await Conversation.findById(conversationId);
-    if (!conversation) {
-      return res.status(404).json({ error: 'Conversation not found' });
-    }
+    if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
     
-    const isAdmin = String(req.user?.role || '').toLowerCase() === 'admin';
-    if (!isAdmin && !hasParticipant(conversation, req.user._id)) {
-      return res.status(403).json({ error: 'Access denied: not a participant in this conversation' });
+    if (String(req.user?.role).toLowerCase() !== 'admin' && !hasParticipant(conversation, req.user._id)) {
+      return res.status(403).json({ error: 'Access denied' });
     }
 
-    const query = { conversationId };
-    if (before) {
-      query._id = { $lt: before };
-    }
-
-    const messages = await Message.find(query)
+    const messages = await Message.find({ conversationId })
       .sort({ createdAt: -1 })
-      .limit(parseInt(limit))
+      .limit(50)
       .populate('sender', 'name email avatar');
 
-    // Mark messages as read
     await Message.updateMany(
-      { 
-        conversationId,
-        sender: { $ne: req.user._id },
-        readBy: { $ne: req.user._id }
-      },
+      { conversationId, sender: { $ne: req.user._id }, readBy: { $ne: req.user._id } },
       { $addToSet: { readBy: req.user._id } }
     );
 
@@ -273,295 +159,106 @@ router.get('/conversations/:conversationId/messages', authenticate, async (req, 
   }
 });
 
-// Send a message
+// Send message
 router.post('/messages', authenticate, async (req, res) => {
-  let session = null;
   try {
-    session = await mongoose.startSession();
-  } catch {
-    session = null;
-  }
+    const { conversationId, content, attachments = [], type = 'text', mediaUrl } = req.body;
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
 
-  const { conversationId, content, attachments = [] } = req.body;
-  
-  if (!content?.trim() && (!attachments || attachments.length === 0)) {
-    if (session) session.endSession();
-    return res.status(400).json({ error: 'Message content or attachment is required' });
-  }
-
-  // Verify user is participant in this conversation
-  const conversation = await Conversation.findById(conversationId);
-  if (!conversation) {
-    if (session) session.endSession();
-    return res.status(404).json({ error: 'Conversation not found' });
-  }
-  
-  const isAdmin = String(req.user?.role || '').toLowerCase() === 'admin';
-  if (!isAdmin && !hasParticipant(conversation, req.user._id)) {
-    if (session) session.endSession();
-    return res.status(403).json({ error: 'Access denied: not a participant in this conversation' });
-  }
-
-  const doWrite = async (useSession) => {
-    const opts = useSession ? { session } : undefined;
-
-    const created = await Message.create(
-      [{
-        conversationId,
-        sender: req.user._id,
-        content: content?.trim(),
-        attachments,
-        readBy: [req.user._id],
-      }],
-      opts
-    );
-
-    await Conversation.findByIdAndUpdate(
+    const created = await Message.create({
       conversationId,
-      {
-        lastMessage: created[0]._id,
-        $addToSet: { participants: req.user._id },
-      },
-      useSession ? { new: true, session } : { new: true }
-    );
+      sender: req.user._id,
+      content: content?.trim(),
+      attachments,
+      type,
+      mediaUrl,
+      readBy: [req.user._id],
+    });
 
-    // Best-effort notification fanout (outside transaction concerns)
-    try {
-      const convo = await Conversation.findById(conversationId).select('participants projectId').lean();
-      const parts = Array.isArray(convo?.participants) ? convo.participants : [];
-      const senderId = String(req.user._id);
-      const targets = parts.filter((p) => String(p) !== senderId);
-      if (targets.length) {
-        const from = String(req.user?.name || req.user?.email || 'Someone');
-        const text = String(content || '').trim();
-        const snippet = text.length > 80 ? `${text.slice(0, 77)}...` : text;
-        const href = `/messages?conversationId=${encodeURIComponent(String(conversationId))}`;
-        const now = new Date();
-        await Notification.insertMany(
-          targets.map((uid) => ({
-            userId: uid,
-            type: 'message_new',
-            title: 'New message',
-            message: `${from}: ${snippet || 'Sent an attachment'}`,
-            href,
-            meta: { conversationId, projectId: convo?.projectId },
-            createdAt: now,
-            updatedAt: now,
-          })),
-          { ordered: false }
-        );
-      }
-    } catch {
-      // best-effort
-    }
+    await Conversation.findByIdAndUpdate(conversationId, { lastMessage: created._id });
 
-    return created[0]._id;
-  };
-
-  try {
-    // Prefer transactions, but fall back gracefully for standalone MongoDB.
-    if (session) {
-      try {
-        session.startTransaction();
-        const messageId = await doWrite(true);
-        await session.commitTransaction();
-        session.endSession();
-
-        const populatedMessage = await Message.findById(messageId).populate('sender', 'name email avatar');
-        try {
-          broadcastSse({ event: "invalidate", data: { keys: ["messages", "notifications"], conversationId: String(conversationId || "") } });
-        } catch {}
-        return res.status(201).json(populatedMessage);
-      } catch (e) {
-        try {
-          await session.abortTransaction();
-        } catch {}
-        session.endSession();
-        // Continue to non-transactional fallback below.
-      }
-    }
-
-    const messageId = await doWrite(false);
-    const populatedMessage = await Message.findById(messageId).populate('sender', 'name email avatar');
-    try {
-      broadcastSse({ event: "invalidate", data: { keys: ["messages", "notifications"], conversationId: String(conversationId || "") } });
-    } catch {}
-    return res.status(201).json(populatedMessage);
+    const populated = await Message.findById(created._id).populate('sender', 'name email avatar');
+    broadcastSse({ event: "invalidate", data: { keys: ["messages"], conversationId: String(conversationId) } });
+    res.status(201).json(populated);
   } catch (e) {
-    if (session) {
-      try {
-        session.endSession();
-      } catch {}
-    }
-    return res.status(500).json({ error: e.message });
+    res.status(500).json({ error: e.message });
   }
 });
 
-// Mark messages as read
-router.post('/messages/read', authenticate, async (req, res) => {
+// Update message (Star, Pin, Edit)
+router.patch('/messages/:messageId', authenticate, async (req, res) => {
   try {
-    const { messageIds } = req.body;
-    
-    if (!messageIds || !Array.isArray(messageIds)) {
-      return res.status(400).json({ error: 'Message IDs array is required' });
+    const { messageId } = req.params;
+    const { content, isStarred, isPinned } = req.body || {};
+
+    const msg = await Message.findById(messageId);
+    if (!msg) return res.status(404).json({ error: 'Message not found' });
+
+    const convo = await Conversation.findById(msg.conversationId);
+    const isSender = String(msg.sender) === String(req.user._id);
+    const isAdmin = String(req.user.role).toLowerCase() === 'admin' || (convo.admins || []).some(a => String(a) === String(req.user._id));
+
+    if (content !== undefined) {
+      if (!isSender && !isAdmin) return res.status(403).json({ error: 'Denied' });
+      if (!isAdmin) {
+        const hour = 60 * 60 * 1000;
+        if (Date.now() - new Date(msg.createdAt).getTime() > hour) return res.status(400).json({ error: 'Time limit exceeded' });
+      }
+      msg.content = content;
     }
 
-    const msgs = await Message.find({ _id: { $in: messageIds } }).select('_id conversationId sender readBy').lean();
-    const convoIds = Array.from(new Set(msgs.map((m) => String(m.conversationId))));
-    const convos = await Conversation.find({ _id: { $in: convoIds }, participants: req.user._id }).select('_id').lean();
-    const allowedConvoIds = new Set(convos.map((c) => String(c._id)));
-    const allowedMessageIds = msgs
-      .filter((m) => allowedConvoIds.has(String(m.conversationId)))
-      .map((m) => m._id);
-
-    if (!allowedMessageIds.length) {
-      return res.json({ success: true });
+    if (isStarred !== undefined) msg.isStarred = isStarred;
+    if (isPinned !== undefined) {
+      if (!isSender && !isAdmin) return res.status(403).json({ error: 'Denied' });
+      msg.isPinned = isPinned;
     }
 
-    await Message.updateMany(
-      {
-        _id: { $in: allowedMessageIds },
-        sender: { $ne: req.user._id },
-        readBy: { $ne: req.user._id },
-      },
-      { $addToSet: { readBy: req.user._id } }
-    );
+    await msg.save();
+    const populated = await Message.findById(msg._id).populate('sender', 'name email avatar');
+    broadcastSse({ event: "invalidate", data: { keys: ["messages"], conversationId: String(msg.conversationId) } });
+    res.json(populated);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
+// Delete message
+router.delete('/messages/:messageId', authenticate, async (req, res) => {
+  try {
+    const msg = await Message.findById(req.params.messageId);
+    if (!msg) return res.status(404).json({ error: 'Not found' });
+
+    const isSender = String(msg.sender) === String(req.user._id);
+    if (!isSender && String(req.user.role).toLowerCase() !== 'admin') return res.status(403).json({ error: 'Denied' });
+
+    if (String(req.user.role).toLowerCase() !== 'admin') {
+      const hour = 60 * 60 * 1000;
+      if (Date.now() - new Date(msg.createdAt).getTime() > hour) return res.status(400).json({ error: 'Time limit exceeded' });
+    }
+
+    msg.isDeleted = true;
+    msg.content = '';
+    await msg.save();
+    broadcastSse({ event: "invalidate", data: { keys: ["messages"], conversationId: String(msg.conversationId) } });
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// Edit a message (sender or conversation admin)
-router.patch('/messages/:messageId', authenticate, async (req, res) => {
-  try {
-    const { messageId } = req.params;
-    const { content } = req.body || {};
-    if (typeof content !== 'string') {
-      return res.status(400).json({ error: 'content is required' });
-    }
-
-    const msg = await Message.findById(messageId);
-    if (!msg) return res.status(404).json({ error: 'Message not found' });
-
-    const convo = await Conversation.findById(msg.conversationId).select('admins participants');
-    if (!convo) return res.status(404).json({ error: 'Conversation not found' });
-
-    const isSender = String(msg.sender) === String(req.user._id);
-    const isAdmin = Array.isArray(convo.admins) && convo.admins.some((a) => String(a) === String(req.user._id));
-    if (!isSender && !isAdmin) {
-      return res.status(403).json({ error: 'Not allowed to edit this message' });
-    }
-
-    if (msg.isDeleted) return res.status(400).json({ error: 'Cannot edit a deleted message' });
-
-    msg.content = String(content || '').trim();
-    await msg.save();
-
-    const populated = await Message.findById(msg._id).populate('sender', 'name email avatar');
-    try {
-      broadcastSse({ event: "invalidate", data: { keys: ["messages"], conversationId: String(msg?.conversationId || "") } });
-    } catch {}
-    return res.json(populated);
-  } catch (e) {
-    return res.status(500).json({ error: e.message });
-  }
-});
-
-// Soft delete a message (sender or conversation admin)
-router.delete('/messages/:messageId', authenticate, async (req, res) => {
-  try {
-    const { messageId } = req.params;
-    const msg = await Message.findById(messageId);
-    if (!msg) return res.status(404).json({ error: 'Message not found' });
-
-    const convo = await Conversation.findById(msg.conversationId).select('admins lastMessage');
-    if (!convo) return res.status(404).json({ error: 'Conversation not found' });
-
-    const isSender = String(msg.sender) === String(req.user._id);
-    const isAdmin = Array.isArray(convo.admins) && convo.admins.some((a) => String(a) === String(req.user._id));
-    if (!isSender && !isAdmin) {
-      return res.status(403).json({ error: 'Not allowed to delete this message' });
-    }
-
-    if (msg.isDeleted) return res.json({ success: true });
-
-    msg.isDeleted = true;
-    msg.deletedAt = new Date();
-    // Optional: clear sensitive content
-    msg.content = '';
-    await msg.save();
-
-    // If it was the last message in the conversation, update lastMessage pointer
-    if (String(convo.lastMessage) === String(msg._id)) {
-      const prev = await Message.find({ conversationId: msg.conversationId, isDeleted: { $ne: true } })
-        .sort({ createdAt: -1 })
-        .limit(1)
-        .lean();
-      await Conversation.findByIdAndUpdate(msg.conversationId, { lastMessage: prev[0]?._id || undefined });
-    }
-
-    try {
-      broadcastSse({ event: "invalidate", data: { keys: ["messages", "notifications"], conversationId: String(msg?.conversationId || "") } });
-    } catch {}
-
-    return res.json({ success: true });
-  } catch (e) {
-    return res.status(500).json({ error: e.message });
-  }
-});
-
-// Delete a conversation (participant can delete 1:1, creator/admin can delete group)
+// Delete conversation
 router.delete('/conversations/:conversationId', authenticate, async (req, res) => {
   try {
-    const { conversationId } = req.params;
-
-    // Verify conversation exists
-    const convo = await Conversation.findById(conversationId);
-    if (!convo) return res.status(404).json({ error: 'Conversation not found' });
-
-    const isAdmin = String(req.user?.role || '').toLowerCase() === 'admin';
-    const userId = String(req.user._id);
-    const isParticipant = hasParticipant(convo, req.user._id);
-    const isCreator = String(convo.createdBy) === userId;
-    const isConvoAdmin = Array.isArray(convo.admins) && convo.admins.some((a) => String(a) === userId);
-    const participantCount = Array.isArray(convo.participants) ? convo.participants.length : 0;
-    const isOneToOne = participantCount === 2;
-
-    // Permission check:
-    // - Admins can delete any conversation
-    // - Participants can delete 1:1 conversations
-    // - Creators or admins can delete group conversations
-    let canDelete = isAdmin;
-    if (!canDelete) {
-      if (isOneToOne) {
-        canDelete = isParticipant;
-      } else {
-        canDelete = isCreator || isConvoAdmin;
-      }
-    }
-
-    if (!canDelete) {
-      return res.status(403).json({ error: 'Not allowed to delete this conversation' });
-    }
-
-    // Delete all messages in the conversation
-    await Message.deleteMany({ conversationId });
-
-    // Delete the conversation
-    await Conversation.findByIdAndDelete(conversationId);
-
-    // Delete related notifications
-    await Notification.deleteMany({ "meta.conversationId": conversationId });
-
-    try {
-      broadcastSse({ event: "invalidate", data: { keys: ["conversations", "messages", "notifications"] } });
-    } catch {}
-
-    return res.json({ success: true });
+    const convo = await Conversation.findById(req.params.conversationId);
+    if (!convo) return res.status(404).json({ error: 'Not found' });
+    
+    await Message.deleteMany({ conversationId: convo._id });
+    await Conversation.findByIdAndDelete(convo._id);
+    broadcastSse({ event: "invalidate", data: { keys: ["conversations"] } });
+    res.json({ success: true });
   } catch (e) {
-    return res.status(500).json({ error: e.message });
+    res.status(500).json({ error: e.message });
   }
 });
 

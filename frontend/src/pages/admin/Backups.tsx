@@ -395,7 +395,7 @@ export default function Backups() {
               Final <span className="text-indigo-600">Validation</span>
             </AlertDialogTitle>
             <AlertDialogDescription className="text-slate-500 font-bold uppercase tracking-widest text-[10px] mt-4">
-              Step 02: Institutional Authority Verification
+              Step 02: Corporate Authority Verification
             </AlertDialogDescription>
             <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100">
               <p className="text-sm font-bold text-indigo-900 leading-relaxed">

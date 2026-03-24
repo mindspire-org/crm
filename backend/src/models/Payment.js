@@ -24,4 +24,9 @@ const PaymentSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Add indexes for high-performance financial lookups
+PaymentSchema.index({ clientId: 1 });
+PaymentSchema.index({ invoiceId: 1 });
+PaymentSchema.index({ createdAt: -1 });
+
 export default mongoose.model("Payment", PaymentSchema);

@@ -203,11 +203,11 @@ router.get("/", authenticate, async (req, res) => {
   }
 });
 
-// Run payroll for a period from Employees' salary (admin only)
+// Manual run for all active employees (admin only)
 router.post("/run", authenticate, isAdmin, async (req, res) => {
   try {
-    const period = req.body?.period || req.query.period || new Date().toISOString().slice(0,7);
-    const emps = await Employee.find({}).lean();
+    const period = req.body?.period || req.query.period || new Date().toISOString().slice(0, 7);
+    const emps = await Employee.find({ status: "active" }).lean();
     const bulk = emps.map((e) => {
       const name = e.name || `${e.firstName || ""} ${e.lastName || ""}`.trim();
       const basic = Number(e.salary || 0) || 0;
@@ -217,14 +217,110 @@ router.post("/run", authenticate, isAdmin, async (req, res) => {
       return {
         updateOne: {
           filter: { employeeId: e._id, period },
-          update: { $set: { employeeId: e._id, employee: name, period, basic, allowances, deductions, net, status: "draft" } },
+          update: {
+            $set: {
+              employeeId: e._id,
+              employee: name,
+              period,
+              basic,
+              allowances,
+              deductions,
+              net,
+              status: "draft",
+            },
+          },
           upsert: true,
         },
       };
     });
     if (bulk.length) await Payroll.bulkWrite(bulk, { ordered: false });
+
+    // After bulk write, we also trigger the process step for these to ensure accrual happens
+    // Alternatively, we let user manually 'Process' them from the UI.
+    // Based on user request "when we initiate payroll... should be shown in ledger",
+    // let's auto-process them if they have a non-zero net.
+    
     const items = await Payroll.find({ period }).sort({ employee: 1 }).lean();
-    res.json({ ok: true, count: items.length, items });
+    
+    // Auto-process drafts to trigger ledger entries
+    for (const doc of items) {
+      if (doc.status === "draft" && doc.net > 0) {
+        try {
+          const settings = await getSettings();
+          const empAcc = await ensureLinkedAccount("employee", doc.employeeId, doc.employee || "Employee");
+          await postJournal({
+            date: new Date(),
+            memo: `Payroll initiated ${doc.period} - ${doc.employee}`,
+            refNo: `PAY-${doc.period}-${doc.employeeId.toString().slice(-4)}`,
+            lines: [
+              { accountCode: settings.salaryExpense, debit: doc.net, credit: 0 },
+              { accountCode: empAcc.code, debit: 0, credit: doc.net, entityType: "employee", entityId: doc.employeeId },
+            ],
+            postedBy: "system",
+          });
+          await Payroll.findByIdAndUpdate(doc._id, { status: "processed" });
+        } catch (je) {
+          console.error("Journal post failed for payroll initiation", je);
+        }
+      }
+    }
+
+    const updatedItems = await Payroll.find({ period }).sort({ employee: 1 }).lean();
+    res.json({ ok: true, count: updatedItems.length, items: updatedItems });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Update status to 'processed' or 'paid' to trigger ledger entries
+router.post("/:id/process", authenticate, isAdmin, async (req, res) => {
+  try {
+    const doc = await Payroll.findByIdAndUpdate(req.params.id, { status: "processed" }, { new: true });
+    if (!doc) return res.status(404).json({ error: "Not found" });
+
+    const amt = Number(doc.net || 0);
+    if (amt > 0) {
+      const settings = await getSettings();
+      const empAcc = await ensureLinkedAccount("employee", doc.employeeId, doc.employee || "Employee");
+      await postJournal({
+        date: new Date(),
+        memo: `Payroll processed ${doc.period} - ${doc.employee}`,
+        refNo: `PAY-${doc.period}-${doc.employeeId.toString().slice(-4)}`,
+        lines: [
+          { accountCode: settings.salaryExpense, debit: amt, credit: 0 },
+          { accountCode: empAcc.code, debit: 0, credit: amt, entityType: "employee", entityId: doc.employeeId },
+        ],
+        postedBy: "system",
+      });
+    }
+    res.json(doc);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.post("/:id/pay", authenticate, isAdmin, async (req, res) => {
+  try {
+    const doc = await Payroll.findByIdAndUpdate(req.params.id, { status: "paid" }, { new: true });
+    if (!doc) return res.status(404).json({ error: "Not found" });
+
+    const amt = Number(doc.net || 0);
+    if (amt > 0) {
+      const settings = await getSettings();
+      const empAcc = await ensureLinkedAccount("employee", doc.employeeId, doc.employee || "Employee");
+      const cashOrBank = settings.bankAccount || settings.cashAccount;
+      await postJournal({
+        date: new Date(),
+        memo: `Salary paid ${doc.period} - ${doc.employee}`,
+        refNo: `SAL-${doc.period}-${doc.employeeId.toString().slice(-4)}`,
+        lines: [
+          { accountCode: empAcc.code, debit: amt, credit: 0, entityType: "employee", entityId: doc.employeeId },
+          { accountCode: cashOrBank, debit: 0, credit: amt },
+        ],
+        postedBy: "system",
+      });
+    }
+    res.json(doc);
   } catch (e) {
     res.status(400).json({ error: e.message });
   }

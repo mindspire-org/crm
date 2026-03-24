@@ -2710,7 +2710,7 @@ export default function LeadDetails() {
                         <button
                           type="button"
                           className="text-primary underline cursor-pointer"
-                          onClick={() => navigate(`/prospects/proposals`)}
+                          onClick={() => navigate(`/prospects/proposals/${p._id}`)}
                         >
                           {formatYmd(p.proposalDate)}
                         </button>
@@ -2860,7 +2860,7 @@ export default function LeadDetails() {
                         <button
                           type="button"
                           className="text-primary underline cursor-pointer"
-                          onClick={() => navigate(`/sales/contracts`)}
+                          onClick={() => navigate(`/sales/contracts/${c._id}`)}
                         >
                           {c.title || "-"}
                         </button>

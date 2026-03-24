@@ -183,7 +183,7 @@ export const ROLE_PERMISSION_MAP: Record<UserRole, string[]> = {
   ],
   marketer: [
     PERMISSIONS.LEADS_READ, PERMISSIONS.LEADS_UPDATE, PERMISSIONS.LEADS_CREATE,
-    PERMISSIONS.PIPELINE_VIEW, PERMISSIONS.REPORTS_VIEW_LIMITED
+    PERMISSIONS.PIPELINE_MANAGE, PERMISSIONS.REPORTS_VIEW_LIMITED
   ],
   sales: [
     PERMISSIONS.LEADS_READ, PERMISSIONS.LEADS_UPDATE, PERMISSIONS.LEADS_CREATE,
@@ -324,12 +324,7 @@ export function canAccessModule(module: ModuleKey, user?: User | null): boolean 
   const perms = normalizePermissions(u.permissions);
   if (perms.has(module)) return true;
 
-  if (role === 'marketer') {
-    const allowed = new Set<ModuleKey>(['dashboard', 'messages', 'announcements', 'calendar', 'tasks', 'profile', 'files', 'notes', 'projects', 'crm', 'tickets', 'events', 'hrm']);
-    return allowed.has(module);
-  }
-
-  if (role === 'sales') {
+  if (role === 'marketer' || role === 'sales') {
     const allowed = new Set<ModuleKey>(['dashboard', 'messages', 'announcements', 'calendar', 'tasks', 'profile', 'files', 'notes', 'projects', 'crm', 'sales', 'prospects', 'reports', 'tickets', 'events', 'clients', 'hrm']);
     return allowed.has(module);
   }
@@ -403,8 +398,14 @@ export function canAccessPath(pathname: string, user?: User | null): boolean {
   // HRM: allow attendance for all authenticated users; salary ledger for staff only
   if (pathname.startsWith('/hrm')) {
     if (pathname === '/hrm/attendance' || pathname.startsWith('/hrm/attendance/')) return true;
+    if (pathname === '/hrm/my-profile' || pathname.startsWith('/hrm/my-profile/')) return true;
     if (pathname === '/hrm/my-salary-ledger' || pathname.startsWith('/hrm/my-salary-ledger/')) return role === 'staff';
     return false;
+  }
+
+  if (pathname.startsWith('/crm/meta-ads')) {
+    const r = normalizeRole(u.role);
+    return r === 'admin' || r === 'marketing_manager';
   }
 
   return canAccessModule(getModuleFromPath(pathname), u);
@@ -461,7 +462,8 @@ export function canViewFinancialData(user?: User): boolean {
   const currentUser = user || getCurrentUser();
   if (!currentUser) return false;
 
-  return ['admin', 'finance', 'finance_manager', 'finance manager'].includes(currentUser.role);
+  const role = normalizeRole(currentUser.role);
+  return ['admin', 'finance', 'finance_manager', 'finance_manager'].includes(role);
 }
 
 /**

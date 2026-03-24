@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { HealthspirePrintTemplate } from "@/components/print/HealthspirePrintTemplate";
 import { API_BASE } from "@/lib/api/base";
 import { useSettings } from "@/hooks/useSettings";
+import { Download, Printer } from "lucide-react";
 
 // Dynamically load html2pdf when needed to avoid bundler install requirement
 const loadHtml2Pdf = (): Promise<any> => {
@@ -149,6 +150,30 @@ export default function EstimatePreview() {
     return () => window.clearTimeout(t);
   }, [viewMode.isPdf, est, id]);
 
+  const downloadPdf = async () => {
+    if (!est) return;
+    const el = pdfTargetRef.current;
+    if (!el) return;
+    try {
+      try {
+        await (document as any).fonts?.ready;
+      } catch {}
+      const html2pdf = await loadHtml2Pdf();
+      const filename = `estimate-${est?.number || id || ""}.pdf`;
+      await html2pdf()
+        .set({
+          margin: 0,
+          filename,
+          image: { type: "jpeg", quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
+          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+          pagebreak: { mode: ["avoid-all", "css", "legacy"], avoid: ["tr", "table"] },
+        } as any)
+        .from(el)
+        .save();
+    } catch {}
+  };
+
   useEffect(() => {
     if (!est) return;
     if (!viewMode.share) return;
@@ -274,7 +299,15 @@ export default function EstimatePreview() {
           .estimate-preview { padding: 0 !important; background: white !important; min-height: auto !important; }
         }
       `}</style>
-      <div className={`flex items-center justify-end mb-3 print:hidden ${viewMode.isPdf ? "hidden" : ""}`}>
+      <div className={`flex items-center justify-end gap-2 mb-3 print:hidden ${viewMode.isPdf ? "hidden" : ""}`}>
+        <Button variant="outline" onClick={downloadPdf}>
+          <Download className="w-4 h-4 mr-2" />
+          Download
+        </Button>
+        <Button variant="outline" onClick={() => { try { window.print(); } catch {} }}>
+          <Printer className="w-4 h-4 mr-2" />
+          Print
+        </Button>
         <Button variant="outline" onClick={() => navigate(-1)}>Close</Button>
       </div>
 

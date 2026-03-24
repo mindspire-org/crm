@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Edit, Trash2, Calendar, DollarSign, Tag, FileText, RefreshCw } from "lucide-react";
+import { ArrowLeft, Edit, Trash2, Calendar, DollarSign, Tag, FileText, RefreshCw, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { API_BASE } from "@/lib/api/base";
 import { getAuthHeaders } from "@/lib/api/auth";
@@ -136,6 +136,14 @@ export default function SubscriptionDetails() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => navigate(`/subscriptions/${subscription._id}/print`, { state: { data: subscription, type: 'OVERVIEW' } })}>
+            <Printer className="w-4 h-4 mr-1" />
+            Print Overview
+          </Button>
+          <Button variant="outline" onClick={() => navigate(`/subscriptions/${subscription._id}/print`, { state: { data: subscription, type: 'HISTORY' } })}>
+            <Printer className="w-4 h-4 mr-1" />
+            Print History
+          </Button>
           <Button variant="outline" onClick={() => navigate(`/subscriptions?edit=${subscription._id}`)}>
             <Edit className="w-4 h-4 mr-1" />
             Edit

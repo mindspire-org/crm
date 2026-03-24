@@ -9,7 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Upload, Tags, Search, HelpCircle, Edit, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, ChevronsUpDown, Download, Edit, HelpCircle, Plus, Search, Tags, Trash2, Upload, X } from "lucide-react";
+import { DatePicker } from "@/components/ui/date-picker";
 import { NavLink } from "react-router-dom";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -181,6 +182,8 @@ export default function Clients() {
   const [openLabels, setOpenLabels] = useState(false);
   const [openImport, setOpenImport] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [rangeFrom, setRangeFrom] = useState("");
+  const [rangeTo, setRangeTo] = useState("");
   const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [clientsData, setClientsData] = useState<any[]>([]);
   const [q, setQ] = useState("");
@@ -225,7 +228,12 @@ export default function Clients() {
     (async () => {
       try {
         setLoading(true);
-        const url = `${API_BASE}/api/clients${debouncedQ ? `?q=${encodeURIComponent(debouncedQ)}` : ""}`;
+        const sp = new URLSearchParams();
+        if (debouncedQ) sp.set("q", debouncedQ);
+        if (rangeFrom) sp.set("from", rangeFrom);
+        if (rangeTo) sp.set("to", rangeTo);
+        
+        const url = `${API_BASE}/api/clients?${sp.toString()}`;
         const res = await fetch(url, { headers: getAuthHeaders() });
         if (!res.ok) return;
         const data = await res.json();
@@ -246,7 +254,7 @@ export default function Clients() {
         setLoading(false);
       }
     })();
-  }, [debouncedQ]);
+  }, [debouncedQ, rangeFrom, rangeTo]);
 
   useEffect(() => {
     (async () => {
@@ -271,6 +279,59 @@ export default function Clients() {
       [r.name, r.client, r.title, r.email, r.phone].some((v) => (v || "").toLowerCase().includes(s))
     );
   }, [q, contacts]);
+
+  const printClients = () => {
+    const win = window.open("", "_blank");
+    if (!win) return;
+    const html = `
+      <html>
+        <head>
+          <title>Client List</title>
+          <style>
+            body { font-family: sans-serif; padding: 20px; color: #333; }
+            h1 { text-align: center; color: #4f46e5; margin-bottom: 30px; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { padding: 12px; border: 1px solid #e2e8f0; text-align: left; font-size: 12px; }
+            th { background: #f8fafc; font-weight: bold; text-transform: uppercase; }
+            tr:nth-child(even) { background: #f1f5f9; }
+            .currency { text-align: right; font-family: monospace; }
+          </style>
+        </head>
+        <body>
+          <h1>Client List</h1>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Primary Contact</th>
+                <th>Phone</th>
+                <th>Email</th>
+                <th>Total Invoiced</th>
+                <th>Due</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${clientsData.map((c, i) => `
+                <tr>
+                  <td>${i + 1}</td>
+                  <td>${c.company || c.person || "-"}</td>
+                  <td>${c.person || "-"}</td>
+                  <td>${c.phone || "-"}</td>
+                  <td>${c.email || "-"}</td>
+                  <td class="currency">Rs.${Number(c.totalInvoiced || 0).toLocaleString()}</td>
+                  <td class="currency">Rs.${(Number(c.totalInvoiced || 0) - Number(c.paymentReceived || 0)).toLocaleString()}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+          <script>window.print();</script>
+        </body>
+      </html>
+    `;
+    win.document.write(html);
+    win.document.close();
+  };
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -359,14 +420,40 @@ export default function Clients() {
 
         {/* Clients list */}
         <TabsContent value="clients">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Button variant="outline">- Quick filters -</Button>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-3 gap-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <DatePicker 
+                value={rangeFrom} 
+                onChange={setRangeFrom} 
+                placeholder="From Date"
+                className="h-9 w-32 border-slate-200 bg-white shadow-sm"
+              />
+              <span className="text-slate-400">→</span>
+              <DatePicker 
+                value={rangeTo} 
+                onChange={setRangeTo} 
+                placeholder="To Date"
+                className="h-9 w-32 border-slate-200 bg-white shadow-sm"
+              />
+              {(rangeFrom || rangeTo) && (
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-8 w-8 rounded-full text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                  onClick={() => { setRangeFrom(""); setRangeTo(""); }}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
+              <Button variant="outline" className="h-9" onClick={printClients}>
+                <Download className="w-4 h-4 mr-2" />
+                Print List
+              </Button>
             </div>
             <div className="flex items-center gap-2">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input className="pl-9 w-64" placeholder="Search" value={q} onChange={(e)=>setQ(e.target.value)} />
+                <Input className="pl-9 w-64 h-9" placeholder="Search" value={q} onChange={(e)=>setQ(e.target.value)} />
               </div>
             </div>
           </div>
@@ -515,6 +602,45 @@ function ContactsTable({ rows }: { rows: ContactRow[] }) {
 }
 
 function ClientsMainTable({ clients, onClientUpdated, onClientDeleted }: { clients: any[]; onClientUpdated?: (updated:any)=>void; onClientDeleted?: (id: string)=>void }) {
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' | null }>({ key: 'createdAt', direction: 'desc' });
+
+  const sortedClients = useMemo(() => {
+    if (!sortConfig.key || !sortConfig.direction) return clients;
+
+    return [...clients].sort((a, b) => {
+      let aVal = a[sortConfig.key];
+      let bVal = b[sortConfig.key];
+
+      // Handle specific fields
+      if (sortConfig.key === 'name') {
+        aVal = a.company || a.person || '';
+        bVal = b.company || b.person || '';
+      } else if (sortConfig.key === 'clientGroups' || sortConfig.key === 'labels') {
+        aVal = (a[sortConfig.key] || []).join(', ');
+        bVal = (b[sortConfig.key] || []).join(', ');
+      }
+
+      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [clients, sortConfig]);
+
+  const requestSort = (key: string) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const getSortIcon = (key: string) => {
+    if (sortConfig.key !== key) return <ChevronsUpDown className="w-3 h-3 ml-1 opacity-30" />;
+    return sortConfig.direction === 'asc' 
+      ? <ChevronUp className="w-3 h-3 ml-1 text-primary" /> 
+      : <ChevronDown className="w-3 h-3 ml-1 text-primary" />;
+  };
+
   const canViewPricing = useMemo(() => {
     const u = getCurrentUser();
     return u ? canViewFinancialData(u as any) : false;
@@ -626,20 +752,44 @@ function ClientsMainTable({ clients, onClientUpdated, onClientDeleted }: { clien
         <TableHeader>
           <TableRow className="bg-muted/40">
             <TableHead className="w-12">ID</TableHead>
-            <TableHead>Name</TableHead>
-            <TableHead>Primary contact</TableHead>
-            <TableHead>Phone</TableHead>
-            <TableHead>Client groups</TableHead>
-            <TableHead>Labels</TableHead>
-            <TableHead>Projects</TableHead>
-            {canViewPricing && <TableHead>Total invoiced</TableHead>}
-            {canViewPricing && <TableHead>Payment Received</TableHead>}
-            {canViewPricing && <TableHead>Due</TableHead>}
+            <TableHead className="cursor-pointer hover:bg-muted/60 transition-colors" onClick={() => requestSort('name')}>
+              <div className="flex items-center">Name {getSortIcon('name')}</div>
+            </TableHead>
+            <TableHead className="cursor-pointer hover:bg-muted/60 transition-colors" onClick={() => requestSort('person')}>
+              <div className="flex items-center">Primary contact {getSortIcon('person')}</div>
+            </TableHead>
+            <TableHead className="cursor-pointer hover:bg-muted/60 transition-colors" onClick={() => requestSort('phone')}>
+              <div className="flex items-center">Phone {getSortIcon('phone')}</div>
+            </TableHead>
+            <TableHead className="cursor-pointer hover:bg-muted/60 transition-colors" onClick={() => requestSort('clientGroups')}>
+              <div className="flex items-center">Client groups {getSortIcon('clientGroups')}</div>
+            </TableHead>
+            <TableHead className="cursor-pointer hover:bg-muted/60 transition-colors" onClick={() => requestSort('labels')}>
+              <div className="flex items-center">Labels {getSortIcon('labels')}</div>
+            </TableHead>
+            <TableHead className="cursor-pointer hover:bg-muted/60 transition-colors" onClick={() => requestSort('projectsCount')}>
+              <div className="flex items-center">Projects {getSortIcon('projectsCount')}</div>
+            </TableHead>
+            {canViewPricing && (
+              <TableHead className="cursor-pointer hover:bg-muted/60 transition-colors" onClick={() => requestSort('totalInvoiced')}>
+                <div className="flex items-center">Total invoiced {getSortIcon('totalInvoiced')}</div>
+              </TableHead>
+            )}
+            {canViewPricing && (
+              <TableHead className="cursor-pointer hover:bg-muted/60 transition-colors" onClick={() => requestSort('paymentReceived')}>
+                <div className="flex items-center">Payment Received {getSortIcon('paymentReceived')}</div>
+              </TableHead>
+            )}
+            {canViewPricing && (
+              <TableHead className="cursor-pointer hover:bg-muted/60 transition-colors" onClick={() => requestSort('due')}>
+                <div className="flex items-center">Due {getSortIcon('due')}</div>
+              </TableHead>
+            )}
             <TableHead className="w-24 text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {clients.map((c: any, idx: number) => (
+          {sortedClients.map((c: any, idx: number) => (
             <TableRow key={String(c._id || idx)}>
               <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
               <TableCell className="whitespace-nowrap">
@@ -666,13 +816,13 @@ function ClientsMainTable({ clients, onClientUpdated, onClientDeleted }: { clien
               <TableCell className="whitespace-nowrap">{(c.labels||[]).join(", ") || "-"}</TableCell>
               <TableCell className="whitespace-nowrap">{c.projectsCount ?? 0}</TableCell>
               {canViewPricing && (
-                <TableCell className="whitespace-nowrap">{c.totalInvoiced ? `Rs.${c.totalInvoiced}` : "Rs.0"}</TableCell>
+                <TableCell className="whitespace-nowrap">{c.totalInvoiced != null ? `Rs.${Number(c.totalInvoiced).toLocaleString()}` : "Rs.0"}</TableCell>
               )}
               {canViewPricing && (
-                <TableCell className="whitespace-nowrap">{c.paymentReceived ? `Rs.${c.paymentReceived}` : "Rs.0"}</TableCell>
+                <TableCell className="whitespace-nowrap">{c.paymentReceived != null ? `Rs.${Number(c.paymentReceived).toLocaleString()}` : "Rs.0"}</TableCell>
               )}
               {canViewPricing && (
-                <TableCell className="whitespace-nowrap">{c.due ? `Rs.${c.due}` : "Rs.0"}</TableCell>
+                <TableCell className="whitespace-nowrap">{c.due != null ? `Rs.${Number(c.due).toLocaleString()}` : "Rs.0"}</TableCell>
               )}
               <TableCell className="text-right">
                 <div className="inline-flex items-center gap-3">

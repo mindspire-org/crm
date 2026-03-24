@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { MoreHorizontal, Plus, FileText, DollarSign, Mail, Printer, Download, Copy, MessageCircle, X } from "lucide-react";
+import { MoreHorizontal, Plus, FileText, DollarSign, Mail, Printer, Download, Copy, MessageCircle, X, Trash2, Building2, CreditCard, Landmark, Receipt, FolderPlus } from "lucide-react";
 import { BackButton } from "@/components/ui/back-button";
 import { Separator } from "@/components/ui/separator";
 import { getAuthHeaders } from "@/lib/api/auth";
@@ -182,18 +182,20 @@ export default function InvoiceDetailPage() {
       .map((it) => {
         const name = String(it?.name || it?.title || it?.item || "").trim();
         const desc = String(it?.description || "").trim();
-        const description = name ? `<strong>${name}</strong><br/>${desc}` : desc;
+        // If there is both a name and a description, combine them. 
+        // If only description exists (e.g. from older records), use it.
+        const description = (name && desc) ? `<strong>${name}</strong><br/>${desc}` : (desc || name || "-");
         const qty = it?.quantity ?? it?.qty ?? "";
         const price = it?.rate ?? "";
         const rowTotal = Number(qty || 0) * Number(price || 0);
         return {
-          description: description || "-",
+          description: description,
           qty: qty === "" ? "" : String(qty).padStart(2, "0"),
           price: price === "" ? "" : Number(price).toLocaleString(),
           total: Number.isFinite(rowTotal) ? rowTotal.toLocaleString() : "",
         };
       })
-      .filter((x) => x.description);
+      .filter((x) => x.description && x.description !== "-");
     return mapped;
   }, [items]);
 
@@ -268,6 +270,14 @@ export default function InvoiceDetailPage() {
     }
   };
 
+  const openCreateProjectPrompt = () => {
+    setProjectDraftTitle(`Project - Invoice ${inv?.number || ""}`);
+    setProjectDraftPrice(String(invoiceTotal || 0));
+    setProjectDraftStart(new Date().toISOString().slice(0, 10));
+    setProjectDraftDeadline(inv?.dueDate ? new Date(inv.dueDate).toISOString().slice(0, 10) : "");
+    setOpenProjectPrompt(true);
+  };
+
   const createProjectFromInvoice = async () => {
     try {
       const payload = {
@@ -335,6 +345,12 @@ export default function InvoiceDetailPage() {
       setItems(next);
       setInv(updated);
       setOpenItem(false);
+      // Reset form fields
+      setItemName("");
+      setItemDesc("");
+      setItemQty("1");
+      setItemRate("0");
+      setEditingItemIndex(null);
     }
   };
 
@@ -384,12 +400,26 @@ export default function InvoiceDetailPage() {
           <Button size="sm" onClick={() => setOpenPay(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white"><DollarSign className="w-4 h-4 mr-2"/>Add Payment</Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild><Button variant="outline" size="sm">Actions</Button></DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => navigate(`/invoices/${id}/preview`)}><FileText className="w-4 h-4 mr-2"/>Preview</DropdownMenuItem>
-              <DropdownMenuItem onClick={downloadPdfDirect}><Download className="w-4 h-4 mr-2"/>Download PDF</DropdownMenuItem>
-              <DropdownMenuItem onClick={convertToContract}><Copy className="w-4 h-4 mr-2"/>Convert to Contract</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setOpenInfo(true)}><MoreHorizontal className="w-4 h-4 mr-2"/>Branding Info</DropdownMenuItem>
-            </DropdownMenuContent>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => navigate(`/invoices/${id}/preview`)}><FileText className="w-4 h-4 mr-2"/>Preview</DropdownMenuItem>
+                <DropdownMenuItem onClick={downloadPdfDirect}><Download className="w-4 h-4 mr-2"/>Download PDF</DropdownMenuItem>
+                <DropdownMenuItem onClick={async () => {
+                  if (!inv?.number || !confirm("Are you sure you want to delete this invoice?")) return;
+                  try {
+                    const r = await fetch(`${API_BASE}/api/invoices/${encodeURIComponent(inv.number)}`, { method: 'DELETE', headers: getAuthHeaders() });
+                    if (r.ok) {
+                      toast.success("Invoice deleted");
+                      navigate("/invoices");
+                    } else {
+                      const err = await r.json().catch(() => ({}));
+                      toast.error(err.error || "Failed to delete invoice");
+                    }
+                  } catch { toast.error("Failed to delete invoice"); }
+                }} className="text-destructive"><Trash2 className="w-4 h-4 mr-2"/>Delete</DropdownMenuItem>
+                <DropdownMenuItem onClick={convertToContract}><Copy className="w-4 h-4 mr-2"/>Convert to Contract</DropdownMenuItem>
+                <DropdownMenuItem onClick={openCreateProjectPrompt}><FolderPlus className="w-4 h-4 mr-2"/>Create Project</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setOpenInfo(true)}><MoreHorizontal className="w-4 h-4 mr-2"/>Branding Info</DropdownMenuItem>
+              </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </div>
@@ -433,7 +463,12 @@ export default function InvoiceDetailPage() {
                       <TableRow key={idx} className="group">
                         <TableCell className="max-w-[300px]">
                           <div className="font-bold text-slate-900">{it.name}</div>
-                          <div className="text-[11px] text-slate-500 prose-sm" dangerouslySetInnerHTML={{ __html: it.description }} />
+                          {it.description && (
+                            <div 
+                              className="text-[11px] text-slate-500 prose-sm mt-1" 
+                              dangerouslySetInnerHTML={{ __html: it.description }} 
+                            />
+                          )}
                         </TableCell>
                         <TableCell className="font-mono">{it.quantity}</TableCell>
                         <TableCell className="font-mono text-xs">Rs.{Number(it.rate).toLocaleString()}</TableCell>
@@ -476,15 +511,62 @@ export default function InvoiceDetailPage() {
               </CardContent>
             </Card>
 
-            <Card className="lg:col-span-4 border-slate-200 shadow-sm self-start">
-              <CardHeader><CardTitle className="text-sm uppercase tracking-widest text-slate-400">Payment Protocol</CardTitle></CardHeader>
-              <CardContent className="space-y-6">
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-[11px] font-mono whitespace-pre-line leading-relaxed text-slate-600">{viewPaymentInfo}</div>
-                <Separator />
-                <div className="space-y-3 text-sm">
-                  <div className="flex justify-between"><span>Status:</span><Badge className={cn("uppercase text-[10px]", inv.status === 'Paid' ? 'bg-emerald-500' : 'bg-rose-500')}>{inv.status}</Badge></div>
-                  <div className="flex justify-between"><span>Total Paid:</span><span className="font-bold text-emerald-600">Rs.{paymentsTotal.toLocaleString()}</span></div>
-                  <div className="flex justify-between pt-2 border-t font-black"><span>Total Remaining:</span><span className="text-lg text-rose-600">Rs.{balanceDue.toLocaleString()}</span></div>
+            <Card className="lg:col-span-4 border-slate-200 shadow-sm self-start overflow-hidden rounded-xl bg-white">
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <CardTitle className="text-[10px] uppercase tracking-widest font-bold text-slate-500 flex items-center gap-2">
+                  <CreditCard className="w-3.5 h-3.5" />
+                  Payment Protocol
+                </CardTitle>
+                <Badge variant="outline" className={cn(
+                  "text-[9px] font-bold px-2 py-0 h-5 border-0 bg-transparent",
+                  inv.status === 'Paid' ? 'text-emerald-600' : 'text-rose-600'
+                )}>
+                  {inv.status}
+                </Badge>
+              </div>
+              <CardContent className="p-6 space-y-6">
+                <div className="space-y-5">
+                  {viewPaymentInfo.split('\n\n').map((block, bIdx) => {
+                    const lines = block.split('\n');
+                    const title = lines[0]?.split(':')[1]?.trim() || "Account";
+                    return (
+                      <div key={bIdx} className="space-y-2">
+                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{title}</div>
+                        <div className="space-y-1">
+                          {lines.slice(1).map((line, lIdx) => {
+                            const [label, ...valueParts] = line.split(':');
+                            const value = valueParts.join(':').trim();
+                            if (!label || !value) return null;
+                            return (
+                              <div key={lIdx} className="flex justify-between text-[11px] leading-relaxed">
+                                <span className="text-slate-400">{label.trim()}</span>
+                                <span className="text-slate-700 font-medium">{value}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 space-y-3">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-400">Total Paid</span>
+                    <span className="font-semibold text-emerald-600">Rs.{paymentsTotal.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-sm pt-1">
+                    <span className="font-bold text-slate-900">Balance Due</span>
+                    <span className="font-bold text-rose-600">Rs.{balanceDue.toLocaleString()}</span>
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    className="w-full mt-2 h-9 text-xs font-bold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 border border-indigo-100 rounded-lg"
+                    onClick={() => setOpenPay(true)}
+                  >
+                    <DollarSign className="w-3.5 h-3.5 mr-2" />
+                    Record Payment
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -635,6 +717,41 @@ export default function InvoiceDetailPage() {
               {editingItemIndex === null ? "Add Item" : "Update Item"}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={openProjectPrompt} onOpenChange={setOpenProjectPrompt}>
+        <DialogContent className="bg-card max-w-lg" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Start a project for this invoice?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <div className="text-muted-foreground">Create a project linked to this invoice so you can track tasks, milestones and deadline.</div>
+            <div className="grid gap-3">
+              <div className="space-y-1">
+                <Label>Project title</Label>
+                <Input value={projectDraftTitle} onChange={(e)=>setProjectDraftTitle(e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Price</Label>
+                  <Input type="number" value={projectDraftPrice} onChange={(e)=>setProjectDraftPrice(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label>Start</Label>
+                  <DatePicker value={projectDraftStart} onChange={setProjectDraftStart} placeholder="Pick start date" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label>Deadline</Label>
+                <DatePicker value={projectDraftDeadline} onChange={setProjectDraftDeadline} placeholder="Pick deadline" />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenProjectPrompt(false)}>Not now</Button>
+            <Button onClick={createProjectFromInvoice}>Create project</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

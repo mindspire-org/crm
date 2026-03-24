@@ -29,10 +29,24 @@ const MessageSchema = new mongoose.Schema(
       type: String,
       size: Number
     }],
+    type: {
+      type: String,
+      enum: ['text', 'image', 'video', 'file'],
+      default: 'text'
+    },
+    mediaUrl: String,
     isDeleted: {
       type: Boolean,
       default: false,
       index: true
+    },
+    isStarred: {
+      type: Boolean,
+      default: false
+    },
+    isPinned: {
+      type: Boolean,
+      default: false
     },
     deletedAt: {
       type: Date

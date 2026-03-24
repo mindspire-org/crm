@@ -8,6 +8,18 @@ const CandidateSchema = new mongoose.Schema(
     applied: { type: Date, default: Date.now },
     jobId: { type: mongoose.Schema.Types.ObjectId, ref: "Job" },
     jobTitle: { type: String, default: "" },
+    email: { type: String, default: "" },
+    phone: { type: String, default: "" },
+    city: { type: String, default: "" },
+    company: { type: String, default: "" },
+    contactMethod: { type: String, default: "" },
+    portfolioUrl: { type: String, default: "" },
+    notes: { type: String, default: "" },
+    photoUrl: { type: String, default: "" },
+    resumeUrl: { type: String, default: "" },
+    experience: { type: String, default: "" },
+    category: { type: String, default: "" },
+    labels: [{ type: String }],
   },
   { timestamps: true }
 );

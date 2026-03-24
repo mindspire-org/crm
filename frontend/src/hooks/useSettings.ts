@@ -103,6 +103,17 @@ export type Settings = {
     version: string;
     updatedAt: string;
   };
+  hr?: {
+    standardStartTime: string;
+    standardEndTime: string;
+    lateThresholdMinutes: number;
+    absentThresholdHours: number;
+    deductionLateAmount: number;
+    deductionAbsentAmount: number;
+    hiringMinExperience: string;
+    hiringMinEducation: string;
+    hiringAgeLimit?: string;
+  };
 };
 
 const DEFAULTS: Settings = {
@@ -129,6 +140,17 @@ const DEFAULTS: Settings = {
     fontFamily: "Inter",
     darkMode: false,
     compactMode: false,
+  },
+  hr: {
+    standardStartTime: "09:00",
+    standardEndTime: "18:00",
+    lateThresholdMinutes: 15,
+    absentThresholdHours: 4,
+    deductionLateAmount: 500,
+    deductionAbsentAmount: 2000,
+    hiringMinExperience: "2 years",
+    hiringMinEducation: "Bachelor's",
+    hiringAgeLimit: "18-45",
   },
   localization: {
     language: "en",
