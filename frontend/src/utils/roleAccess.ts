@@ -317,7 +317,7 @@ export function canAccessModule(module: ModuleKey, user?: User | null): boolean 
   if (module === 'user_management') return false;
 
   if (role === 'client') {
-    const allowed = new Set<ModuleKey>(['client_portal', 'messages', 'dashboard', 'profile']);
+    const allowed = new Set<ModuleKey>(['client_portal', 'messages', 'dashboard', 'profile', 'tickets']);
     return allowed.has(module);
   }
 

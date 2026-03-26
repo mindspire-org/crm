@@ -1517,8 +1517,12 @@ export default function Leads() {
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                        <Command value={leadSystemSearch} onValueChange={setLeadSystemSearch}>
-                          <CommandInput placeholder="Search system..." />
+                        <Command>
+                          <CommandInput 
+                            placeholder="Search system..." 
+                            value={leadSystemSearch}
+                            onValueChange={setLeadSystemSearch}
+                          />
                           <CommandList>
                             <CommandGroup>
                               <CommandItem
@@ -1534,11 +1538,6 @@ export default function Leads() {
                               </CommandItem>
 
                               {uniqueSystemNeededOptions
-                                .filter((option) => {
-                                  const q = String(leadSystemSearch || "").trim().toLowerCase();
-                                  if (!q) return true;
-                                  return option.toLowerCase().includes(q);
-                                })
                                 .map((option) => {
                                   const selected = leadForm.systemNeeded === option;
                                   return (
@@ -1571,11 +1570,7 @@ export default function Leads() {
                                 + Add Custom Value
                               </CommandItem>
                             </CommandGroup>
-                            {uniqueSystemNeededOptions.filter((option) => {
-                              const q = String(leadSystemSearch || "").trim().toLowerCase();
-                              if (!q) return false;
-                              return option.toLowerCase().includes(q);
-                            }).length === 0 && String(leadSystemSearch || "").trim() ? (
+                            {uniqueSystemNeededOptions.length === 0 && String(leadSystemSearch || "").trim() ? (
                               <CommandEmpty>No system found.</CommandEmpty>
                             ) : null}
                           </CommandList>
@@ -1610,8 +1605,12 @@ export default function Leads() {
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                        <Command value={leadOwnerSearch} onValueChange={setLeadOwnerSearch}>
-                          <CommandInput placeholder="Search owner..." />
+                        <Command>
+                          <CommandInput 
+                            placeholder="Search owner..." 
+                            value={leadOwnerSearch}
+                            onValueChange={setLeadOwnerSearch}
+                          />
                           <CommandList>
                             <CommandGroup>
                               <CommandItem
@@ -1626,12 +1625,6 @@ export default function Leads() {
                                 -
                               </CommandItem>
                               {employees
-                                .filter((e) => {
-                                  const q = String(leadOwnerSearch || "").trim().toLowerCase();
-                                  if (!q) return true;
-                                  const label = employeeDisplayName(e).toLowerCase();
-                                  return label.includes(q);
-                                })
                                 .map((e) => {
                                   const label = employeeDisplayName(e);
                                   const selected = leadForm.ownerId === e._id;
@@ -1651,12 +1644,7 @@ export default function Leads() {
                                   );
                                 })}
                             </CommandGroup>
-                            {employees.filter((e) => {
-                              const q = String(leadOwnerSearch || "").trim().toLowerCase();
-                              if (!q) return false;
-                              const label = employeeDisplayName(e).toLowerCase();
-                              return label.includes(q);
-                            }).length === 0 && String(leadOwnerSearch || "").trim() ? (
+                            {employees.length === 0 && String(leadOwnerSearch || "").trim() ? (
                               <CommandEmpty>No owner found.</CommandEmpty>
                             ) : null}
                           </CommandList>

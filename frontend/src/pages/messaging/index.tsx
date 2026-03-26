@@ -15,6 +15,7 @@ import { Separator } from '@/components/ui/separator';
 import EmojiPicker from 'emoji-picker-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { AudioPlayer } from './components/AudioPlayer';
 import { cn } from '@/lib/utils';
 import { uploadAttachment, editMessage as apiEditMessage, deleteMessage as apiDeleteMessage, deleteConversation as apiDeleteConversation } from '@/lib/api/messaging';
@@ -46,6 +47,7 @@ export default function Messaging() {
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [recordingMs, setRecordingMs] = useState(0);
   const [voiceBlob, setVoiceBlob] = useState<Blob | null>(null);
   const [voicePreviewUrl, setVoicePreviewUrl] = useState<string>('');
@@ -94,6 +96,9 @@ export default function Messaging() {
     error,
     selectConversation,
     sendMessage,
+    starMessage,
+    pinMessage,
+    markAsRead,
     refreshConversations,
   } = useMessaging();
 
@@ -330,35 +335,24 @@ export default function Messaging() {
 
   const handleStarMessage = async (messageId: string, isStarred: boolean) => {
     try {
-      const res = await fetch(`${API_BASE}/api/messages/${messageId}`, {
-        method: 'PATCH',
-        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ isStarred: !isStarred })
-      });
-      if (res.ok) {
-        queryClient.invalidateQueries({ queryKey: ['messages', selectedConversation?._id] });
-        toast({ title: !isStarred ? 'Message starred' : 'Message unstarred' });
-      }
-    } catch (e) {}
+      await starMessage(messageId, !isStarred);
+      toast({ title: !isStarred ? 'Message starred' : 'Message unstarred' });
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to update star status', variant: 'destructive' });
+    }
   };
 
   const handlePinMessage = async (messageId: string, isPinned: boolean) => {
     try {
-      const res = await fetch(`${API_BASE}/api/messages/${messageId}`, {
-        method: 'PATCH',
-        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ isPinned: !isPinned })
-      });
-      if (res.ok) {
-        queryClient.invalidateQueries({ queryKey: ['messages', selectedConversation?._id] });
-        toast({ title: !isPinned ? 'Message pinned' : 'Message unpinned' });
-      }
-    } catch (e) {}
+      await pinMessage(messageId, !isPinned);
+      toast({ title: !isPinned ? 'Message pinned' : 'Message unpinned' });
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to update pin status', variant: 'destructive' });
+    }
   };
 
   const handleDeleteConversation = async () => {
     if (!selectedConversation?._id) return;
-    if (!window.confirm('Are you sure you want to delete this conversation? This action cannot be undone.')) return;
     try {
       await apiDeleteConversation(selectedConversation._id);
       queryClient.setQueryData(['conversations'], (old: any) =>
@@ -367,6 +361,7 @@ export default function Messaging() {
       selectConversation('');
       queryClient.removeQueries({ queryKey: ['messages', selectedConversation._id] });
       toast({ title: 'Conversation deleted' });
+      setIsDeleteDialogOpen(false);
     } catch (e: any) {
       toast({ title: 'Error', description: e.message || 'Failed to delete conversation', variant: 'destructive' });
     }
@@ -382,13 +377,35 @@ export default function Messaging() {
     } catch (e) {}
   }, [selectedConversation, sendMessage, toast]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    // Scroll to bottom on initial load and when messages change
+    scrollToBottom('auto');
+  }, [selectedConversation?._id]);
+
+  useEffect(() => {
+    if (selectedConversation?._id && messages.length > 0) {
+      const unreadIds = messages
+        .filter((m) => !m.readBy?.includes(userId || ''))
+        .map((m) => m._id);
+      if (unreadIds.length > 0) {
+        markAsRead(unreadIds);
+      }
+    }
+  }, [selectedConversation?._id, messages, userId, markAsRead]);
+
+  useEffect(() => {
+    // Only scroll to bottom if we are already near the bottom OR if the last message is from the user
+    const lastMessage = messages[messages.length - 1];
+    const isFromUser = lastMessage?.sender?._id === userId;
+    
+    if (isFromUser) {
+      scrollToBottom('smooth');
+    }
+  }, [messages, userId]);
 
   const getOtherParticipants = useCallback((conversation: any) => {
     if (!conversation?.participants) return [];
@@ -656,11 +673,28 @@ export default function Messaging() {
                     <DropdownMenuItem onClick={() => setIsNewConversationOpen(true)}>
                       <Users className="mr-2 h-4 w-4" /> New group
                     </DropdownMenuItem>
-                    <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={handleDeleteConversation}>
+                    <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setIsDeleteDialogOpen(true)}>
                       <Trash2 className="mr-2 h-4 w-4" /> Delete conversation
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+
+                <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will permanently delete this conversation and all its messages. This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleDeleteConversation} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             </div>
 
@@ -714,10 +748,35 @@ export default function Messaging() {
                                 {message.content && <p className="whitespace-pre-wrap break-words">{message.content}</p>}
                                 {Array.isArray(message.attachments) && message.attachments.map((att: any, idx: number) => {
                                   if (att.type?.startsWith('audio/')) {
-                                    return <AudioPlayer key={idx} url={att.url.startsWith('http') ? att.url : `${API_BASE}${att.url}`} />;
+                                    return <AudioPlayer key={idx} src={att.url.startsWith('http') ? att.url : `${API_BASE}${att.url}`} mine={isOwn} />;
                                   }
                                   if (att.isSticker) {
                                     return <img key={idx} src={att.url} alt="sticker" className="w-32 h-32 object-contain" />;
+                                  }
+                                  if (att.type?.startsWith('image/')) {
+                                    const imgUrl = att.url.startsWith('http') ? att.url : `${API_BASE}${att.url}`;
+                                    return (
+                                      <div key={idx} className="mt-2 rounded-lg overflow-hidden border border-white/20 max-w-sm">
+                                        <img 
+                                          src={imgUrl} 
+                                          alt={att.name || "Image"} 
+                                          className="w-full h-auto cursor-pointer hover:opacity-90 transition-opacity" 
+                                          onClick={() => window.open(imgUrl, '_blank')}
+                                        />
+                                      </div>
+                                    );
+                                  }
+                                  if (att.type?.startsWith('video/')) {
+                                    const videoUrl = att.url.startsWith('http') ? att.url : `${API_BASE}${att.url}`;
+                                    return (
+                                      <div key={idx} className="mt-2 rounded-lg overflow-hidden border border-white/20 max-w-sm bg-black/20">
+                                        <video 
+                                          src={videoUrl} 
+                                          controls 
+                                          className="w-full h-auto"
+                                        />
+                                      </div>
+                                    );
                                   }
                                   if (att.type === 'project_tag') {
                                     return (
@@ -730,6 +789,28 @@ export default function Messaging() {
                                           <div className="bg-white h-full transition-all" style={{ width: `${att.progress}%` }} />
                                         </div>
                                       </div>
+                                    );
+                                  }
+                                  // Generic file download
+                                  if (att.url) {
+                                    const fileUrl = att.url.startsWith('http') ? att.url : `${API_BASE}${att.url}`;
+                                    return (
+                                      <a 
+                                        key={idx} 
+                                        href={fileUrl} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer" 
+                                        className="flex items-center gap-2 bg-black/10 hover:bg-black/20 p-2 rounded-lg text-xs font-medium transition-colors border border-white/10 group/file mt-1"
+                                      >
+                                        <div className="p-1.5 bg-white/10 rounded-md">
+                                          <FileIcon className="w-3.5 h-3.5" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="truncate">{att.name || "Download file"}</p>
+                                          <p className="opacity-50 text-[10px]">{(att.size / 1024).toFixed(1)} KB</p>
+                                        </div>
+                                        <Download className="w-3.5 h-3.5 opacity-0 group-hover/file:opacity-100 transition-opacity" />
+                                      </a>
                                     );
                                   }
                                   return null;
@@ -807,6 +888,31 @@ export default function Messaging() {
                   </Button>
                 </div>
               )}
+
+              {selectedFile && (
+                <div className="mb-2 p-2 bg-muted/50 rounded-lg flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-xs">
+                    <Paperclip className="h-3.5 w-3.5 text-primary" />
+                    <span className="font-medium truncate max-w-[200px]">{selectedFile.name}</span>
+                    <span className="text-muted-foreground">({(selectedFile.size / 1024).toFixed(1)} KB)</span>
+                  </div>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => setSelectedFile(null)}>
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              )}
+
+              {voicePreviewUrl && (
+                <div className="mb-2 p-2 bg-muted/50 rounded-lg flex items-center gap-3">
+                  <div className="flex-1">
+                    <AudioPlayer src={voicePreviewUrl} />
+                  </div>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={stopVoicePreview}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+
               <form onSubmit={handleSendMessage} className="flex items-center gap-2">
                 <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} />
                 
@@ -832,13 +938,38 @@ export default function Messaging() {
                   <Paperclip className="w-5 h-5" />
                 </Button>
 
-                <Input
-                  placeholder={isRecording ? "Recording..." : "Type a message..."}
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  className="flex-1 h-10 bg-muted/30 border-0"
-                  disabled={isRecording}
-                />
+                {isRecording ? (
+                  <div className="flex-1 flex items-center gap-3 bg-muted/30 px-3 h-10 rounded-md border border-red-500/20">
+                    <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                    <span className="text-sm font-medium flex-1">Recording: {Math.floor(recordingMs / 1000)}s</span>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      type="button" 
+                      className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                      onClick={() => {
+                        stopRecording();
+                        setVoiceBlob(null);
+                        setVoicePreviewUrl('');
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <Input
+                    placeholder="Type a message..."
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    className="flex-1 h-10 bg-muted/30 border-0"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendMessage(e as any);
+                      }
+                    }}
+                  />
+                )}
 
                 <Popover open={showStickers} onOpenChange={setShowStickers}>
                   <PopoverTrigger asChild>

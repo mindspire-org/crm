@@ -19,9 +19,11 @@ interface MessagingContextType {
   isLoading: boolean;
   error: Error | null;
   selectConversation: (conversationId: string) => void;
-  sendMessage: (content: string, attachments?: any[]) => Promise<void>;
+  sendMessage: (content: string, attachments?: any[], type?: string) => Promise<void>;
   createNewConversation: (participantIds: string[]) => Promise<void>;
   markAsRead: (messageIds: string[]) => void;
+  starMessage: (messageId: string, isStarred: boolean) => Promise<void>;
+  pinMessage: (messageId: string, isPinned: boolean) => Promise<void>;
   refreshConversations: () => void;
 }
 
@@ -69,9 +71,9 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // Mutation for sending a message
   const sendMessageMutation = useMutation({
-    mutationFn: async ({ content, attachments = [] }: { content: string; attachments?: any[] }) => {
+    mutationFn: async ({ content, attachments = [], type = 'text' }: { content: string; attachments?: any[]; type?: string }) => {
       if (!selectedConversation) throw new Error('No conversation selected');
-      return messagingApi.sendMessage(selectedConversation._id, content, attachments);
+      return messagingApi.sendMessage(selectedConversation._id, content, attachments, type);
     },
     onSuccess: (newMessage) => {
       // Update the messages query cache
@@ -124,6 +126,32 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     },
   });
 
+  // Mutation for starring a message
+  const starMessageMutation = useMutation({
+    mutationFn: ({ messageId, isStarred }: { messageId: string; isStarred: boolean }) =>
+      messagingApi.starMessage(messageId, isStarred),
+    onSuccess: (updatedMessage) => {
+      queryClient.setQueryData(['messages', selectedConversation?._id], (old: any) =>
+        (Array.isArray(old) ? old : []).map((msg: any) =>
+          msg._id === updatedMessage._id ? updatedMessage : msg
+        )
+      );
+    },
+  });
+
+  // Mutation for pinning a message
+  const pinMessageMutation = useMutation({
+    mutationFn: ({ messageId, isPinned }: { messageId: string; isPinned: boolean }) =>
+      messagingApi.pinMessage(messageId, isPinned),
+    onSuccess: (updatedMessage) => {
+      queryClient.setQueryData(['messages', selectedConversation?._id], (old: any) =>
+        (Array.isArray(old) ? old : []).map((msg: any) =>
+          msg._id === updatedMessage._id ? updatedMessage : msg
+        )
+      );
+    },
+  });
+
   const selectConversation = useCallback((conversationId: string) => {
     if (!conversationId) {
       setSelectedConversation(null);
@@ -135,11 +163,11 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   }, [conversations]);
 
-  const handleSendMessage = useCallback(async (content: string, attachments: any[] = []) => {
+  const handleSendMessage = useCallback(async (content: string, attachments: any[] = [], type: string = 'text') => {
     if (!content.trim() && attachments.length === 0) return;
     
     try {
-      await sendMessageMutation.mutateAsync({ content, attachments });
+      await sendMessageMutation.mutateAsync({ content, attachments, type });
     } catch (error) {
       console.error('Failed to send message:', error);
       throw error;
@@ -160,6 +188,14 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     markAsReadMutation.mutate(messageIds);
   }, [markAsReadMutation]);
 
+  const starMessage = useCallback(async (messageId: string, isStarred: boolean) => {
+    await starMessageMutation.mutateAsync({ messageId, isStarred });
+  }, [starMessageMutation]);
+
+  const pinMessage = useCallback(async (messageId: string, isPinned: boolean) => {
+    await pinMessageMutation.mutateAsync({ messageId, isPinned });
+  }, [pinMessageMutation]);
+
   const refreshConversations = useCallback(() => {
     refetchConversations();
   }, [refetchConversations]);
@@ -175,6 +211,8 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     sendMessage: handleSendMessage,
     createNewConversation,
     markAsRead,
+    starMessage,
+    pinMessage,
     refreshConversations,
   };
 

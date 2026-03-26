@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { Sidebar } from "./Sidebar";
 import { TopNav } from "./TopNav";
 import { MobileBottomNav } from "./MobileBottomNav";
@@ -12,6 +13,7 @@ import { API_BASE } from "@/lib/api/base";
 export function MainLayout() {
   const location = useLocation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [activeAnnouncement, setActiveAnnouncement] = useState<any>(null);
@@ -31,6 +33,23 @@ export function MainLayout() {
         setActiveAnnouncement(data);
       } catch (err) {
         console.error("Failed to parse announcement SSE:", err);
+      }
+    });
+
+    sse.addEventListener("invalidate", (e: any) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.keys && Array.isArray(data.keys)) {
+          data.keys.forEach((key: string) => {
+            if (key === "messages" && data.conversationId) {
+              queryClient.invalidateQueries({ queryKey: ["messages", data.conversationId] });
+            } else {
+              queryClient.invalidateQueries({ queryKey: [key] });
+            }
+          });
+        }
+      } catch (err) {
+        console.error("Failed to parse invalidate SSE:", err);
       }
     });
 

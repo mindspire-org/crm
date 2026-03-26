@@ -4,10 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Search, MessageSquare, Users, Send, Paperclip, Smile, MoreVertical, Plus, Phone, Video, Info, Mic, Settings, Moon, Sun, Palette } from "lucide-react";
+import { Search, MessageSquare, Users, Send, Paperclip, Smile, MoreVertical, Plus, Phone, Video, Info, Mic, Settings, Moon, Sun, Palette, FileIcon, X, Loader2, Play, Pause, Volume2, Download, ExternalLink, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 import { useMessaging } from "@/contexts/MessagingContext";
 import { NewConversation } from "./components/NewConversation";
+import { AudioPlayer } from "./components/AudioPlayer";
 import { useToast } from "@/components/ui/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
@@ -15,6 +16,9 @@ import { useTheme } from "next-themes";
 import Picker from "emoji-picker-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { uploadAttachment } from "@/lib/api/messaging";
+import { API_BASE } from "@/lib/api/base";
+import { cn } from "@/lib/utils";
 const getStoredAuthUser = (): { id?: string; _id?: string; email?: string; role?: string } | null => {
   const raw = localStorage.getItem("auth_user") || sessionStorage.getItem("auth_user");
   if (!raw) return null;
@@ -32,6 +36,10 @@ export default function MessagingEnhanced() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showThemeMenu, setShowThemeMenu] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -72,12 +80,26 @@ export default function MessagingEnhanced() {
     }
   }, [conversationIdFromUrl, safeConversations, selectedConversation, selectConversation]);
   // Handle sending a new message
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSendMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!newMessage.trim() && !selectedFile) return;
 
     try {
-      await sendMessage(newMessage);
+      setUploading(true);
+      let attachments: any[] = [];
+      let type = 'text';
+      
+      if (selectedFile) {
+        const uploaded = await uploadAttachment(selectedFile);
+        attachments = [uploaded];
+        
+        if (selectedFile.type.startsWith('image/')) type = 'image';
+        else if (selectedFile.type.startsWith('video/')) type = 'video';
+        else if (selectedFile.type.startsWith('audio/')) type = 'audio';
+        else type = 'file';
+      }
+
+      await sendMessage(newMessage, attachments, type);
       setNewMessage("");
       setSelectedFile(null);
       setShowEmojiPicker(false);
@@ -88,6 +110,51 @@ export default function MessagingEnhanced() {
         description: error.message || "Failed to send message",
         variant: "destructive",
       });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        audioChunksRef.current.push(event.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const file = new File([audioBlob], `voice-message-${Date.now()}.webm`, { type: 'audio/webm' });
+        
+        try {
+          setUploading(true);
+          const uploaded = await uploadAttachment(file);
+          await sendMessage("", [uploaded], 'voice');
+          toast({ title: "Success", description: "Voice message sent" });
+        } catch (error) {
+          toast({ title: "Error", description: "Failed to send voice message", variant: "destructive" });
+        } finally {
+          setUploading(false);
+        }
+        
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (error) {
+      toast({ title: "Error", description: "Could not access microphone", variant: "destructive" });
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
     }
   };
 
@@ -96,11 +163,9 @@ export default function MessagingEnhanced() {
     const file = e.target.files?.[0];
     if (file) {
       setSelectedFile(file);
-      toast({
-        title: "File selected",
-        description: `${file.name} attached`,
-      });
     }
+    // Reset value so the same file can be selected again if removed
+    e.target.value = "";
   };
 
   // Handle emoji selection
@@ -370,26 +435,111 @@ export default function MessagingEnhanced() {
             </div>
             <div className="flex-1 overflow-hidden">
               <ScrollArea className="h-full">
-              <div className="p-4 space-y-3 min-h-0">
+              <div className="p-4 space-y-4 min-h-0">
                 {(Array.isArray(messages) ? messages : []).map((m: any) => {
                   const mine = String(m?.sender?._id || "") === String(userId || "");
+                  const attachments = Array.isArray(m.attachments) ? m.attachments : [];
+                  
                   return (
                     <div key={m._id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-                      <div
-                        className={`max-w-[70%] rounded-lg px-3 py-2 text-sm ${
-                          mine ? "bg-primary text-primary-foreground" : "bg-muted"
-                        }`}
-                      >
-                        {!!m?.content && <div className="whitespace-pre-wrap break-words">{m.content}</div>}
-                        {!!m?.createdAt && (
-                          <div
-                            className={`mt-1 text-[10px] ${
-                              mine ? "text-primary-foreground/70" : "text-muted-foreground"
-                            }`}
-                          >
-                            {format(new Date(m.createdAt), "p")}
-                          </div>
-                        )}
+                      <div className={cn("max-w-[80%] flex flex-col gap-1", mine ? "items-end" : "items-start")}>
+                        <div
+                          className={cn(
+                            "rounded-2xl px-4 py-2.5 text-sm shadow-sm",
+                            mine ? "bg-primary text-primary-foreground rounded-tr-none" : "bg-muted text-foreground rounded-tl-none"
+                          )}
+                        >
+                          {!!m?.content && <div className="whitespace-pre-wrap break-words">{m.content}</div>}
+                          
+                          {/* Attachments Display */}
+                          {attachments.length > 0 ? (
+                            <div className={cn("mt-2 space-y-2 w-full min-w-[120px]", m.content ? "pt-2 border-t border-white/10" : "")}>
+                              {attachments.map((att: any, idx: number) => {
+                                if (!att) return null;
+                                const url = typeof att === 'string' ? att : att.url;
+                                if (!url) return null;
+                                
+                                const name = typeof att === 'object' ? att.name : "Attachment";
+                                const type = typeof att === 'object' ? att.type : "";
+                                const fullUrl = url.startsWith('http') ? url : `${API_BASE}${url.startsWith('/') ? '' : '/'}${url}`;
+                                
+                                if (type?.startsWith('image/') || url.match(/\.(jpeg|jpg|gif|png|webp)$/i)) {
+                                  return (
+                                    <div key={idx} className="rounded-lg overflow-hidden border border-white/10 bg-black/5">
+                                      <img 
+                                        src={fullUrl} 
+                                        alt={name} 
+                                        className="max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity block mx-auto"
+                                        onClick={() => window.open(fullUrl, '_blank')}
+                                        loading="lazy"
+                                      />
+                                    </div>
+                                  );
+                                }
+                                
+                                if (type?.startsWith('video/') || url.match(/\.(mp4|webm|ogg|mov)$/i)) {
+                                  return (
+                                    <div key={idx} className="rounded-lg overflow-hidden border border-white/10 bg-black/20">
+                                      <video 
+                                        src={fullUrl} 
+                                        controls 
+                                        className="max-w-full rounded-lg block mx-auto"
+                                      />
+                                    </div>
+                                  );
+                                }
+                                
+                                if (type?.startsWith('audio/') || type === 'voice' || url.match(/\.(mp3|wav|ogg|webm|m4a)$/i)) {
+                                  return (
+                                    <div key={idx} className="w-full min-w-[220px] py-1">
+                                      <AudioPlayer src={fullUrl} mine={mine} />
+                                    </div>
+                                  );
+                                }
+                                
+                                return (
+                                  <a 
+                                    key={idx}
+                                    href={fullUrl} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className={cn(
+                                      "flex items-center gap-3 p-3 rounded-xl border transition-all",
+                                      mine ? "bg-white/10 border-white/20 hover:bg-white/20 text-white" : "bg-white border-slate-200 hover:bg-slate-50 text-slate-900"
+                                    )}
+                                  >
+                                    <div className={cn("p-2 rounded-lg shrink-0", mine ? "bg-white/20" : "bg-indigo-50")}>
+                                      <FileIcon className={cn("w-5 h-5", mine ? "text-white" : "text-indigo-600")} />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-bold truncate">{name}</p>
+                                      <p className={cn("text-[10px] uppercase tracking-wider opacity-60")}>Document</p>
+                                    </div>
+                                    <Download className="w-4 h-4 shrink-0 opacity-60" />
+                                  </a>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            !m.content && (
+                              <div className="flex items-center gap-2 text-[10px] opacity-50 italic py-1">
+                                <FileIcon className="w-3 h-3" /> Loading media...
+                              </div>
+                            )
+                          )}
+
+                          {!!m?.createdAt && (
+                            <div
+                              className={cn(
+                                "mt-1.5 text-[9px] font-medium flex items-center gap-1.5",
+                                mine ? "text-white/70" : "text-slate-400"
+                              )}
+                            >
+                              {format(new Date(m.createdAt), "p")}
+                              {mine && <CheckCircle2 className="w-2.5 h-2.5 opacity-70" />}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -400,46 +550,96 @@ export default function MessagingEnhanced() {
             </div>
 
             <Separator />
-            <form onSubmit={handleSendMessage} className="p-4 flex items-end gap-2">
-              <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} />
-
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-10 w-10"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <Paperclip className="h-4 w-4" />
-              </Button>
-
-              <div className="flex-1">
-                {selectedFile ? (
-                  <div className="text-xs text-muted-foreground mb-1 truncate">{selectedFile.name}</div>
-                ) : null}
-                <Input
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  placeholder="Type a message..."
-                  className="h-10"
-                />
-              </div>
-
-              <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
-                <PopoverTrigger asChild>
-                  <Button type="button" variant="ghost" size="icon" className="h-10 w-10">
-                    <Smile className="h-4 w-4" />
+            <div className="p-4 space-y-3">
+              {selectedFile && (
+                <div className="flex items-center gap-3 p-3 rounded-2xl bg-indigo-50 border border-indigo-100 animate-in fade-in slide-in-from-bottom-2">
+                  <div className="p-2 rounded-xl bg-white shadow-sm">
+                    <FileIcon className="w-5 h-5 text-indigo-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-slate-900 truncate">{selectedFile.name}</p>
+                    <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest">
+                      {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-8 w-8 rounded-full hover:bg-white" 
+                    onClick={() => setSelectedFile(null)}
+                  >
+                    <X className="w-4 h-4 text-slate-400" />
                   </Button>
-                </PopoverTrigger>
-                <PopoverContent align="end" className="p-0">
-                  <Picker onEmojiClick={(emojiData: any) => handleEmojiSelect(emojiData)} />
-                </PopoverContent>
-              </Popover>
+                </div>
+              )}
 
-              <Button type="submit" size="icon" className="h-10 w-10" disabled={!newMessage.trim() && !selectedFile}>
-                <Send className="h-4 w-4" />
-              </Button>
-            </form>
+              <form onSubmit={handleSendMessage} className="flex items-center gap-2">
+                <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} />
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-11 w-11 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                >
+                  <Paperclip className="h-5 w-5" />
+                </Button>
+
+                <div className="relative flex-1 group">
+                  <Input
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    placeholder="Type a message..."
+                    className="h-11 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition-all px-4 font-medium"
+                    disabled={uploading}
+                  />
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
+                      <PopoverTrigger asChild>
+                        <Button 
+                          type="button" 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 rounded-lg text-slate-400 hover:text-amber-500"
+                          disabled={uploading}
+                        >
+                          <Smile className="h-5 w-5" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="end" side="top" className="p-0 border-0 shadow-2xl rounded-2xl overflow-hidden">
+                        <Picker onEmojiClick={(emojiData: any) => handleEmojiSelect(emojiData)} />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </div>
+
+                {newMessage.trim() || selectedFile ? (
+                  <Button 
+                    type="submit" 
+                    size="icon" 
+                    className="h-11 w-11 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-200 hover:scale-[1.05] transition-all"
+                    disabled={uploading}
+                  >
+                    {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+                  </Button>
+                ) : (
+                  <Button 
+                    type="button" 
+                    size="icon" 
+                    className={cn(
+                      "h-11 w-11 rounded-xl transition-all",
+                      isRecording ? "bg-rose-500 hover:bg-rose-600 animate-pulse text-white" : "bg-slate-900 hover:bg-slate-800 text-white shadow-lg shadow-slate-200"
+                    )}
+                    onClick={isRecording ? stopRecording : startRecording}
+                    disabled={uploading}
+                  >
+                    {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Mic className="h-5 w-5" />}
+                  </Button>
+                )}
+              </form>
+            </div>
           </> 
         ) : (
           <div className="flex-1 flex items-center justify-center bg-muted/50">

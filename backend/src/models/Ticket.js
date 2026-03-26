@@ -14,6 +14,8 @@ const TicketSchema = new mongoose.Schema(
     assignedTo: { type: String, default: "" },
     status: { type: String, default: "open" },
     lastActivity: { type: Date },
+    startDate: { type: Date },
+    endDate: { type: Date },
     messages: {
       type: [
         {

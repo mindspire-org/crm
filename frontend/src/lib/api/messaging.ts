@@ -124,27 +124,36 @@ export const fetchMessages = async (
 export const sendMessage = async (
   conversationId: string, 
   content: string,
-  attachments: any[] = []
+  attachments: any[] = [],
+  type: string = 'text'
 ): Promise<Message> => {
-  const normalizeAttachments = (atts: any[]): string[] => {
+  const normalizeAttachments = (atts: any[]): any[] => {
     const list = Array.isArray(atts) ? atts : [];
     return list
       .map((a: any) => {
-        if (!a) return "";
-        if (typeof a === "string") return a;
-        if (typeof a === "object" && typeof a.url === "string") return a.url;
-        return "";
+        if (!a) return null;
+        if (typeof a === "string") return { url: a, name: "Attachment", type: "", size: 0 };
+        if (typeof a === "object" && typeof a.url === "string") {
+          return {
+            url: a.url,
+            name: a.name || "Attachment",
+            type: a.type || "",
+            size: a.size || 0
+          };
+        }
+        return null;
       })
-      .filter((u: string) => Boolean(String(u || "").trim()));
+      .filter((a: any) => a !== null);
   };
 
   const response = await fetch(`${API_BASE}/api/messages/messages`, {
     method: 'POST',
-    headers: getAuthHeaders(),
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       conversationId,
       content,
       attachments: normalizeAttachments(attachments),
+      type
     }),
   });
   
@@ -192,9 +201,10 @@ export const uploadAttachment = async (file: File): Promise<{ url: string; name?
         continue;
       }
       const json = await res.json();
-      const rawUrl = json.url || json.path;
+      const rawUrl = json.url || json.path || json.fileUrl;
+      // Store relative path if it's on our server, or full URL if external
       const normalizedUrl = rawUrl && typeof rawUrl === 'string'
-        ? (rawUrl.startsWith('/') ? `${API_BASE}${rawUrl}` : rawUrl)
+        ? (rawUrl.startsWith(API_BASE) ? rawUrl.replace(API_BASE, '') : rawUrl)
         : '';
       return {
         url: normalizedUrl,
@@ -219,6 +229,32 @@ export const editMessage = async (messageId: string, content: string): Promise<M
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
     throw new Error(error.error || error.message || 'Failed to edit message');
+  }
+  return response.json();
+};
+
+export const starMessage = async (messageId: string, isStarred: boolean): Promise<Message> => {
+  const response = await fetch(`${API_BASE}/api/messages/messages/${messageId}`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ isStarred }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error || error.message || 'Failed to star message');
+  }
+  return response.json();
+};
+
+export const pinMessage = async (messageId: string, isPinned: boolean): Promise<Message> => {
+  const response = await fetch(`${API_BASE}/api/messages/messages/${messageId}`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ isPinned }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error || error.message || 'Failed to pin message');
   }
   return response.json();
 };

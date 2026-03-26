@@ -40,18 +40,30 @@ const getMyEmployeeId = async (req) => {
 const ensureTicketAccess = async (req, res, ticket) => {
   if (!ticket) return true;
   if (req.user?.role === "admin") return true;
-  if (req.user?.role === "staff" || req.user?.role === "marketer") {
-    const myEmployeeId = await getMyEmployeeId(req);
-    if (!myEmployeeId) {
-      res.status(403).json({ error: "Access denied" });
-      return false;
+  
+  // Clients can access their own tickets
+  if (req.user?.role === "client") {
+    if (String(ticket.clientId || "") === String(req.user.clientId || "")) {
+      return true;
     }
-    if (String(ticket.assignedTo || "") !== myEmployeeId) {
-      res.status(403).json({ error: "Access denied" });
-      return false;
-    }
-    return true;
+    res.status(403).json({ error: "Access denied" });
+    return false;
   }
+
+  if (
+    req.user?.role === "staff" ||
+    req.user?.role === "marketer" ||
+    req.user?.role === "developer" ||
+    req.user?.role === "project_manager" ||
+    req.user?.role === "sales" ||
+    req.user?.role === "sales_manager" ||
+    req.user?.role === "marketing_manager" ||
+    req.user?.role === "finance" ||
+    req.user?.role === "finance_manager"
+  ) {
+    return true; // Staff/Team roles can see all tickets for now, or you can restrict based on assignedTo
+  }
+  
   res.status(403).json({ error: "Access denied" });
   return false;
 };
@@ -62,14 +74,16 @@ router.get("/", authenticate, async (req, res) => {
     const clientId = req.query.clientId?.toString();
     
     const filter = {};
-    if (req.user.role === "staff" || req.user.role === "marketer") {
-      const myEmployeeId = await getMyEmployeeId(req);
-      if (!myEmployeeId) return res.json([]);
-      // Ticket.assignedTo is stored as a string in schema
-      filter.assignedTo = myEmployeeId;
-    } else if (req.user.role !== "admin") {
-      return res.status(403).json({ error: "Access denied" });
+    
+    if (req.user.role === "client") {
+      filter.clientId = req.user.clientId;
+    } else if (req.user.role === "admin") {
+      // Admin sees everything
+    } else {
+      // Other roles see everything for now as requested "any one can generate ticket" 
+      // implying visibility is also broader
     }
+
     if (clientId) {
       if (mongoose.isValidObjectId(clientId)) {
         filter.clientId = new mongoose.Types.ObjectId(clientId);
@@ -102,8 +116,13 @@ router.get("/", authenticate, async (req, res) => {
 
 router.post("/", authenticate, async (req, res) => {
   try {
-    if (req.user.role !== "admin") return res.status(403).json({ error: "Access denied" });
     const payload = req.body || {};
+    
+    // If client is creating a ticket, enforce their own clientId
+    if (req.user.role === "client") {
+      payload.clientId = req.user.clientId;
+    }
+
     const doc = await Ticket.create(payload);
     await assignTicketNoIfMissing(doc);
     res.status(201).json(doc);

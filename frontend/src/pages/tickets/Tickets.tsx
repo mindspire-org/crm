@@ -39,6 +39,8 @@ type TicketDoc = {
   status?: string;
   lastActivity?: string;
   createdAt?: string;
+  startDate?: string;
+  endDate?: string;
 };
 
 const clientDisplayName = (c: ClientDoc) => c.company || c.person || "Unnamed";
@@ -87,6 +89,9 @@ export default function Tickets() {
   const [ticketLabelOpen, setTicketLabelOpen] = useState(false);
   const [ticketLabelSearch, setTicketLabelSearch] = useState("");
   const [ticketLabel, setTicketLabel] = useState("-");
+
+  const [ticketStartDate, setTicketStartDate] = useState("");
+  const [ticketEndDate, setTicketEndDate] = useState("");
 
   const labelColorByName = useMemo(() => {
     const m = new Map<string, string>();
@@ -188,6 +193,10 @@ export default function Tickets() {
     setTicketLabelOpen(false);
     setTicketLabelSearch("");
     setTicketLabel("-");
+
+    setTicketStartDate("");
+    setTicketEndDate("");
+
     setEditingTicket(null);
   };
 
@@ -200,6 +209,8 @@ export default function Tickets() {
     setTicketDescription(t.description || "");
     setTicketAssignedTo(t.assignedTo || "-");
     setTicketLabel((t.labels || [])[0] || "-");
+    setTicketStartDate(t.startDate || "");
+    setTicketEndDate(t.endDate || "");
     setOpenAddTicket(true);
   };
 
@@ -218,6 +229,8 @@ export default function Tickets() {
       requestedBy: ticketRequestedBy !== "-" ? ticketRequestedBy : "",
       status: "open",
       lastActivity: new Date().toISOString(),
+      startDate: ticketStartDate || undefined,
+      endDate: ticketEndDate || undefined,
     };
     if (ticketClientId !== "-") {
       payload.clientId = ticketClientId;
@@ -648,8 +661,12 @@ export default function Tickets() {
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                        <Command value={ticketClientSearch} onValueChange={setTicketClientSearch}>
-                          <CommandInput placeholder="Search client..." />
+                        <Command>
+                          <CommandInput 
+                            placeholder="Search client..." 
+                            value={ticketClientSearch}
+                            onValueChange={setTicketClientSearch}
+                          />
                           <CommandList>
                             <CommandGroup>
                               <CommandItem
@@ -664,12 +681,6 @@ export default function Tickets() {
                                 -
                               </CommandItem>
                               {clients
-                                .filter((c) => {
-                                  const q = String(ticketClientSearch || "").trim().toLowerCase();
-                                  if (!q) return true;
-                                  const label = clientDisplayName(c).toLowerCase();
-                                  return label.includes(q);
-                                })
                                 .map((c) => {
                                 const label = clientDisplayName(c);
                                 const selected = ticketClientId === c._id;
@@ -689,12 +700,7 @@ export default function Tickets() {
                                 );
                               })}
                             </CommandGroup>
-                            {clients.filter((c) => {
-                              const q = String(ticketClientSearch || "").trim().toLowerCase();
-                              if (!q) return false;
-                              const label = clientDisplayName(c).toLowerCase();
-                              return label.includes(q);
-                            }).length === 0 && String(ticketClientSearch || "").trim() ? (
+                            {clients.length === 0 && String(ticketClientSearch || "").trim() ? (
                               <CommandEmpty>No client found.</CommandEmpty>
                             ) : null}
                           </CommandList>
@@ -720,8 +726,12 @@ export default function Tickets() {
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                        <Command value={ticketRequestedBySearch} onValueChange={setTicketRequestedBySearch}>
-                          <CommandInput placeholder="Search client..." />
+                        <Command>
+                          <CommandInput 
+                            placeholder="Search client..." 
+                            value={ticketRequestedBySearch}
+                            onValueChange={setTicketRequestedBySearch}
+                          />
                           <CommandList>
                             <CommandGroup>
                               <CommandItem
@@ -735,19 +745,13 @@ export default function Tickets() {
                                 <Check className={`mr-2 h-4 w-4 ${ticketRequestedBy === "-" ? "opacity-100" : "opacity-0"}`} />
                                 -
                               </CommandItem>
-                              {clients
-                                .filter((c) => {
-                                  const q = String(ticketRequestedBySearch || "").trim().toLowerCase();
-                                  if (!q) return true;
-                                  const label = clientDisplayName(c).toLowerCase();
-                                  return label.includes(q);
-                                })
-                                .map((c) => {
-                                  const label = clientDisplayName(c);
+                              {employees
+                                .map((e) => {
+                                  const label = employeeDisplayName(e);
                                   const selected = ticketRequestedBy === label;
                                   return (
                                     <CommandItem
-                                      key={c._id}
+                                      key={e._id}
                                       value={label}
                                       onSelect={() => {
                                         setTicketRequestedBy(label);
@@ -761,13 +765,8 @@ export default function Tickets() {
                                   );
                                 })}
                             </CommandGroup>
-                            {clients.filter((c) => {
-                              const q = String(ticketRequestedBySearch || "").trim().toLowerCase();
-                              if (!q) return false;
-                              const label = clientDisplayName(c).toLowerCase();
-                              return label.includes(q);
-                            }).length === 0 && String(ticketRequestedBySearch || "").trim() ? (
-                              <CommandEmpty>No client found.</CommandEmpty>
+                            {employees.length === 0 && String(ticketRequestedBySearch || "").trim() ? (
+                              <CommandEmpty>No employee found.</CommandEmpty>
                             ) : null}
                           </CommandList>
                         </Command>
@@ -807,8 +806,12 @@ export default function Tickets() {
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                        <Command value={ticketAssignedSearch} onValueChange={setTicketAssignedSearch}>
-                          <CommandInput placeholder="Search employee..." />
+                        <Command>
+                          <CommandInput 
+                            placeholder="Search employee..." 
+                            value={ticketAssignedSearch}
+                            onValueChange={setTicketAssignedSearch}
+                          />
                           <CommandList>
                             <CommandGroup>
                               <CommandItem
@@ -823,12 +826,6 @@ export default function Tickets() {
                                 -
                               </CommandItem>
                               {employees
-                                .filter((e) => {
-                                  const q = String(ticketAssignedSearch || "").trim().toLowerCase();
-                                  if (!q) return true;
-                                  const label = employeeDisplayName(e).toLowerCase();
-                                  return label.includes(q);
-                                })
                                 .map((e) => {
                                   const label = employeeDisplayName(e);
                                   const selected = ticketAssignedTo === label;
@@ -848,12 +845,7 @@ export default function Tickets() {
                                   );
                                 })}
                             </CommandGroup>
-                            {employees.filter((e) => {
-                              const q = String(ticketAssignedSearch || "").trim().toLowerCase();
-                              if (!q) return false;
-                              const label = employeeDisplayName(e).toLowerCase();
-                              return label.includes(q);
-                            }).length === 0 && String(ticketAssignedSearch || "").trim() ? (
+                            {employees.length === 0 && String(ticketAssignedSearch || "").trim() ? (
                               <CommandEmpty>No employee found.</CommandEmpty>
                             ) : null}
                           </CommandList>
@@ -879,8 +871,13 @@ export default function Tickets() {
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                        <Command value={ticketLabelSearch} onValueChange={setTicketLabelSearch}>
-                          <CommandInput placeholder="Search label..." autoComplete="off" />
+                        <Command>
+                          <CommandInput 
+                            placeholder="Search label..." 
+                            autoComplete="off" 
+                            value={ticketLabelSearch}
+                            onValueChange={setTicketLabelSearch}
+                          />
                           <CommandList>
                             <CommandGroup>
                               <CommandItem
@@ -895,12 +892,6 @@ export default function Tickets() {
                                 -
                               </CommandItem>
                               {ticketLabels
-                                .filter((l) => {
-                                  const q = String(ticketLabelSearch || "").trim().toLowerCase();
-                                  if (!q) return true;
-                                  const label = String(l?.name || "").toLowerCase();
-                                  return label.includes(q);
-                                })
                                 .map((l) => {
                                   const label = String(l?.name || "").trim();
                                   const selected = ticketLabel === label;
@@ -923,18 +914,31 @@ export default function Tickets() {
                             {!ticketLabels.length && !String(ticketLabelSearch || "").trim() ? (
                               <CommandEmpty>No labels available.</CommandEmpty>
                             ) : null}
-                            {ticketLabels.filter((l) => {
-                              const q = String(ticketLabelSearch || "").trim().toLowerCase();
-                              if (!q) return false;
-                              const label = String(l?.name || "").toLowerCase();
-                              return label.includes(q);
-                            }).length === 0 && String(ticketLabelSearch || "").trim() ? (
+                            {ticketLabels.length === 0 && String(ticketLabelSearch || "").trim() ? (
                               <CommandEmpty>No label found.</CommandEmpty>
                             ) : null}
                           </CommandList>
                         </Command>
                       </PopoverContent>
                     </Popover>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-center">
+                  <Label className="md:text-right text-muted-foreground">Timeline</Label>
+                  <div className="md:col-span-4 flex items-center gap-3">
+                    <DatePicker 
+                      value={ticketStartDate} 
+                      onChange={setTicketStartDate} 
+                      placeholder="Start date"
+                      className="flex-1"
+                    />
+                    <span className="text-slate-400">to</span>
+                    <DatePicker 
+                      value={ticketEndDate} 
+                      onChange={setTicketEndDate} 
+                      placeholder="Due date"
+                      className="flex-1"
+                    />
                   </div>
                 </div>
               </div>
