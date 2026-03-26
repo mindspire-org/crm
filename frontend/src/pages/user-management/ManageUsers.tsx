@@ -13,6 +13,7 @@ import { Search, MoreHorizontal, RefreshCw, Trash2, Plus, Edit2 } from 'lucide-r
 import { API_BASE } from '@/lib/api/base';
 import { getAuthHeaders } from '@/lib/api/auth';
 import { toast } from '@/components/ui/sonner';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 type UserRow = {
   _id: string;
@@ -315,20 +316,14 @@ export default function ManageUsers() {
         </CardContent>
       </Card>
 
-      <Dialog open={openDelete} onOpenChange={setOpenDelete}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete user</DialogTitle>
-            <DialogDescription>
-              This will permanently delete {deleting?.email || 'this user'}.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpenDelete(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={doDelete}>Delete</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={openDelete}
+        onOpenChange={setOpenDelete}
+        onConfirm={doDelete}
+        title="Delete User"
+        description={`This will permanently delete ${deleting?.email || 'this user'}. This action cannot be undone.`}
+        variant="destructive"
+      />
 
       <Dialog open={openEdit} onOpenChange={setOpenAddEdit}>
         <DialogContent className="sm:max-w-[425px]">

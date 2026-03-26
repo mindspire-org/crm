@@ -1,9 +1,10 @@
-﻿import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Clock,
   CheckCircle,
@@ -209,6 +210,7 @@ const FancyTooltip = ({ active, payload, label }: any) => {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const role = useMemo(() => getCurrentUser()?.role || "staff", []);
   const canViewPricing = useMemo(() => {
     const u = getCurrentUser();
     return u ? canViewFinancialData(u as any) : false;
@@ -275,6 +277,14 @@ export default function Dashboard() {
   const [upcomingEvents, setUpcomingEvents] = useState<EventRow[]>([]);
   const [announcements, setAnnouncements] = useState<AnnouncementRow[]>([]);
   const [invoiceOverview, setInvoiceOverview] = useState({ overdue: 0, unpaid: 0, paid: 0, draft: 0, total: 0 });
+  const [todayTasks, setTodayTasks] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+
+  const [openAddTask, setOpenAddTask] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskAssignee, setNewTaskAssignee] = useState("");
+  const [savingTask, setSavingTask] = useState(false);
 
   const normalizeAvatarSrc = useMemo(() => (input: string) => {
     const s = String(input || "").trim();
@@ -549,19 +559,31 @@ export default function Dashboard() {
     try {
       const headers = getAuthHeaders();
       const me = getCurrentUser();
-      const canReadTickets = me?.role === "admin" || me?.role === "staff" || me?.role === "marketer";
-      const [membersRes, expensesRes, ticketsRes, eventsRes, annRes, invRes] = await Promise.all([
+      const canReadTickets = me?.role === "admin" || me?.role === "staff" || me?.role === "marketer" || me?.role === "project_manager";
+      const [membersRes, expensesRes, ticketsRes, eventsRes, annRes, invRes, tasksRes, empRes] = await Promise.all([
         fetch(`${API_BASE}/api/attendance/members`, { headers }).catch(() => null as any),
         fetch(`${API_BASE}/api/expenses`, { headers }).catch(() => null as any),
         canReadTickets ? fetch(`${API_BASE}/api/tickets`, { headers }).catch(() => null as any) : (null as any),
         fetch(`${API_BASE}/api/events`, { headers }).catch(() => null as any),
         fetch(`${API_BASE}/api/announcements?active=1`, { headers }).catch(() => null as any),
         fetch(`${API_BASE}/api/invoices`, { headers }).catch(() => null as any),
+        fetch(`${API_BASE}/api/tasks?deadlineFrom=${todayIso}&deadlineTo=${todayIso}`, { headers }).catch(() => null as any),
+        (me?.role === "admin" || me?.role === "project_manager") ? fetch(`${API_BASE}/api/employees`, { headers }).catch(() => null as any) : (null as any),
       ]);
 
       if (membersRes?.ok) {
         const json = await membersRes.json().catch(() => []);
         setClockMembers(Array.isArray(json) ? json : []);
+      }
+
+      if (tasksRes?.ok) {
+        const json = await tasksRes.json().catch(() => []);
+        setTodayTasks(Array.isArray(json) ? json : []);
+      }
+
+      if (empRes?.ok) {
+        const json = await empRes.json().catch(() => []);
+        setEmployees(Array.isArray(json) ? json : []);
       }
 
       if (expensesRes?.ok) {
@@ -737,6 +759,36 @@ export default function Dashboard() {
     if (!(t > 0)) return 0;
     return Math.max(0, Math.min(100, Math.round((v / t) * 100)));
   }, [monthlyCollected, monthlyTarget]);
+
+  const handleCreateTask = async () => {
+    if (!newTaskTitle.trim()) return;
+    setSavingTask(true);
+    try {
+      const assigneeDoc = employees.find(e => e._id === newTaskAssignee);
+      const payload = {
+        title: newTaskTitle.trim(),
+        deadline: todayIso,
+        status: "todo",
+        priority: "medium",
+        assignees: assigneeDoc ? [{ name: assigneeDoc.name || `${assigneeDoc.firstName} ${assigneeDoc.lastName}`, initials: assigneeDoc.initials }] : [],
+      };
+      const res = await fetch(`${API_BASE}/api/tasks`, {
+        method: "POST",
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setOpenAddTask(false);
+        setNewTaskTitle("");
+        setNewTaskAssignee("");
+        loadOpsData();
+      }
+    } catch (e) {
+      console.error("Failed to create task", e);
+    } finally {
+      setSavingTask(false);
+    }
+  };
 
   const handleSaveTarget = () => {
     try {
@@ -1033,6 +1085,119 @@ export default function Dashboard() {
           </GlassCard>
         )}
       </div>
+
+      {/* Today's Tasks Section */}
+      <GlassCard className="border-indigo-100 dark:border-indigo-900/30">
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <div className="space-y-1">
+            <CardTitle className="text-xl font-bold flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-indigo-600" />
+              Today's Tasks
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">Manage and track your workload for today</p>
+          </div>
+          {(isAdmin || role === "project_manager") && (
+            <Dialog open={openAddTask} onOpenChange={setOpenAddTask}>
+              <DialogTrigger asChild>
+                <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2">
+                  <Plus className="w-4 h-4" />
+                  Assign Task
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle>Assign New Task</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Task Title</label>
+                    <Input
+                      value={newTaskTitle}
+                      onChange={(e) => setNewTaskTitle(e.target.value)}
+                      placeholder="What needs to be done?"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Assign To</label>
+                    <Select value={newTaskAssignee} onValueChange={setNewTaskAssignee}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select team member" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {employees.map((emp) => (
+                          <SelectItem key={emp._id} value={emp._id}>
+                            {emp.name || `${emp.firstName} ${emp.lastName}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setOpenAddTask(false)}>Cancel</Button>
+                  <Button onClick={handleCreateTask} disabled={savingTask || !newTaskTitle.trim()}>
+                    {savingTask ? "Assigning..." : "Assign Task"}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {todayTasks.length > 0 ? (
+              <div className="grid gap-3">
+                {todayTasks.map((task) => (
+                  <div
+                    key={task._id}
+                    className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50/50 dark:bg-slate-800/30 dark:border-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors group"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={`p-2 rounded-lg ${
+                        task.status === "completed" ? "bg-emerald-100 text-emerald-600" : "bg-amber-100 text-amber-600"
+                      }`}>
+                        {task.status === "completed" ? <CheckCircle className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-slate-900 dark:text-slate-100">{task.title}</h4>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge variant="outline" className="text-[10px] py-0 h-4 border-slate-200">
+                            {task.priority || "Medium"}
+                          </Badge>
+                          {task.assignees?.length > 0 && (
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Users className="w-3 h-3" />
+                              {task.assignees[0].name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => navigate(`/tasks/${task._id}`)}
+                    >
+                      View Details
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-full mb-4">
+                  <Briefcase className="w-8 h-8 text-slate-400" />
+                </div>
+                <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100">No tasks for today</h3>
+                <p className="text-slate-500 max-w-xs mx-auto mt-1">
+                  Enjoy your day! Or click "Assign Task" to create a new one.
+                </p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </GlassCard>
 
       {/* KPI Cards - Dynamic columns based on role */}
       <div className={`grid gap-4 grid-cols-1 sm:grid-cols-2 ${canAccessSales ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>

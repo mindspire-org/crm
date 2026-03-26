@@ -27,7 +27,18 @@ const upload = multer({ storage });
 
 const canReadClients = (role) => {
   const r = String(role || "").toLowerCase();
-  return r === "admin" || r === "staff" || r === "marketer";
+  return [
+    "admin",
+    "staff",
+    "marketer",
+    "marketing_manager",
+    "sales",
+    "sales_manager",
+    "finance",
+    "finance_manager",
+    "developer",
+    "project_manager",
+  ].includes(r);
 };
 
 const canWriteClients = (role) => {

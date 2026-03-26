@@ -19,6 +19,7 @@ import { getAuthHeaders } from "@/lib/api/auth";
 import { API_BASE } from "@/lib/api/base";
 import { canViewFinancialData, getCurrentUser } from "@/utils/roleAccess";
 import { COUNTRIES } from "@/data/countries";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 interface ContactRow {
   id: string;
@@ -649,6 +650,8 @@ function ClientsMainTable({ clients, onClientUpdated, onClientDeleted }: { clien
   const [editing, setEditing] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [clientToDelete, setClientToDelete] = useState<string | null>(null);
   // full editable state
   const [typeVal, setTypeVal] = useState<"org"|"person">("org");
   const [company, setCompany] = useState("");
@@ -729,8 +732,6 @@ function ClientsMainTable({ clients, onClientUpdated, onClientDeleted }: { clien
   };
 
   const deleteClient = async (clientId: string) => {
-    const ok = window.confirm("Delete this client? This cannot be undone.");
-    if (!ok) return;
     try {
       setDeletingId(clientId);
       const res = await fetch(`${API_BASE}/api/clients/${clientId}`, { method: "DELETE", headers: getAuthHeaders() });
@@ -832,7 +833,7 @@ function ClientsMainTable({ clients, onClientUpdated, onClientDeleted }: { clien
                   <Button
                     variant="link"
                     className="px-0 text-destructive inline-flex items-center gap-1"
-                    onClick={() => deleteClient(String(c._id))}
+                    onClick={() => { setClientToDelete(String(c._id)); setConfirmDeleteOpen(true); }}
                     disabled={deletingId === String(c._id)}
                   >
                     <Trash2 className="w-4 h-4" /> Delete
@@ -924,6 +925,15 @@ function ClientsMainTable({ clients, onClientUpdated, onClientDeleted }: { clien
           </DialogContent>
         </Dialog>
       )}
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        onConfirm={() => clientToDelete && deleteClient(clientToDelete)}
+        title="Delete Client"
+        description="Are you sure you want to delete this client? This cannot be undone."
+        variant="destructive"
+      />
     </Card>
   );
 }

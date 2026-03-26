@@ -78,7 +78,7 @@ const recalcProjectProgress = async (projectId) => {
 
 const buildTaskVisibilityFilter = async (req) => {
   if (!req.user) return {};
-  if (req.user.role === "admin") return {};
+  if (req.user.role === "admin" || req.user.role === "project_manager") return {};
 
   const userId = req.user._id;
   const email = String(req.user.email || "").trim();

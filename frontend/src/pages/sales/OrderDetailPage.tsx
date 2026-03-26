@@ -9,9 +9,11 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Copy, Download, FileText, Mail, Plus, Printer } from "lucide-react";
+import { toast } from "@/components/ui/sonner";
+import { Copy, Download, FileText, Mail, Plus, Printer, Trash2 } from "lucide-react";
 import { API_BASE } from "@/lib/api/base";
 import { getAuthHeaders } from "@/lib/api/auth";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 const brand = {
   name: "HealthSpire",
@@ -35,6 +37,10 @@ export default function OrderDetailPage() {
   const [itemRate, setItemRate] = useState("0");
   const [itemDesc, setItemDesc] = useState("");
   const [itemUnit, setItemUnit] = useState("");
+
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [itemToDeleteIdx, setItemToDeleteIdx] = useState<number | null>(null);
+  const [confirmCloneOpen, setConfirmCloneOpen] = useState(false);
 
   const brand = {
     name: "HealthSpire",
@@ -111,9 +117,28 @@ export default function OrderDetailPage() {
     setOpenItem(false);
   };
   const deleteItem = async (idx: number) => {
-    if (!confirm("Delete this item?")) return;
     const next = items.filter((_: any, i: number) => i !== idx);
     await saveItems(next);
+  };
+
+  const handleCloneOrder = async () => {
+    if (!order) return;
+    const clone = { ...order };
+    delete clone._id; delete clone.createdAt; delete clone.updatedAt; delete clone.__v; delete clone.number;
+    try {
+      const r = await fetch(`${API_BASE}/api/orders`, {
+        method: "POST",
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify(clone)
+      });
+      if (r.ok) {
+        const n = await r.json();
+        toast.success("Order cloned");
+        navigate(`/sales/orders/${n._id}`);
+      }
+    } catch {
+      toast.error("Failed to clone order");
+    }
   };
 
   const formatClient = (o: any) => {
@@ -133,12 +158,7 @@ export default function OrderDetailPage() {
               <DropdownMenuItem onClick={() => navigate(`/sales/orders/${id}`)}><FileText className="w-4 h-4 mr-2"/>Preview</DropdownMenuItem>
               <DropdownMenuItem onClick={() => window.open(`/sales/orders/${id}?print=1`, "_blank")!}><Download className="w-4 h-4 mr-2"/>Download PDF</DropdownMenuItem>
               <DropdownMenuItem onClick={() => window.open(`/sales/orders/${id}?print=1`, "_blank")!}><Printer className="w-4 h-4 mr-2"/>Print</DropdownMenuItem>
-              <DropdownMenuItem onClick={async () => {
-                const clone = { ...order };
-                delete clone._id; delete clone.createdAt; delete clone.updatedAt; delete clone.__v; delete clone.number;
-                const r = await fetch(`${API_BASE}/api/orders`, { method: "POST", headers: getAuthHeaders({"Content-Type":"application/json"}), body: JSON.stringify(clone) });
-                if (r.ok) { const n = await r.json(); navigate(`/sales/orders/${n._id}`); }
-              }}><Copy className="w-4 h-4 mr-2"/>Clone Order</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setConfirmCloneOpen(true)}><Copy className="h-4 w-4 mr-2"/>Clone Order</DropdownMenuItem>
               <DropdownMenuItem onClick={() => { const mail = `mailto:?subject=${encodeURIComponent(order.number || "Order")}&body=${encodeURIComponent(window.location.origin + "/sales/orders/" + id)}`; window.location.href = mail; }}><Mail className="w-4 h-4 mr-2"/>Email order to client</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -205,7 +225,7 @@ export default function OrderDetailPage() {
                           <TableCell>Rs.{(Number(it.quantity||0) * Number(it.rate||0)).toLocaleString()}</TableCell>
                           <TableCell className="text-right">
                             <Button size="sm" variant="outline" onClick={()=>openEditItem(idx)}>Edit</Button>
-                            <Button size="sm" variant="destructive" className="ml-2" onClick={()=>deleteItem(idx)}>Delete</Button>
+                            <Button size="sm" variant="destructive" className="ml-2" onClick={() => { setItemToDeleteIdx(idx); setConfirmDeleteOpen(true); }}>Delete</Button>
                           </TableCell>
                         </TableRow>
                       ))
@@ -262,6 +282,24 @@ export default function OrderDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        onConfirm={() => itemToDeleteIdx !== null && deleteItem(itemToDeleteIdx)}
+        title="Delete Item"
+        description="Are you sure you want to delete this item?"
+        variant="destructive"
+      />
+
+      <ConfirmDialog
+        open={confirmCloneOpen}
+        onOpenChange={setConfirmCloneOpen}
+        onConfirm={handleCloneOrder}
+        title="Clone Order"
+        description="Are you sure you want to clone this order?"
+        confirmText="Clone"
+      />
     </div>
   );
 }

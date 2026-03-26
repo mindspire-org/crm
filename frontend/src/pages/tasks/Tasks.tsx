@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -71,7 +72,7 @@ type TaskDoc = {
   subTasks?: Array<{ _id?: string; title?: string; done?: boolean }>;
   reminders?: Array<{ _id?: string; title?: string; when?: string; repeat?: string; priority?: string; createdBy?: string; createdByName?: string; notifyTargets?: string[] }>;
   taskComments?: Array<{ _id?: string; authorName?: string; text?: string; attachmentCount?: number; attachments?: Array<{ _id?: string; name?: string; url?: string; path?: string }>; createdAt?: string }>;
-  attachments?: Array<{ _id?: string; name?: string; url?: string; path?: string } | string>;
+  attachments?: number | Array<{ _id?: string; name?: string; url?: string; path?: string } | string>;
   dependencies?: { blockedBy?: string[]; blocking?: string[] };
   activity?: Array<{ _id?: string; type?: string; message?: string; authorName?: string; createdAt?: string }>;
   createdByUserId?: string;
@@ -153,6 +154,15 @@ export default function Tasks() {
   const [commentDraft, setCommentDraft] = useState("");
   const [commentFiles, setCommentFiles] = useState<File[]>([]);
 
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
+  const [confirmDeleteLabelOpen, setConfirmDeleteLabelOpen] = useState(false);
+  const [labelToDelete, setLabelToDelete] = useState<string | null>(null);
+  const [confirmCloneOpen, setConfirmCloneOpen] = useState(false);
+  const [taskToClone, setTaskToClone] = useState<TaskDoc | null>(null);
+  const [confirmDeleteCommentOpen, setConfirmDeleteCommentOpen] = useState(false);
+  const [commentToDeleteIdx, setCommentToDeleteIdx] = useState<number | null>(null);
+
   const [depOpen, setDepOpen] = useState(false);
   const [depBlockedBy, setDepBlockedBy] = useState<string>("");
   const [depBlocking, setDepBlocking] = useState<string>("");
@@ -210,7 +220,6 @@ export default function Tasks() {
   };
 
   const deleteLabel = async (id: string) => {
-    if (!confirm("Delete this label?")) return;
     try {
       const r = await fetch(`${API_BASE}/api/task-labels/${id}`, { method: "DELETE", headers: getAuthHeaders() });
       if (r.ok) {
@@ -628,38 +637,6 @@ export default function Tasks() {
     }
   };
 
-  const cloneTask = async (t: TaskDoc) => {
-    const payload: any = {
-      title: t.title ? `${t.title} (copy)` : "Task (copy)",
-      description: t.description || "",
-      status: t.status || "todo",
-      priority: t.priority || "medium",
-      start: t.start,
-      deadline: t.deadline,
-      leadId: t.leadId,
-      projectId: t.projectId,
-      invoiceId: t.invoiceId,
-      assignees: t.assignees || [],
-      collaborators: t.collaborators || [],
-      tags: t.tags || [],
-    };
-    try {
-      const r = await fetch(`${API_BASE}/api/tasks`, {
-        method: "POST",
-        headers: getAuthHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify(payload),
-      });
-      if (r.ok) {
-        const created = await r.json();
-        setItems((prev) => [created, ...prev]);
-        toast.success("Task cloned");
-        return;
-      }
-    } catch {
-    }
-    toast.error("Failed to clone");
-  };
-
   const isTaskCreator = (task: TaskDoc | null): boolean => {
     if (!task) return false;
     const user = getCurrentUser();
@@ -896,7 +873,6 @@ export default function Tasks() {
   ];
 
   const handleDelete = async (t: TaskDoc) => {
-    if (!confirm("Delete this task?")) return;
     try {
       const r = await fetch(`${API_BASE}/api/tasks/${t._id}`, { method: "DELETE", headers: getAuthHeaders() });
       if (r.ok) {
@@ -906,7 +882,61 @@ export default function Tasks() {
       }
     } catch {
     }
-    setItems((prev) => prev.filter((x) => x._id !== t._id));
+    toast.error("Failed to delete");
+  };
+
+  const cloneTask = async (t: TaskDoc) => {
+    const payload: any = {
+      title: `${t.title} (Copy)`,
+      description: t.description || "",
+      status: "todo",
+      priority: t.priority || "medium",
+      start: t.start,
+      deadline: t.deadline,
+      assignees: t.assignees || [],
+      collaborators: t.collaborators || [],
+      tags: t.tags || [],
+      leadId: t.leadId,
+      projectId: t.projectId,
+      checklist: (t.checklist || []).map(x => ({ text: x.text, done: false })),
+      subTasks: (t.subTasks || []).map(x => ({ title: x.title, done: false })),
+    };
+    try {
+      const res = await fetch(`${API_BASE}/api/tasks`, {
+        method: "POST",
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setItems(prev => [created, ...prev]);
+        toast.success("Task cloned");
+        return;
+      }
+    } catch (e) {
+      console.error("Failed to clone task", e);
+    }
+    toast.error("Failed to clone task");
+  };
+
+  const deleteComment = async (idx: number) => {
+    if (!taskInfo?._id) return;
+    const next = (taskInfo.taskComments || []).filter((_, i) => i !== idx);
+    const removedComment = (taskInfo.taskComments || [])[idx];
+    const removedAttCount = removedComment?.attachments?.length || removedComment?.attachmentCount || 0;
+    const prevAttachmentCount = Array.isArray((taskInfo as any).attachments)
+      ? (taskInfo as any).attachments.length
+      : Number((taskInfo as any).attachments || 0);
+    const r = await updateTask(taskInfo._id, {
+      taskComments: next,
+      comments: next.length,
+      attachments: Math.max(0, prevAttachmentCount - removedAttCount),
+    });
+    if (r.ok) {
+      toast.success("Comment deleted");
+    } else {
+      toast.error("Failed to delete comment");
+    }
   };
 
   const fmt = (iso?: string) => {
@@ -1110,7 +1140,7 @@ export default function Tasks() {
                                 <Button type="button" size="icon" variant="ghost" onClick={() => handleEdit(t)}>
                                   <Pencil className="w-4 h-4" />
                                 </Button>
-                                <Button type="button" size="icon" variant="ghost" onClick={() => handleDelete(t)}>
+                                <Button type="button" size="icon" variant="ghost" onClick={() => { setTaskToDelete(t._id); setConfirmDeleteOpen(true); }}>
                                   <Trash2 className="w-4 h-4" />
                                 </Button>
                               </>
@@ -1192,7 +1222,7 @@ export default function Tasks() {
                                     <Button type="button" variant="ghost" size="icon-sm" onClick={(e) => { e.stopPropagation(); handleEdit(t); }} aria-label="Edit">
                                       <Pencil className="w-4 h-4" />
                                     </Button>
-                                    <Button type="button" variant="ghost" size="icon-sm" onClick={(e) => { e.stopPropagation(); handleDelete(t); }} aria-label="Delete">
+                                    <Button type="button" variant="ghost" size="icon-sm" onClick={(e) => { e.stopPropagation(); setTaskToDelete(t._id); setConfirmDeleteOpen(true); }} aria-label="Delete">
                                       <Trash2 className="w-4 h-4" />
                                     </Button>
                                   </>
@@ -1448,7 +1478,7 @@ export default function Tasks() {
                       <span className={`h-2.5 w-2.5 rounded-full ${l.color || "bg-slate-300"}`} />
                       <div className="truncate">{l.name}</div>
                     </div>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => deleteLabel(l._id)} className="text-destructive">
+                    <Button type="button" variant="ghost" size="sm" onClick={() => { setLabelToDelete(l._id); setConfirmDeleteLabelOpen(true); }} className="text-destructive">
                       Delete
                     </Button>
                   </div>
@@ -1949,25 +1979,10 @@ export default function Tasks() {
                                           size="icon"
                                           variant="ghost"
                                           className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
-                                          onClick={async () => {
+                                          onClick={() => {
                                             if (!taskInfo?._id) return;
-                                            if (!confirm("Delete this comment?")) return;
-                                            const next = (taskInfo.taskComments || []).filter((_, i) => i !== idx);
-                                            const removedComment = (taskInfo.taskComments || [])[idx];
-                                            const removedAttCount = removedComment?.attachments?.length || removedComment?.attachmentCount || 0;
-                                            const prevAttachmentCount = Array.isArray((taskInfo as any).attachments)
-                                              ? (taskInfo as any).attachments.length
-                                              : Number((taskInfo as any).attachments || 0);
-                                            const r = await updateTask(taskInfo._id, {
-                                              taskComments: next,
-                                              comments: next.length,
-                                              attachments: Math.max(0, prevAttachmentCount - removedAttCount),
-                                            });
-                                            if (r.ok) {
-                                              toast.success("Comment deleted");
-                                            } else {
-                                              toast.error("Failed to delete comment");
-                                            }
+                                            setCommentToDeleteIdx(idx);
+                                            setConfirmDeleteCommentOpen(true);
                                           }}
                                         >
                                           <Trash2 className="w-3 h-3 text-muted-foreground hover:text-destructive" />
@@ -2466,7 +2481,7 @@ export default function Tasks() {
           <DialogFooter className="px-6 py-4 border-t bg-muted/30">
             <div className="flex items-center justify-end gap-2 w-full">
               {canCloneTask(taskInfo) && (
-                <Button type="button" variant="outline" onClick={() => taskInfo && cloneTask(taskInfo)} disabled={!taskInfo} className="gap-1">
+                <Button type="button" variant="outline" onClick={() => { if (taskInfo) { setTaskToClone(taskInfo); setConfirmCloneOpen(true); } }} disabled={!taskInfo} className="gap-1">
                   <Copy className="w-4 h-4" />
                   Clone
                 </Button>
@@ -2482,6 +2497,41 @@ export default function Tasks() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        onConfirm={() => taskToDelete && handleDelete({ _id: taskToDelete } as any)}
+        title="Delete Task"
+        description="Are you sure you want to delete this task? This action cannot be undone."
+        variant="destructive"
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteLabelOpen}
+        onOpenChange={setConfirmDeleteLabelOpen}
+        onConfirm={() => labelToDelete && deleteLabel(labelToDelete)}
+        title="Delete Label"
+        description="Are you sure you want to delete this label?"
+        variant="destructive"
+      />
+
+      <ConfirmDialog
+        open={confirmCloneOpen}
+        onOpenChange={setConfirmCloneOpen}
+        onConfirm={() => taskToClone && cloneTask(taskToClone)}
+        title="Clone Task"
+        description={`Are you sure you want to clone "${taskToClone?.title}"?`}
+        confirmText="Clone"
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteCommentOpen}
+        onOpenChange={setConfirmDeleteCommentOpen}
+        onConfirm={() => commentToDeleteIdx !== null && deleteComment(commentToDeleteIdx)}
+        title="Delete Comment"
+        description="Are you sure you want to delete this comment?"
+        variant="destructive"
+      />
     </div>
   );
 };

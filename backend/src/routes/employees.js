@@ -49,8 +49,8 @@ router.get("/", authenticate, async (req, res) => {
   const userRole = String(req.user.role || "").toLowerCase();
   const userEmail = req.user.email;
   
-  // Admin and finance_manager can see all employees (even without their own employee record)
-  if (userRole === 'admin' || userRole === 'finance_manager') {
+  // Admin, finance_manager, and project_manager can see all employees
+  if (userRole === 'admin' || userRole === 'finance_manager' || userRole === 'project_manager') {
     const q = req.query.q?.toString().trim();
     const role = req.query.role?.toString().trim();
     const filter = q

@@ -36,6 +36,7 @@ import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { getAuthHeaders } from "@/lib/api/auth";
 import { API_BASE } from "@/lib/api/base";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 type Employee = {
   id: number;
@@ -130,6 +131,9 @@ export default function Employees() {
   const [sendLogin, setSendLogin] = useState(true);
   // Departments options loaded from backend
   const [deptOptions, setDeptOptions] = useState<string[]>([]);
+
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null);
 
   const mergedDeptOptions = useMemo(() => {
     const out: string[] = [];
@@ -616,9 +620,7 @@ export default function Employees() {
     setOpenAdd(true);
   };
 
-  const deleteEmployee = async (emp: Employee, index: number) => {
-    const proceed = window.confirm(`Delete ${emp.name}?`);
-    if (!proceed) return;
+  const deleteEmployee = async (emp: Employee) => {
     setItems((prev) => prev.filter((it) => it.id !== emp.id));
     if (emp.dbId) {
       try {
@@ -972,8 +974,8 @@ export default function Employees() {
                       startEdit(employee, fullIndex);
                     }}>Edit</Button>
                     <Button variant="destructive" size="sm" onClick={()=>{
-                      const fullIndex = items.findIndex(e=>e.id===employee.id);
-                      deleteEmployee(employee, fullIndex);
+                      setEmployeeToDelete(employee);
+                      setConfirmDeleteOpen(true);
                     }}>Delete</Button>
                   </>
                 )}
@@ -982,6 +984,15 @@ export default function Employees() {
           </Card>
         ))}
       </div>
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        onConfirm={() => employeeToDelete && deleteEmployee(employeeToDelete)}
+        title="Delete Member"
+        description={`Are you sure you want to delete ${employeeToDelete?.name}? This action cannot be undone.`}
+        variant="destructive"
+      />
     </div>
   );
 }

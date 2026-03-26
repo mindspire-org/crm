@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Combobox } from "@/components/ui/combobox";
 import { toast } from "@/components/ui/sonner";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import ExcelJS from "exceljs";
 import {
   Plus,
@@ -413,6 +414,11 @@ export default function InvoiceList() {
   const [projectDraftDeadline, setProjectDraftDeadline] = useState<string>("");
   const [projectInvoice, setProjectInvoice] = useState<any | null>(null);
 
+  const [confirmDeletePaymentOpen, setConfirmDeletePaymentOpen] = useState(false);
+  const [paymentToDeleteId, setPaymentToDeleteId] = useState<string | null>(null);
+  const [confirmDeleteInvoiceOpen, setConfirmDeleteInvoiceOpen] = useState(false);
+  const [invoiceToDeleteId, setInvoiceToDeleteId] = useState<string | null>(null);
+
   const openPaymentFor = async (invoiceIdText: string) => {
     try {
       const num = invoiceIdText.split('#')[1]?.trim() || "";
@@ -567,10 +573,34 @@ export default function InvoiceList() {
     } catch {}
   };
 
-  const handleDropdownPayment = async (invoiceIdText: string) => {
-    setPayInvoiceDropdownOpen(false);
-    await openPaymentFor(invoiceIdText);
+  const deletePayment = async (id: string) => {
+    try {
+      const r = await fetch(`${API_BASE}/api/payments/${id}`, { method: "DELETE", headers: getAuthHeaders() });
+      if (r.ok) {
+        toast.success("Payment deleted");
+        if (payInvoiceId) {
+          const pRes = await fetch(`${API_BASE}/api/payments?invoiceId=${encodeURIComponent(payInvoiceId)}`, { headers: getAuthHeaders() });
+          if (pRes.ok) setPayments(await pRes.json());
+        }
+        await loadInvoices();
+      }
+    } catch {}
   };
+
+  const deleteInvoice = async (id: string) => {
+     try {
+       const res = await fetch(`${API_BASE}/api/invoices/${id}`, { method: "DELETE", headers: getAuthHeaders() });
+       if (res.ok) {
+         toast.success("Invoice deleted");
+         await loadInvoices();
+       }
+     } catch {}
+   };
+
+   const handleDropdownPayment = async (invoiceIdText: string) => {
+     setPayInvoiceDropdownOpen(false);
+     await openPaymentFor(invoiceIdText);
+   };
 
   const loadInvoices = async () => {
     try {
@@ -1205,16 +1235,9 @@ export default function InvoiceList() {
                               setPayDate(p.date ? new Date(p.date).toISOString().slice(0,10) : new Date().toISOString().slice(0,10));
                               setPayNote(p.note || "");
                             }}>Edit</Button>
-                            <Button size="sm" variant="destructive" onClick={async () => {
-                              if (!confirm("Delete this payment?")) return;
-                              await fetch(`${API_BASE}/api/payments/${encodeURIComponent(p._id)}`, { method: 'DELETE', headers: getAuthHeaders() });
-                              if (payInvoiceId) {
-                                const pRes = await fetch(`${API_BASE}/api/payments?invoiceId=${encodeURIComponent(payInvoiceId)}`, { headers: getAuthHeaders() });
-                                if (pRes.ok) {
-                                  const list = await pRes.json();
-                                  setPayments(Array.isArray(list) ? list : []);
-                                }
-                              }
+                            <Button size="sm" variant="destructive" onClick={() => {
+                              setPaymentToDeleteId(p._id);
+                              setConfirmDeletePaymentOpen(true);
                             }}>Delete</Button>
                           </div>
                         </div>
@@ -1625,12 +1648,12 @@ export default function InvoiceList() {
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={()=>openEditFor(r.id)}>Edit</DropdownMenuItem>
                                 <DropdownMenuItem onClick={()=>navigate(`/invoices/${encodeURIComponent(r.id.split('#')[1] || '1')}/preview`)}>Preview</DropdownMenuItem>
-                                <DropdownMenuItem onClick={async ()=>{
+                                <DropdownMenuItem onClick={() => {
                                   const num = r.id.split('#')[1] || '';
-                                  if (!num || !confirm("Are you sure you want to delete this invoice?")) return;
-                                  await fetch(`${API_BASE}/api/invoices/${encodeURIComponent(num)}`, { method: 'DELETE', headers: getAuthHeaders() });
-                                  await loadInvoices();
-                                  toast.success("Invoice deleted");
+                                  if (num) {
+                                    setInvoiceToDeleteId(num);
+                                    setConfirmDeleteInvoiceOpen(true);
+                                  }
                                 }} className="text-destructive">Delete</DropdownMenuItem>
                                 <DropdownMenuItem onClick={()=>openPaymentFor(r.id)}>Add payment</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => {
@@ -1695,6 +1718,24 @@ export default function InvoiceList() {
           </Tabs>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={confirmDeletePaymentOpen}
+        onOpenChange={setConfirmDeletePaymentOpen}
+        onConfirm={() => paymentToDeleteId && deletePayment(paymentToDeleteId)}
+        title="Delete Payment"
+        description="Are you sure you want to delete this payment?"
+        variant="destructive"
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteInvoiceOpen}
+        onOpenChange={setConfirmDeleteInvoiceOpen}
+        onConfirm={() => invoiceToDeleteId && deleteInvoice(invoiceToDeleteId)}
+        title="Delete Invoice"
+        description="Are you sure you want to delete this invoice? This action cannot be undone."
+        variant="destructive"
+      />
     </div>
   );
 }

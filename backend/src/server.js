@@ -149,6 +149,7 @@ const corsOptions = {
     "Authorization",
     "Accept",
     "X-Requested-With",
+    "Cache-Control",
   ],
   exposedHeaders: ["Content-Length", "Content-Type"],
 };

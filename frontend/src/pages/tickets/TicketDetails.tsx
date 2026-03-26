@@ -7,10 +7,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { CheckCircle2, MoreHorizontal, Paperclip, Send, Tags } from "lucide-react";
+import { CheckCircle2, Download, FileText, MoreHorizontal, Paperclip, Send, Tags } from "lucide-react";
 import { toast } from "sonner";
 import { getAuthHeaders } from "@/lib/api/auth";
 import { API_BASE } from "@/lib/api/base";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 // API base centralized via Vite env
 
@@ -92,6 +93,8 @@ export default function TicketDetails() {
   const [newTemplateBody, setNewTemplateBody] = useState("");
   const [newTemplateType, setNewTemplateType] = useState("all");
   const [savingTemplate, setSavingTemplate] = useState(false);
+  const [confirmDeleteTemplateOpen, setConfirmDeleteTemplateOpen] = useState(false);
+  const [templateToDelete, setTemplateToDelete] = useState<string | null>(null);
 
   const [openEdit, setOpenEdit] = useState(false);
   const [editTitle, setEditTitle] = useState("");
@@ -261,8 +264,6 @@ export default function TicketDetails() {
   };
 
   const deleteTemplate = async (idToDelete: string) => {
-    const ok = window.confirm("Delete this template?");
-    if (!ok) return;
     try {
       const res = await fetch(`${API_BASE}/api/ticket-templates/${idToDelete}`, { method: "DELETE", headers: getAuthHeaders() });
 
@@ -505,6 +506,97 @@ export default function TicketDetails() {
   const inCount = (ticket?.messages || []).length;
   const outCount = 0;
 
+  const downloadCompletionDoc = () => {
+    if (!ticket) return;
+    const win = window.open("", "_blank");
+    if (!win) {
+      toast.error("Popup blocked. Please allow popups to download the document.");
+      return;
+    }
+
+    const companyName = "HealthSpire";
+    const date = new Date().toLocaleDateString();
+    const ticketNo = ticket.ticketNo ? `#${ticket.ticketNo}` : ticket._id.slice(-6).toUpperCase();
+    
+    const tasksHtml = tasks.length > 0 
+      ? `<ul>${tasks.map(t => `<li>${t.title} (${t.status || 'Done'})</li>`).join('')}</ul>`
+      : "<p>N/A</p>";
+
+    const html = `
+      <html>
+        <head>
+          <title>Ticket Completion - ${ticketNo}</title>
+          <style>
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #1e293b; line-height: 1.6; max-width: 800px; margin: 0 auto; }
+            .header { border-bottom: 2px solid #4f46e5; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; }
+            .company-name { font-size: 28px; font-weight: 800; color: #4f46e5; letter-spacing: -0.025em; }
+            .doc-type { font-size: 14px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em; }
+            .ticket-info { background: #f8fafc; padding: 20px; border-radius: 12px; margin-bottom: 30px; display: grid; grid-template-cols: 1fr 1fr; gap: 10px; }
+            .info-item { font-size: 14px; }
+            .info-label { font-weight: 600; color: #64748b; margin-right: 8px; }
+            h2 { font-size: 20px; font-weight: 700; color: #0f172a; margin-top: 30px; margin-bottom: 15px; border-left: 4px solid #4f46e5; padding-left: 12px; }
+            .section { margin-bottom: 30px; }
+            ul { padding-left: 20px; }
+            li { margin-bottom: 8px; }
+            .footer { margin-top: 60px; border-top: 1px solid #e2e8f0; pt: 20px; text-align: center; font-size: 12px; color: #94a3b8; }
+            @media print { .no-print { display: none; } body { padding: 0; } }
+            .btn { background: #4f46e5; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; margin-bottom: 20px; }
+          </style>
+        </head>
+        <body>
+          <div class="no-print" style="text-align: right;">
+            <button class="btn" onclick="window.print()">Print / Save as PDF</button>
+          </div>
+          <div class="header">
+            <div>
+              <div class="company-name">${companyName}</div>
+              <div class="doc-type">Ticket Completion Certificate</div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-weight: 700; font-size: 18px;">${ticketNo}</div>
+              <div style="font-size: 14px; color: #64748b;">Date: ${date}</div>
+            </div>
+          </div>
+
+          <div class="section">
+            <p>Dear <strong>${ticket.client || 'Valued Client'}</strong>,</p>
+            <p>We are pleased to inform you that your support ticket has been successfully resolved. Below is a summary of the work performed.</p>
+          </div>
+
+          <div class="ticket-info">
+            <div class="info-item"><span class="info-label">Subject:</span> ${ticket.title}</div>
+            <div class="info-item"><span class="info-label">Status:</span> Resolved & Closed</div>
+            <div class="info-item"><span class="info-label">Requested By:</span> ${ticket.requestedBy || '-'}</div>
+            <div class="info-item"><span class="info-label">Assigned To:</span> ${ticket.assignedTo || '-'}</div>
+          </div>
+
+          <div class="section">
+            <h2>Original Request</h2>
+            <div style="background: #fff; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; font-size: 14px; white-space: pre-wrap;">${ticket.description || 'No description provided.'}</div>
+          </div>
+
+          <div class="section">
+            <h2>What We Have Done</h2>
+            ${tasksHtml}
+            <p style="font-size: 14px; margin-top: 15px;">All requested changes and fixes have been implemented and verified. The ticket is now marked as complete in our system.</p>
+          </div>
+
+          <div class="section">
+            <p>Thank you for choosing <strong>${companyName}</strong>. If you have any further questions regarding this ticket, please don't hesitate to contact us.</p>
+          </div>
+
+          <div class="footer">
+            &copy; ${new Date().getFullYear()} mindspire.org • HealthSpire Management Platform
+          </div>
+        </body>
+      </html>
+    `;
+
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+  };
+
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -514,10 +606,23 @@ export default function TicketDetails() {
           </Button>
           <h1 className="text-base font-semibold">{ticketTitle}</h1>
         </div>
-        <Button onClick={toggleClosed} disabled={!ticket} className="gap-2">
-          <CheckCircle2 className="w-4 h-4" />
-          {(ticket?.status || "open") === "closed" ? "Mark as Open" : "Mark as Closed"}
-        </Button>
+        <div className="flex items-center gap-2">
+          {ticket?.status === "closed" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={downloadCompletionDoc}
+              className="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              Completion Doc
+            </Button>
+          )}
+          <Button onClick={toggleClosed} disabled={!ticket} className="gap-2">
+            <CheckCircle2 className="w-4 h-4" />
+            {(ticket?.status || "open") === "closed" ? "Mark as Open" : "Mark as Closed"}
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -885,7 +990,7 @@ export default function TicketDetails() {
                           <Button variant="outline" size="sm" onClick={() => insertTemplate(t)}>
                             Use
                           </Button>
-                          <Button variant="destructive" size="sm" onClick={() => deleteTemplate(t._id)}>
+                          <Button variant="destructive" size="sm" onClick={() => { setTemplateToDelete(t._id); setConfirmDeleteTemplateOpen(true); }}>
                             Delete
                           </Button>
                         </div>
@@ -905,6 +1010,15 @@ export default function TicketDetails() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={confirmDeleteTemplateOpen}
+        onOpenChange={setConfirmDeleteTemplateOpen}
+        onConfirm={() => templateToDelete && deleteTemplate(templateToDelete)}
+        title="Delete Template"
+        description="Are you sure you want to delete this ticket template?"
+        variant="destructive"
+      />
     </div>
   );
 }

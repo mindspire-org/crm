@@ -52,6 +52,11 @@ const isCrossOrigin = (url) => {
 self.addEventListener("fetch", (event) => {
   const req = event.request;
 
+  // Bypass service worker for SSE streams (Realtime updates)
+  if (req.headers.get("Accept") === "text/event-stream" || req.url.includes("/api/realtime/stream")) {
+    return;
+  }
+
   // Pass through non-GET requests with credentials for cross-origin API calls
   // This is critical for POST /api/auth/login to work in PWA mode
   if (req.method !== "GET") {
@@ -107,7 +112,10 @@ self.addEventListener("fetch", (event) => {
           const index = await cache.match("/index.html");
           if (index) return index;
         }
-        throw new Error("Offline");
+        return new Response(JSON.stringify({ error: "Offline" }), {
+          status: 503,
+          headers: { "Content-Type": "application/json" },
+        });
       }
     })()
   );

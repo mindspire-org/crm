@@ -16,9 +16,30 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
-import { ExternalLink, RefreshCw, Trash2, X } from "lucide-react";
+import { 
+  ExternalLink, 
+  RefreshCw, 
+  Trash2, 
+  X, 
+  CheckCircle2, 
+  Clock, 
+  AlertCircle, 
+  Calendar, 
+  User, 
+  Tag, 
+  Paperclip, 
+  MessageSquare, 
+  Activity, 
+  ChevronRight,
+  MoreVertical,
+  Plus,
+  Send,
+  Flag
+} from "lucide-react";
 import { getAuthHeaders } from "@/lib/api/auth";
 import { API_BASE } from "@/lib/api/base";
+import { cn } from "@/lib/utils";
+import { format } from "date-fns";
 
 type Employee = { _id: string; name?: string; firstName?: string; lastName?: string; avatar?: string; image?: string };
 type TaskLabel = { _id: string; name: string; color?: string };

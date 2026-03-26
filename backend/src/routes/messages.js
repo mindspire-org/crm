@@ -132,6 +132,37 @@ router.post('/conversations', authenticate, async (req, res) => {
   }
 });
 
+// Update conversation (e.g., group name)
+router.put('/conversations/:conversationId', authenticate, async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const { groupName } = req.body;
+
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
+
+    const isAdmin = (conversation.admins || []).some(adminId => adminId.toString() === req.user._id.toString());
+    if (!isAdmin && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Only group admins can change the group name' });
+    }
+
+    if (groupName) {
+      conversation.groupName = groupName;
+    }
+
+    await conversation.save();
+    const populated = await Conversation.findById(conversation._id)
+      .populate('participants', 'name email avatar')
+      .populate('lastMessage');
+
+    broadcastSse({ event: "invalidate", data: { keys: ["conversations"] } });
+    res.json(populated);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+
 // Get messages
 router.get('/conversations/:conversationId/messages', authenticate, async (req, res) => {
   try {

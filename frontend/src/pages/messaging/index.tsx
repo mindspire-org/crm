@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Search, MessageSquare, Users, Send, Paperclip, Smile, MoreVertical, Plus, Phone, Video, Info, Mic, Edit3, Trash2, Settings, Palette, Link as LinkIcon, StopCircle, Sparkles, Star, Pin, Check, CheckCheck } from 'lucide-react';
+import { Search, MessageSquare, Users, Send, Paperclip, Smile, MoreVertical, Plus, Phone, Video, Info, Mic, Edit3, Trash2, Settings, Palette, Link as LinkIcon, StopCircle, Sparkles, Star, Pin, Check, CheckCheck, FileIcon, Download, X } from 'lucide-react';
 import { format, isAfter, subHours } from 'date-fns';
 import { useMessaging } from '@/contexts/MessagingContext';
 import { NewConversation } from './components/NewConversation';
@@ -48,6 +48,8 @@ export default function Messaging() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isEditGroupOpen, setIsEditGroupOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
   const [recordingMs, setRecordingMs] = useState(0);
   const [voiceBlob, setVoiceBlob] = useState<Blob | null>(null);
   const [voicePreviewUrl, setVoicePreviewUrl] = useState<string>('');
@@ -367,6 +369,27 @@ export default function Messaging() {
     }
   };
 
+  const handleUpdateGroupName = async () => {
+    if (!selectedConversation?._id || !newGroupName.trim()) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/messages/conversations/${selectedConversation._id}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ groupName: newGroupName.trim() }),
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error(error.error || 'Failed to update group name');
+      }
+      refreshConversations();
+      toast({ title: 'Group name updated' });
+      setIsEditGroupOpen(false);
+      setNewGroupName("");
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    }
+  };
+
   const shareMeeting = useCallback(async () => {
     if (!selectedConversation) return;
     const url = `https://meet.jit.si/healthspire-${selectedConversation._id}`;
@@ -486,6 +509,12 @@ export default function Messaging() {
     const otherParticipants = getOtherParticipants(conversation);
     return otherParticipants[0]?.name?.charAt(0).toUpperCase() || 'U';
   }, [getOtherParticipants]);
+
+  const isGroupAdmin = useMemo(() => {
+    if (!selectedConversation?.isGroup) return false;
+    const adminIds = selectedConversation.admins || [];
+    return adminIds.includes(userId || '') || role === 'admin';
+  }, [selectedConversation, userId, role]);
 
   if (isLoading && !selectedConversation) {
     return (
@@ -670,6 +699,14 @@ export default function Messaging() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    {selectedConversation.isGroup && isGroupAdmin && (
+                      <DropdownMenuItem onClick={() => {
+                        setNewGroupName(getConversationTitle(selectedConversation));
+                        setIsEditGroupOpen(true);
+                      }}>
+                        <Edit3 className="mr-2 h-4 w-4" /> Edit Name
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem onClick={() => setIsNewConversationOpen(true)}>
                       <Users className="mr-2 h-4 w-4" /> New group
                     </DropdownMenuItem>
@@ -678,6 +715,26 @@ export default function Messaging() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+
+                <AlertDialog open={isEditGroupOpen} onOpenChange={setIsEditGroupOpen}>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Edit Group Name</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Enter a new name for the group.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <Input 
+                      value={newGroupName} 
+                      onChange={(e) => setNewGroupName(e.target.value)} 
+                      placeholder="New group name"
+                    />
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleUpdateGroupName}>Save</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
 
                 <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
                   <AlertDialogContent>
@@ -817,11 +874,14 @@ export default function Messaging() {
                                 })}
                               </div>
                             )}
-                            <div className={`text-[10px] mt-1 flex items-center gap-1 ${isOwn ? 'text-white/70 justify-end' : 'text-muted-foreground'}`}>
+                            <div className={cn(
+                              "text-[10px] mt-1 flex items-center gap-1",
+                              isOwn ? `text-${themeTokens.bubbleMineText}/70 justify-end` : 'text-muted-foreground'
+                            )}>
                               {format(new Date(message.createdAt), 'p')}
                               {isOwn && (
-                                <span>
-                                  {message.readBy?.length > 1 ? <CheckCheck className="w-3 h-3" /> : <Check className="w-3 h-3" />}
+                                <span className={`text-${themeTokens.bubbleMineText}/80`}>
+                                  {message.readBy && message.readBy.length > 1 ? <CheckCheck className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />}
                                 </span>
                               )}
                             </div>

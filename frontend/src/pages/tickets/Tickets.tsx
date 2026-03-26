@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { Check, CheckCircle2, ChevronsUpDown, Edit, MoreHorizontal, Plus, RefreshCw, Search, Settings, Tags, Trash2, Paperclip, Mic, Ticket, Clock, AlertCircle, CheckCircle, BarChart3, CalendarDays } from "lucide-react";
+import { Check, CheckCircle2, ChevronsUpDown, Edit, MoreHorizontal, Plus, RefreshCw, Search, Settings, Tags, Trash2, Paperclip, Mic, Ticket, Clock, AlertCircle, CheckCircle, BarChart3, CalendarDays, Copy } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { toast } from "sonner";
@@ -20,6 +20,7 @@ import { getAuthHeaders } from "@/lib/api/auth";
 import { API_BASE } from "@/lib/api/base";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from "recharts";
 import { DatePicker } from "@/components/ui/date-picker";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 type ClientDoc = { _id: string; company?: string; person?: string };
 type EmployeeDoc = { _id: string; name?: string; email?: string };
@@ -66,6 +67,13 @@ export default function Tickets() {
   const [openAddTicket, setOpenAddTicket] = useState(false);
   const [openManageLabels, setOpenManageLabels] = useState(false);
   const [editingTicket, setEditingTicket] = useState<TicketDoc | null>(null);
+
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [ticketToDelete, setTicketToDelete] = useState<string | null>(null);
+  const [confirmDeleteLabelOpen, setConfirmDeleteLabelOpen] = useState(false);
+  const [labelToDelete, setLabelToDelete] = useState<string | null>(null);
+  const [confirmCloneOpen, setConfirmCloneOpen] = useState(false);
+  const [ticketToClone, setTicketToClone] = useState<TicketDoc | null>(null);
 
   const [selectedColor, setSelectedColor] = useState<string>("#4F46E5");
   const [newLabelName, setNewLabelName] = useState("");
@@ -279,8 +287,6 @@ export default function Tickets() {
   };
 
   const deleteTicket = async (id: string) => {
-    const ok = window.confirm("Delete this ticket?");
-    if (!ok) return;
     try {
       const res = await fetch(`${API_BASE}/api/tickets/${id}`, { method: "DELETE", headers: getAuthHeaders() });
       const json = await res.json().catch(() => null);
@@ -289,6 +295,34 @@ export default function Tickets() {
       await loadTickets();
     } catch (e: any) {
       toast.error(e?.message || "Failed to delete");
+    }
+  };
+
+  const cloneTicket = async (t: TicketDoc) => {
+    const payload: any = {
+      title: `${t.title} (Copy)`,
+      description: t.description || "",
+      type: t.type || "general",
+      assignedTo: t.assignedTo || "",
+      requestedBy: t.requestedBy || "",
+      status: "open",
+      lastActivity: new Date().toISOString(),
+      labels: t.labels || [],
+      clientId: t.clientId || undefined,
+      client: t.client || "",
+    };
+    try {
+      const res = await fetch(`${API_BASE}/api/tickets`, {
+        method: "POST",
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Failed to clone ticket");
+      toast.success("Ticket cloned");
+      await loadTickets();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to clone ticket");
     }
   };
 
@@ -312,8 +346,6 @@ export default function Tickets() {
   };
 
   const deleteTicketLabel = async (id: string) => {
-    const ok = window.confirm("Delete this label?");
-    if (!ok) return;
     try {
       const res = await fetch(`${API_BASE}/api/ticket-labels/${id}`, { method: "DELETE", headers: getAuthHeaders() });
       const json = await res.json().catch(() => null);
@@ -582,7 +614,7 @@ export default function Tickets() {
                               <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: l.color || "#4F46E5" }} />
                             </TableCell>
                             <TableCell>
-                              <Button variant="outline" size="sm" onClick={() => deleteTicketLabel(l._id)}>Delete</Button>
+                              <Button variant="outline" size="sm" onClick={() => { setLabelToDelete(l._id); setConfirmDeleteLabelOpen(true); }}>Delete</Button>
                             </TableCell>
                           </TableRow>
                         ))
@@ -1175,7 +1207,11 @@ export default function Tickets() {
                                     <CheckCircle2 className="w-4 h-4 mr-2" />
                                     {(t.status || "open") === "closed" ? "Mark as Open" : "Mark as Closed"}
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => deleteTicket(t._id)} className="text-destructive">
+                                  <DropdownMenuItem onClick={() => { setTicketToClone(t); setConfirmCloneOpen(true); }}>
+                                    <Copy className="w-4 h-4 mr-2" />
+                                    Clone
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => { setTicketToDelete(t._id); setConfirmDeleteOpen(true); }} className="text-destructive">
                                     <Trash2 className="w-4 h-4 mr-2" />
                                     Delete
                                   </DropdownMenuItem>
@@ -1218,6 +1254,32 @@ export default function Tickets() {
           </Tabs>
         </CardContent>
       </Card>
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        onConfirm={() => ticketToDelete && deleteTicket(ticketToDelete)}
+        title="Delete Ticket"
+        description="Are you sure you want to delete this ticket? This action cannot be undone."
+        variant="destructive"
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteLabelOpen}
+        onOpenChange={setConfirmDeleteLabelOpen}
+        onConfirm={() => labelToDelete && deleteTicketLabel(labelToDelete)}
+        title="Delete Label"
+        description="Are you sure you want to delete this label?"
+        variant="destructive"
+      />
+
+      <ConfirmDialog
+        open={confirmCloneOpen}
+        onOpenChange={setConfirmCloneOpen}
+        onConfirm={() => ticketToClone && cloneTicket(ticketToClone)}
+        title="Clone Ticket"
+        description={`Are you sure you want to clone "${ticketToClone?.title}"?`}
+        confirmText="Clone"
+      />
     </div>
   );
 }
