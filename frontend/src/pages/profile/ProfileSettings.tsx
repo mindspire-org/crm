@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { getAuthHeaders } from "@/lib/api/auth";
 import { ImageManager } from "@/components/ImageManager";
 import { API_BASE } from "@/lib/api/base";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, User, Mail, Shield, Lock, Fingerprint, Camera, Sparkles, RefreshCcw } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const ASSET_BASE = API_BASE;
 
@@ -238,158 +240,273 @@ export default function ProfileSettings() {
   };
 
   if (loading) {
-    return <div className="text-sm text-muted-foreground">Loading profileâ€¦</div>;
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-2">
+          <RefreshCcw className="w-8 h-8 text-indigo-500 animate-spin" />
+          <p className="text-sm font-bold uppercase tracking-widest text-slate-400">Loading Profile...</p>
+        </div>
+      </div>
+    );
   }
 
+  const inputCls = "h-12 rounded-2xl border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-semibold px-4";
+  const labelCls = "text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1 mb-1.5 block";
+
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Profile Settings</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-4">
-            <div className="flex items-center gap-4">
-              <Avatar className="h-16 w-16 border">
-                <AvatarImage
-                  src={normalizeAvatarSrc(avatar, avatarVer)}
-                  onError={(e) => {
-                    const img = e.currentTarget as HTMLImageElement;
-                    img.src = "/api/placeholder/64/64";
-                  }}
-                />
-                <AvatarFallback className="text-lg">{initials}</AvatarFallback>
-              </Avatar>
-              <div className="space-y-1">
-                <div className="text-sm font-medium">{name || ""}</div>
-                <div className="text-xs text-muted-foreground">{email || ""}</div>
-                <div className="text-xs text-muted-foreground">{role ? String(role).toUpperCase() : ""}</div>
-              </div>
-            </div>
-            
-            <ImageManager
-              currentImage={normalizeAvatarSrc(avatar, avatarVer)}
-              onImageChange={handleAvatarChange}
-              onImageRemove={handleAvatarRemove}
-              aspectRatio={1}
-              disabled={uploading}
-            />
-          </div>
+    <div className="max-w-5xl mx-auto space-y-8 pb-20 animate-fade-in">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 px-2">
+        <div className="space-y-1">
+          <h1 className="text-4xl font-black tracking-tight text-slate-900">
+            Account <span className="text-indigo-600">Settings</span>
+          </h1>
+          <p className="text-sm font-medium text-slate-500">Manage your profile information and security preferences.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button 
+            variant="outline" 
+            onClick={() => void loadMe()} 
+            disabled={saving || uploading}
+            className="h-11 px-6 rounded-2xl border-slate-200 font-bold uppercase text-[10px] tracking-widest hover:bg-slate-50"
+          >
+            <RefreshCcw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} />
+            Refresh
+          </Button>
+          <Button 
+            onClick={saveProfile} 
+            disabled={saving || uploading}
+            className="h-11 px-8 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold uppercase text-[10px] tracking-widest shadow-xl shadow-slate-200 hover:scale-[1.02] transition-all"
+          >
+            {saving ? <RefreshCcw className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
+            Save Changes
+          </Button>
+        </div>
+      </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Name</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Left Column: Profile Card */}
+        <div className="lg:col-span-1 space-y-8">
+          <Card className="rounded-[2.5rem] border-0 shadow-2xl shadow-slate-200/50 overflow-hidden bg-white">
+            <div className="h-32 bg-gradient-to-br from-indigo-600 to-violet-700 relative">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.2),transparent)]" />
             </div>
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input value={email} onChange={(e) => setEmail(e.target.value)} />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Username</Label>
-            <Input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Enter your username" />
-            <p className="text-xs text-muted-foreground">Used for login. Can be different from your email.</p>
-          </div>
-
-          <div className="rounded-lg border p-4 space-y-4">
-            <div className="text-sm font-medium">Reset PIN</div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Current Password</Label>
-                <div className="relative">
-                  <Input 
-                    type={showPinCurrentPassword ? "text" : "password"} 
-                    value={pinCurrentPassword} 
-                    onChange={(e) => setPinCurrentPassword(e.target.value)} 
-                    className="pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPinCurrentPassword(!showPinCurrentPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showPinCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
+            <CardContent className="pt-0 px-8 pb-8">
+              <div className="relative -mt-16 mb-6 flex justify-center">
+                <div className="relative group">
+                  <Avatar className="h-32 w-32 border-[6px] border-white shadow-2xl rounded-[2rem]">
+                    <AvatarImage
+                      src={normalizeAvatarSrc(avatar, avatarVer)}
+                      className="object-cover"
+                      onError={(e) => {
+                        const img = e.currentTarget as HTMLImageElement;
+                        img.src = "/api/placeholder/128/128";
+                      }}
+                    />
+                    <AvatarFallback className="text-3xl font-black bg-slate-100 text-slate-400">
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="absolute inset-0 rounded-[2rem] bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                    <Camera className="w-8 h-8 text-white" />
+                  </div>
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>New PIN (4-8 digits)</Label>
-                <div className="relative">
-                  <Input 
-                    type={showNewPin ? "text" : "password"} 
-                    value={newPin} 
-                    onChange={(e) => setNewPin(e.target.value)} 
-                    className="pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowNewPin(!showNewPin)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showNewPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
+              
+              <div className="text-center space-y-1 mb-8">
+                <h3 className="text-xl font-black text-slate-900 tracking-tight">{name || "Unnamed User"}</h3>
+                <p className="text-sm font-bold text-indigo-600 uppercase tracking-widest">{role || "Member"}</p>
+                <div className="pt-4 flex flex-wrap justify-center gap-2">
+                  <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-0 rounded-lg px-3 py-1 font-bold text-[10px] uppercase tracking-wider">
+                    {username || "no-username"}
+                  </Badge>
+                  <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-0 rounded-lg px-3 py-1 font-bold text-[10px] uppercase tracking-wider">
+                    {email?.split('@')[1] || "domain"}
+                  </Badge>
                 </div>
               </div>
-            </div>
-            <div className="flex justify-end">
-              <Button type="button" variant="outline" onClick={savePin} disabled={!pinCurrentPassword.trim() || !newPin.trim()}>
-                Update PIN
-              </Button>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Current password</Label>
-              <div className="relative">
-                <Input 
-                  type={showCurrentPassword ? "text" : "password"} 
-                  value={currentPassword} 
-                  onChange={(e) => setCurrentPassword(e.target.value)} 
-                  className="pr-10"
+              <div className="pt-6 border-t border-slate-100">
+                <ImageManager
+                  currentImage={normalizeAvatarSrc(avatar, avatarVer)}
+                  onImageChange={handleAvatarChange}
+                  onImageRemove={handleAvatarRemove}
+                  aspectRatio={1}
+                  disabled={uploading}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
               </div>
-            </div>
-            <div className="space-y-2">
-              <Label>New password</Label>
-              <div className="relative">
-                <Input 
-                  type={showNewPassword ? "text" : "password"} 
-                  value={newPassword} 
-                  onChange={(e) => setNewPassword(e.target.value)} 
-                  className="pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowNewPassword(!showNewPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              <div className="text-xs text-muted-foreground">Minimum 8 characters, include letters and numbers.</div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
 
-          <div className="flex items-center gap-2">
-            <Button onClick={saveProfile} disabled={saving || uploading}>
-              Save changes
-            </Button>
-            <Button variant="outline" onClick={() => void loadMe()} disabled={saving || uploading}>
-              Refresh
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          <Card className="rounded-[2.5rem] border-0 shadow-xl shadow-slate-200/40 bg-slate-900 text-white overflow-hidden">
+            <CardContent className="p-8 space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center mb-4">
+                <Shield className="w-6 h-6 text-indigo-400" />
+              </div>
+              <h4 className="text-lg font-bold tracking-tight">Data Privacy</h4>
+              <p className="text-sm text-slate-400 leading-relaxed">
+                Your profile information is encrypted and visible only to authorized personnel within HealthSpire.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Column: Settings Forms */}
+        <div className="lg:col-span-2 space-y-8">
+          {/* General Information */}
+          <Card className="rounded-[2.5rem] border-0 shadow-2xl shadow-slate-200/50 bg-white overflow-hidden">
+            <CardHeader className="px-10 pt-10 pb-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
+                  <User className="w-5 h-5 text-indigo-600" />
+                </div>
+                <div>
+                  <CardTitle className="text-xl font-black tracking-tight text-slate-900">General Information</CardTitle>
+                  <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Basic account details</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-10 space-y-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-1.5">
+                  <Label className={labelCls}>Full Name</Label>
+                  <Input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} placeholder="John Doe" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className={labelCls}>Email Address</Label>
+                  <Input value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} placeholder="john@healthspire.org" />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className={labelCls}>Username</Label>
+                <Input value={username} onChange={(e) => setUsername(e.target.value)} className={inputCls} placeholder="johndoe" />
+                <p className="text-[10px] font-bold text-slate-400 ml-1 uppercase tracking-wider">Used for login. Can be different from your email.</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Security & PIN */}
+          <Card className="rounded-[2.5rem] border-0 shadow-2xl shadow-slate-200/50 bg-white overflow-hidden">
+            <CardHeader className="px-10 pt-10 pb-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center">
+                  <Lock className="w-5 h-5 text-rose-600" />
+                </div>
+                <div>
+                  <CardTitle className="text-xl font-black tracking-tight text-slate-900">Security &amp; PIN</CardTitle>
+                  <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Manage your credentials</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-10 space-y-10">
+              {/* PIN Section */}
+              <div className="space-y-6">
+                <div className="flex items-center gap-2 mb-2">
+                  <Fingerprint className="w-4 h-4 text-rose-500" />
+                  <span className="text-xs font-black uppercase tracking-[0.2em] text-slate-900">System PIN</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-1.5">
+                    <Label className={labelCls}>Current Password</Label>
+                    <div className="relative">
+                      <Input 
+                        type={showPinCurrentPassword ? "text" : "password"} 
+                        value={pinCurrentPassword} 
+                        onChange={(e) => setPinCurrentPassword(e.target.value)} 
+                        className={cn(inputCls, "pr-12")}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPinCurrentPassword(!showPinCurrentPassword)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-900 transition-colors"
+                      >
+                        {showPinCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className={labelCls}>New PIN (4-8 digits)</Label>
+                    <div className="relative">
+                      <Input 
+                        type={showNewPin ? "text" : "password"} 
+                        value={newPin} 
+                        onChange={(e) => setNewPin(e.target.value)} 
+                        className={cn(inputCls, "pr-12")}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPin(!showNewPin)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-900 transition-colors"
+                      >
+                        {showNewPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={savePin} 
+                    disabled={!pinCurrentPassword.trim() || !newPin.trim()}
+                    className="h-10 px-6 rounded-xl border-slate-200 font-bold uppercase text-[10px] tracking-widest"
+                  >
+                    Update PIN
+                  </Button>
+                </div>
+              </div>
+
+              {/* Password Section */}
+              <div className="space-y-6 pt-10 border-t border-slate-100">
+                <div className="flex items-center gap-2 mb-2">
+                  <Lock className="w-4 h-4 text-rose-500" />
+                  <span className="text-xs font-black uppercase tracking-[0.2em] text-slate-900">Change Password</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-1.5">
+                    <Label className={labelCls}>Current Password</Label>
+                    <div className="relative">
+                      <Input 
+                        type={showCurrentPassword ? "text" : "password"} 
+                        value={currentPassword} 
+                        onChange={(e) => setCurrentPassword(e.target.value)} 
+                        className={cn(inputCls, "pr-12")}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-900 transition-colors"
+                      >
+                        {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className={labelCls}>New Password</Label>
+                    <div className="relative">
+                      <Input 
+                        type={showNewPassword ? "text" : "password"} 
+                        value={newPassword} 
+                        onChange={(e) => setNewPassword(e.target.value)} 
+                        className={cn(inputCls, "pr-12")}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-900 transition-colors"
+                      >
+                        {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    <p className="text-[10px] font-bold text-slate-400 ml-1 uppercase tracking-wider">Minimum 8 characters with letters &amp; numbers.</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }

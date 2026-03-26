@@ -9,14 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import ReactQuill, { Quill } from "react-quill";
 import "react-quill/dist/quill.snow.css";
 import { API_BASE } from "@/lib/api/base";
-
-
-const getAuthHeaders = () => {
-  const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  return { headers, token };
-};
+import { getAuthHeaders, getAuthToken } from "@/lib/api/auth";
 
 export default function AddAnnouncement() {
   const navigate = useNavigate();
@@ -112,16 +105,15 @@ export default function AddAnnouncement() {
       setLoading(true);
       setError(null);
 
-      const { headers, token } = getAuthHeaders();
+      const token = getAuthToken();
       if (!token) {
         setError("Please login again.");
-        navigate("/auth", { replace: true });
         return;
       }
 
       const res = await fetch(`${API_BASE}/api/announcements`, {
         method: "POST",
-        headers,
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           title: title.trim(),
           message,
@@ -134,10 +126,10 @@ export default function AddAnnouncement() {
           },
         }),
       });
+      
       const json = await res.json().catch(() => null);
       if (res.status === 401) {
         setError("Session expired. Please login again.");
-        navigate("/auth", { replace: true });
         return;
       }
       if (!res.ok) throw new Error(json?.error || `Failed to create announcement (HTTP ${res.status})`);
