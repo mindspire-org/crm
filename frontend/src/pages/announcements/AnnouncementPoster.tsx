@@ -238,7 +238,7 @@ export default function AnnouncementPoster() {
             message={item.message}
             date={item.startDate ? new Date(item.startDate).toLocaleDateString() : new Date(item.createdAt).toLocaleDateString()}
             author={item.createdByName || "Management Team"}
-            brandName={(settings as any)?.company?.name}
+            brandName={(settings as any)?.company?.name || "HealthSpire"}
             logoSrc={brandLogo}
             announcementNumber={item.announcementNumber || item._id?.slice(-4).toUpperCase()}
           />

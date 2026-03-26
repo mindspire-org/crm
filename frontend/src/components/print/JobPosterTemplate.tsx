@@ -32,7 +32,7 @@ export const JobPosterTemplate = forwardRef<HTMLDivElement, Props>(function JobP
     requirements = [],
     benefits = [],
     enrollmentUrl,
-    brandName = "Mindspire",
+    brandName = "HealthSpire",
     logoSrc,
     postedDate,
     applyUrl = "career.mindspire.org",

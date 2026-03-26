@@ -150,7 +150,7 @@ const CoverIllustration = () => (
 /* ─── Main Component ─────────────────────────────────────────── */
 
 export const HaroomPrintTemplate = forwardRef<HTMLDivElement, Props>(
-  function HaroomPrintTemplate(
+  function HealthSpirePrintTemplate(
     {
       title, brand, clientName, clientAddress, docNumber, date,
       items, paymentInformation, totals, termsText, timeframe,

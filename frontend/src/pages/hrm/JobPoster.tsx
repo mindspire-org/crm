@@ -159,7 +159,7 @@ export default function JobPoster() {
       : `${API_BASE}${settings.general.logoUrl}`
     : undefined;
 
-  const brandName = settings?.general?.companyName || "Haroom";
+  const brandName = settings?.general?.companyName || "HealthSpire";
   const primaryColor = settings?.general?.primaryColor || "#4f46e5";
   const accentColor = settings?.general?.accentColor || "#7c3aed";
   const cleanDomain = (settings?.general?.domain || "")

@@ -645,7 +645,7 @@ export default function ContractDetail() {
   const buildPreviewDocument = () => {
     if (!row) return "";
     const viewBrand = { 
-      name: settings?.general?.companyName || "Haroom (Pvt) Ltd", 
+      name: settings?.general?.companyName || "HealthSpire (Pvt) Ltd", 
       email: settings?.general?.companyEmail || "info@haroom.org", 
       phone: settings?.general?.companyPhone || "+92 300 0000000", 
       address: settings?.general?.addressLine1 || "Islamabad, Pakistan", 
@@ -683,7 +683,7 @@ export default function ContractDetail() {
       paymentInformation: row.paymentTermsPercentage ? `${row.paymentTermsPercentage}% Upfront Advance Payment required.` : "Standard payment terms apply.",
       termsText: "1. Validity: This contract is valid for 15 days.\n2. Support: Post-deployment support included for 30 days.",
       signatureData: { 
-        companyName: settings?.general?.companyName || "Haroom (Pvt) Ltd", 
+        companyName: settings?.general?.companyName || "HealthSpire (Pvt) Ltd", 
         companySignatory: settings?.general?.companyName || "Mr. Qutaibah Talat",
         companyDesignation: "CEO",
         clientName: row.client || "Authorized Client Representative" 

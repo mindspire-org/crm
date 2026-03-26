@@ -113,7 +113,7 @@ export default function PublicJobApplication() {
     );
   }
 
-  const brandName = (settings as any)?.company?.name || "Mindspire";
+  const brandName = (settings as any)?.company?.name || "HealthSpire";
 
   if (submitted) {
     return (

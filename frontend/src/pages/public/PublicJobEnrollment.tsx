@@ -225,7 +225,7 @@ export default function PublicJobEnrollment() {
     );
   }
 
-  const brandName = settings?.general?.companyName || "Haroom";
+  const brandName = settings?.general?.companyName || "HealthSpire";
   const primaryColor = settings?.general?.primaryColor || "#4f46e5";
 
   if (submitted) {
@@ -515,7 +515,7 @@ export default function PublicJobEnrollment() {
       
       <footer className="py-10 text-center border-t border-slate-100 bg-white/50">
         <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
-          © {new Date().getFullYear()} {brandName} • SECURE ENROLLMENT PORTAL
+          © {new Date().getFullYear()} mindspire.org • SECURE ENROLLMENT PORTAL
         </p>
       </footer>
     </div>

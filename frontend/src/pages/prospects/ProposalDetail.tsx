@@ -283,7 +283,7 @@ export default function ProposalDetail() {
 
   const buildPreviewDocument = () => {
     const viewBrand = { 
-      name: settings?.general?.companyName || "Haroom (Pvt) Ltd", 
+      name: settings?.general?.companyName || "HealthSpire (Pvt) Ltd", 
       email: settings?.general?.companyEmail || "info@haroom.org", 
       phone: settings?.general?.companyPhone || "+92 300 0000000", 
       address: settings?.general?.addressLine1 || "Islamabad, Pakistan", 
@@ -319,9 +319,9 @@ export default function ProposalDetail() {
       timeframeDays: tfDays,
       sections,
       paymentInformation: "• 50% Upfront Advance Payment to initiate architectural setup.\n• 30% Upon completion of core module integration.\n• 20% Final settlement upon official handover and sync.",
-      termsText: "1. Validity: This technical proposal remains valid for 15 operational days.\n2. Support: Post-deployment hypercare is included for 30 cycles.\n3. Confidentiality: Both parties agree to maintain strict node confidentiality.\n4. Intellectual Property: All custom code remains property of Haroom until final settlement.",
+      termsText: "1. Validity: This technical proposal remains valid for 15 operational days.\n2. Support: Post-deployment hypercare is included for 30 cycles.\n3. Confidentiality: Both parties agree to maintain strict node confidentiality.\n4. Intellectual Property: All custom code remains property of HealthSpire until final settlement.",
       signatureData: { 
-        companyName: settings?.general?.companyName || "Haroom (Pvt) Ltd", 
+        companyName: settings?.general?.companyName || "HealthSpire (Pvt) Ltd", 
         companySignatory: settings?.general?.companyName || "Mr. Qutaibah Talat",
         companyDesignation: "CEO",
         clientName: p?.client || "Authorized Entity Representative" 

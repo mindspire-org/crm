@@ -686,7 +686,7 @@ export default function Portfolio() {
 
           <div style="margin-top: 16px; border-top: 1px solid #e2e8f0; padding-top: 10px; display:flex; align-items:center; justify-content:space-between; gap: 10px; color:#94a3b8; font-size: 9px;">
             <div style="margin:0;">Prepared for sharing • ${sanitize(createdStr)}</div>
-            <div style="margin:0;">© ${new Date().getFullYear()} ${sanitize(pdfConfig.companyName)} • All rights reserved</div>
+            <div style="margin:0;">© ${new Date().getFullYear()} mindspire.org • All rights reserved</div>
           </div>
         </div>
       `;

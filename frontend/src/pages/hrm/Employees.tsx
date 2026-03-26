@@ -46,7 +46,7 @@ type Employee = {
   department: string;
   role: string;
   location: string;
-  status: "active" | "on-leave" | "remote";
+  status: "active" | "on-leave" | "remote" | "inactive";
   joinDate: string;
   initials: string;
   image?: string;
@@ -58,6 +58,7 @@ const statusConfig = {
   active: { label: "Active", variant: "success" as const },
   "on-leave": { label: "On Leave", variant: "warning" as const },
   remote: { label: "Remote", variant: "default" as const },
+  inactive: { label: "Inactive", variant: "destructive" as const },
 };
 
 const departmentColors: Record<string, string> = {
@@ -122,6 +123,7 @@ export default function Employees() {
   const [salaryTerm, setSalaryTerm] = useState("");
   const [hireDate, setHireDate] = useState("");
   const [emailVal, setEmailVal] = useState("");
+  const [statusVal, setStatusVal] = useState<"active" | "on-leave" | "remote" | "inactive">("active");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState("staff");
@@ -191,8 +193,8 @@ export default function Employees() {
         emp.department.toLowerCase().includes(s) ||
         emp.role.toLowerCase().includes(s)
     );
-    if (statusTab === "active") return bySearch.filter((e) => e.status !== "on-leave");
-    return bySearch.filter((e) => e.status === "on-leave");
+    if (statusTab === "active") return bySearch.filter((e) => e.status !== "inactive");
+    return bySearch.filter((e) => e.status === "inactive");
   }, [items, searchQuery, statusTab]);
 
   const nextStep = () => setStep((p) => (p < 3 ? ((p + 1) as 1 | 2 | 3) : p));
@@ -210,6 +212,7 @@ export default function Employees() {
     setSalaryTerm("");
     setHireDate("");
     setEmailVal("");
+    setStatusVal("active");
     setPassword("");
     setRole("staff");
     setSendLogin(true);
@@ -458,7 +461,7 @@ export default function Employees() {
       .toUpperCase();
     if (isEdit && editingIndex !== null) {
       // local update
-      setItems((prev) => prev.map((it, idx) => idx === editingIndex ? { ...it, name, email: emailVal||"", phone: phoneVal||"", role, department: departmentVal, location: address||"", initials } : it));
+      setItems((prev) => prev.map((it, idx) => idx === editingIndex ? { ...it, name, email: emailVal||"", phone: phoneVal||"", role, department: departmentVal, location: address||"", status: statusVal, initials } : it));
       // backend update
       if (editingDbId) {
         try {
@@ -471,7 +474,7 @@ export default function Employees() {
             department: departmentVal,
             role,
             location: address,
-            status: "active",
+            status: statusVal,
             joinDate: hireDate ? new Date(hireDate) : undefined,
             initials,
           };
@@ -521,7 +524,7 @@ export default function Employees() {
           department: departmentVal,
           role: role,
           location: address || "",
-          status: "active",
+          status: statusVal,
           joinDate: hireDate || "Today",
           initials,
         },
@@ -538,7 +541,7 @@ export default function Employees() {
           department: departmentVal,
           role,
           location: address,
-          status: "active",
+          status: statusVal,
           joinDate: hireDate ? new Date(hireDate) : undefined,
           initials,
         };
@@ -602,6 +605,7 @@ export default function Employees() {
     setSalaryTerm(fullEmployeeData.salaryTerm || "");
     setHireDate(fullEmployeeData.joinDate ? new Date(fullEmployeeData.joinDate).toISOString().slice(0,10) : "");
     setEmailVal(fullEmployeeData.email || emp.email || "");
+    setStatusVal(fullEmployeeData.status || emp.status || "active");
     setPassword(fullEmployeeData.password || "");
     setRole(fullEmployeeData.role || emp.role || "staff");
     setSendLogin(false);
@@ -752,6 +756,19 @@ export default function Employees() {
                       <div className="space-y-1"><Label>Salary term</Label><Input placeholder="Salary term" value={salaryTerm} onChange={(e)=>setSalaryTerm(e.target.value)} /></div>
                       <div className="space-y-1"><Label>Date of hire</Label><DatePicker value={hireDate} onChange={setHireDate} placeholder="Pick date" /></div>
                     </div>
+                    <div className="space-y-1">
+                      <Label>Status</Label>
+                      <Select value={statusVal} onValueChange={(v: any)=>setStatusVal(v)}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(statusConfig).map(([val, cfg]) => (
+                            <SelectItem key={val} value={val}>{cfg.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 )}
 
@@ -819,10 +836,9 @@ export default function Employees() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">On Leave</p>
-                <p className="text-2xl font-bold mt-1">{items.filter(i=>i.status==="on-leave").length}</p>
+                <p className="text-sm text-muted-foreground">Inactive members</p>
+                <p className="text-2xl font-bold mt-1">{items.filter(i=>i.status==="inactive").length}</p>
               </div>
-              <Badge variant="warning">{items.length?((items.filter(i=>i.status==="on-leave").length/items.length)*100).toFixed(1):"0.0"}%</Badge>
             </div>
           </CardContent>
         </Card>
@@ -898,7 +914,8 @@ export default function Employees() {
                       "absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white shadow",
                       employee.status === "active" && "bg-success",
                       employee.status === "on-leave" && "bg-warning",
-                      employee.status === "remote" && "bg-primary"
+                      employee.status === "remote" && "bg-primary",
+                      employee.status === "inactive" && "bg-destructive"
                     )}
                   />
                 </div>

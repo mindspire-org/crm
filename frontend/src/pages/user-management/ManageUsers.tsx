@@ -9,7 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { Search, MoreHorizontal, RefreshCw, Trash2, Plus } from 'lucide-react';
+import { Search, MoreHorizontal, RefreshCw, Trash2, Plus, Edit2 } from 'lucide-react';
 import { API_BASE } from '@/lib/api/base';
 import { getAuthHeaders } from '@/lib/api/auth';
 import { toast } from '@/components/ui/sonner';
@@ -32,6 +32,15 @@ export default function ManageUsers() {
   const [status, setStatus] = useState<string>('-');
   const [openDelete, setOpenDelete] = useState(false);
   const [deleting, setDeleting] = useState<UserRow | null>(null);
+
+  const [openEdit, setOpenAddEdit] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserRow | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editRole, setEditRole] = useState('staff');
+  const [editStatus, setEditStatus] = useState<'active' | 'inactive'>('active');
+  const [editPassword, setEditPassword] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const [openAdd, setOpenAdd] = useState(false);
   const [newName, setNewName] = useState('');
@@ -88,6 +97,57 @@ export default function ManageUsers() {
   const confirmDelete = (u: UserRow) => {
     setDeleting(u);
     setOpenDelete(true);
+  };
+
+  const handleEdit = (u: UserRow) => {
+    setEditingUser(u);
+    setEditName(u.name || '');
+    setEditEmail(u.email);
+    setEditRole(u.role || 'staff');
+    setEditStatus(u.status || 'active');
+    setEditPassword('');
+    setOpenAddEdit(true);
+  };
+
+  const doEdit = async () => {
+    if (!editingUser?._id) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/users/admin/${editingUser._id}`, {
+        method: 'PUT',
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          name: editName.trim(),
+          email: editEmail.trim(),
+          role: editRole,
+          status: editStatus
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || 'Failed to update user');
+
+      // Update password if provided
+      if (editPassword.trim()) {
+        const passRes = await fetch(`${API_BASE}/api/users/admin/${editingUser._id}/credentials`, {
+          method: 'PUT',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            password: editPassword.trim()
+          }),
+        });
+        const passJson = await passRes.json().catch(() => null);
+        if (!passRes.ok) throw new Error(passJson?.error || 'Failed to update password');
+      }
+
+      toast.success('User updated successfully');
+      setOpenAddEdit(false);
+      setEditingUser(null);
+      load();
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to update user');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const doDelete = async () => {
@@ -237,6 +297,9 @@ export default function ManageUsers() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleEdit(u)}>
+                              <Edit2 className="h-4 w-4 mr-2" /> Edit
+                            </DropdownMenuItem>
                             <DropdownMenuItem className="text-destructive" onClick={() => confirmDelete(u)}>
                               <Trash2 className="h-4 w-4 mr-2" /> Delete
                             </DropdownMenuItem>
@@ -263,6 +326,62 @@ export default function ManageUsers() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpenDelete(false)}>Cancel</Button>
             <Button variant="destructive" onClick={doDelete}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={openEdit} onOpenChange={setOpenAddEdit}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit User</DialogTitle>
+            <DialogDescription>
+              Update user account details.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label>Full Name</Label>
+              <Input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="John Doe" />
+            </div>
+            <div className="space-y-2">
+              <Label>Email Address</Label>
+              <Input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="john@example.com" />
+            </div>
+            <div className="space-y-2">
+              <Label>Update Password</Label>
+              <Input type="password" value={editPassword} onChange={(e) => setEditPassword(e.target.value)} placeholder="Leave blank to keep current" />
+            </div>
+            <div className="space-y-2">
+              <Label>Role</Label>
+              <Select value={editRole} onValueChange={setEditRole}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select role" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROLE_OPTIONS.map(o => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select value={editStatus} onValueChange={(v: any) => setEditStatus(v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenAddEdit(false)}>Cancel</Button>
+            <Button onClick={doEdit} disabled={saving}>
+              {saving ? 'Saving...' : 'Save Changes'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
