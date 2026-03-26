@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { getAuthHeaders } from "@/lib/api/auth";
 import { ImageManager } from "@/components/ImageManager";
 import { API_BASE } from "@/lib/api/base";
+import { Eye, EyeOff } from "lucide-react";
 
 const ASSET_BASE = API_BASE;
 
@@ -81,9 +82,13 @@ export default function ProfileSettings() {
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
 
   const [pinCurrentPassword, setPinCurrentPassword] = useState("");
   const [newPin, setNewPin] = useState("");
+  const [showPinCurrentPassword, setShowPinCurrentPassword] = useState(false);
+  const [showNewPin, setShowNewPin] = useState(false);
 
   const fileRef = useRef<HTMLInputElement | null>(null);
 
@@ -293,11 +298,39 @@ export default function ProfileSettings() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Current Password</Label>
-                <Input type="password" value={pinCurrentPassword} onChange={(e) => setPinCurrentPassword(e.target.value)} />
+                <div className="relative">
+                  <Input 
+                    type={showPinCurrentPassword ? "text" : "password"} 
+                    value={pinCurrentPassword} 
+                    onChange={(e) => setPinCurrentPassword(e.target.value)} 
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPinCurrentPassword(!showPinCurrentPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showPinCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
               <div className="space-y-2">
                 <Label>New PIN (4-8 digits)</Label>
-                <Input type="password" value={newPin} onChange={(e) => setNewPin(e.target.value)} />
+                <div className="relative">
+                  <Input 
+                    type={showNewPin ? "text" : "password"} 
+                    value={newPin} 
+                    onChange={(e) => setNewPin(e.target.value)} 
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPin(!showNewPin)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showNewPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
             </div>
             <div className="flex justify-end">
@@ -310,11 +343,39 @@ export default function ProfileSettings() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Current password</Label>
-              <Input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+              <div className="relative">
+                <Input 
+                  type={showCurrentPassword ? "text" : "password"} 
+                  value={currentPassword} 
+                  onChange={(e) => setCurrentPassword(e.target.value)} 
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>New password</Label>
-              <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+              <div className="relative">
+                <Input 
+                  type={showNewPassword ? "text" : "password"} 
+                  value={newPassword} 
+                  onChange={(e) => setNewPassword(e.target.value)} 
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
               <div className="text-xs text-muted-foreground">Minimum 8 characters, include letters and numbers.</div>
             </div>
           </div>

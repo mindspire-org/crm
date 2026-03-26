@@ -8,7 +8,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Search, MoreHorizontal, RefreshCw, Trash2 } from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import { Search, MoreHorizontal, RefreshCw, Trash2, Plus } from 'lucide-react';
 import { API_BASE } from '@/lib/api/base';
 import { getAuthHeaders } from '@/lib/api/auth';
 import { toast } from '@/components/ui/sonner';
@@ -31,6 +32,27 @@ export default function ManageUsers() {
   const [status, setStatus] = useState<string>('-');
   const [openDelete, setOpenDelete] = useState(false);
   const [deleting, setDeleting] = useState<UserRow | null>(null);
+
+  const [openAdd, setOpenAdd] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newRole, setNewRole] = useState('staff');
+  const [adding, setAdding] = useState(false);
+
+  const ROLE_OPTIONS = [
+    { value: 'admin', label: 'Admin' },
+    { value: 'staff', label: 'Staff' },
+    { value: 'marketer', label: 'Marketer' },
+    { value: 'marketing_manager', label: 'Marketing Manager' },
+    { value: 'sales', label: 'Sales Person' },
+    { value: 'sales_manager', label: 'Sales Manager' },
+    { value: 'finance', label: 'Finance' },
+    { value: 'finance_manager', label: 'Finance Manager' },
+    { value: 'developer', label: 'Developer' },
+    { value: 'project_manager', label: 'Project Manager' },
+    { value: 'client', label: 'Client' },
+  ];
 
   const load = async () => {
     setLoading(true);
@@ -71,7 +93,7 @@ export default function ManageUsers() {
   const doDelete = async () => {
     if (!deleting?._id) return;
     try {
-      const res = await fetch(`${API_BASE}/api/users/${deleting._id}`, {
+      const res = await fetch(`${API_BASE}/api/users/admin/${deleting._id}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
       });
@@ -86,6 +108,40 @@ export default function ManageUsers() {
     }
   };
 
+  const doAdd = async () => {
+    if (!newEmail.trim() || !newPassword.trim()) {
+      toast.error('Email and password are required');
+      return;
+    }
+    setAdding(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/users`, {
+        method: 'POST',
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          name: newName.trim(),
+          email: newEmail.trim(),
+          password: newPassword,
+          role: newRole,
+          status: 'active'
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || 'Failed to add user');
+      toast.success('User added successfully');
+      setOpenAdd(false);
+      setNewName('');
+      setNewEmail('');
+      setNewPassword('');
+      setNewRole('staff');
+      load();
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to add user');
+    } finally {
+      setAdding(false);
+    }
+  };
+
   return (
     <div className="p-6">
       <Card>
@@ -95,10 +151,16 @@ export default function ManageUsers() {
               <div className="text-lg font-semibold">Users</div>
               <div className="text-sm text-muted-foreground">Manage system users</div>
             </div>
-            <Button variant="outline" onClick={load} disabled={loading}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={load} disabled={loading}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh
+              </Button>
+              <Button onClick={() => setOpenAdd(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add User
+              </Button>
+            </div>
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
@@ -107,14 +169,14 @@ export default function ManageUsers() {
               <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name or email" className="pl-9" />
             </div>
             <Select value={role} onValueChange={setRole}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-[200px]">
                 <SelectValue placeholder="Role" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="-">All roles</SelectItem>
-                <SelectItem value="admin">admin</SelectItem>
-                <SelectItem value="staff">staff</SelectItem>
-                <SelectItem value="client">client</SelectItem>
+                {ROLE_OPTIONS.map(o => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Select value={status} onValueChange={setStatus}>
@@ -201,6 +263,50 @@ export default function ManageUsers() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpenDelete(false)}>Cancel</Button>
             <Button variant="destructive" onClick={doDelete}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={openAdd} onOpenChange={setOpenAdd}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Add New User</DialogTitle>
+            <DialogDescription>
+              Create a new user account with a specific role.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label>Full Name</Label>
+              <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="John Doe" />
+            </div>
+            <div className="space-y-2">
+              <Label>Email Address</Label>
+              <Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="john@example.com" />
+            </div>
+            <div className="space-y-2">
+              <Label>Password</Label>
+              <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Min. 8 characters" />
+            </div>
+            <div className="space-y-2">
+              <Label>Role</Label>
+              <Select value={newRole} onValueChange={setNewRole}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select role" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROLE_OPTIONS.map(o => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenAdd(false)}>Cancel</Button>
+            <Button onClick={doAdd} disabled={adding}>
+              {adding ? 'Adding...' : 'Add User'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

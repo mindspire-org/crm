@@ -345,7 +345,7 @@ export function canAccessModule(module: ModuleKey, user?: User | null): boolean 
   }
 
   if (role === 'project_manager') {
-    const allowed = new Set<ModuleKey>(['dashboard', 'messages', 'announcements', 'calendar', 'tasks', 'profile', 'files', 'notes', 'projects', 'crm', 'tickets', 'events', 'clients', 'hrm']);
+    const allowed = new Set<ModuleKey>(['dashboard', 'messages', 'announcements', 'calendar', 'tasks', 'profile', 'files', 'notes', 'projects', 'crm', 'tickets', 'events', 'clients', 'hrm', 'accounting', 'sales', 'reports']);
     return allowed.has(module);
   }
 

@@ -80,6 +80,7 @@ const DEFAULT_DEPARTMENTS = [
 ];
 
 const BASE_ROLE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "admin", label: "Admin" },
   { value: "staff", label: "Staff" },
   { value: "team_member", label: "Team Member" },
   { value: "developer", label: "Developer" },

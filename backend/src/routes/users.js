@@ -81,6 +81,7 @@ router.get("/me", authenticate, async (req, res) => {
     }
 
     if (
+      role === "admin" ||
       role === "staff" ||
       role === "marketer" ||
       role === "marketing_manager" ||
@@ -114,7 +115,8 @@ router.get("/me", authenticate, async (req, res) => {
         role: user?.role,
         email: user?.email,
         username: user?.username,
-        name: displayName,
+        name: String(user?.name || "").trim(),
+        displayName,
         avatar,
         clientId: user?.clientId,
         permissions: user?.permissions || [],
@@ -152,6 +154,10 @@ router.put("/me", authenticate, async (req, res) => {
       const usernameExists = await User.findOne({ username: usernameNext, _id: { $ne: user._id } }).lean();
       if (usernameExists) return res.status(409).json({ error: "Username already in use" });
       updateUser.username = usernameNext;
+    }
+
+    if (name && typeof name === "string") {
+      updateUser.name = name.trim();
     }
 
     // Password change
@@ -201,7 +207,7 @@ router.put("/me", authenticate, async (req, res) => {
       }
     }
 
-    if (role === "staff" || role === "marketer" || role === "marketing_manager" || role === "developer" || role === "project_manager" || role === "sales" || role === "sales_manager" || role === "finance" || role === "finance_manager") {
+    if (role === "admin" || role === "staff" || role === "marketer" || role === "marketing_manager" || role === "developer" || role === "project_manager" || role === "sales" || role === "sales_manager" || role === "finance" || role === "finance_manager") {
       const dept =
         role === "marketer"
           ? "marketing"
@@ -214,30 +220,22 @@ router.put("/me", authenticate, async (req, res) => {
                 : role === "finance" || role === "finance_manager"
                   ? "finance"
                   : "";
-      // Get existing employee to preserve fields not in User profile
-      const existingEmp = await User.findOne({ email: emailPrev || emailFinal }).lean();
-      
-      // Build update preserving existing fields
+      // Update employee record
       const empUpdate = {
         $setOnInsert: {
-          email: emailFinal,
           status: "active",
           disableLogin: false,
           markAsInactive: false,
         },
         $set: {
           name: nameFinal || emailFinal,
+          email: emailFinal,
           department: dept,
           role: role,
         }
       };
       
-      // If email changed, update it in Employee record too
-      if (emailPrev && emailFinal && emailPrev !== emailFinal && existingEmp) {
-        empUpdate.$set.email = emailFinal;
-      }
-      
-      await User.findOneAndUpdate(
+      await Employee.findOneAndUpdate(
         { email: emailPrev || emailFinal },
         empUpdate,
         { new: true, upsert: true }
