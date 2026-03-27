@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { API_BASE } from "@/lib/api/base";
 import { getAuthHeaders } from "@/lib/api/auth";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 
 export default function Subscriptions() {
   type ClientDoc = { _id: string; company?: string; person?: string };
@@ -96,6 +97,16 @@ export default function Subscriptions() {
   const [note, setNote] = useState("");
   const [label, setLabel] = useState("-");
 
+  const [isAddingNewProduct, setIsAddingNewProduct] = useState(false);
+
+  const uniqueProducts = useMemo(() => {
+    const s = new Set<string>();
+    subscriptions.forEach((x) => {
+      if (x.productName) s.add(x.productName);
+    });
+    return Array.from(s).sort();
+  }, [subscriptions]);
+
   const labelColorByName = useMemo(() => {
     const m = new Map<string, string>();
     for (const l of subscriptionLabels) {
@@ -133,6 +144,7 @@ export default function Subscriptions() {
     setStatusSel("active");
     setNote("");
     setLabel("-");
+    setIsAddingNewProduct(false);
     setEditingSubscription(null);
   };
 
@@ -140,6 +152,7 @@ export default function Subscriptions() {
     setEditingSubscription(s);
     setTitle(s.title || "");
     setProductName(s.productName || "");
+    setIsAddingNewProduct(false);
     setPlanName(s.planName || "");
     setCompanyName(s.companyName || "");
     setWhatsappNumber(s.whatsappNumber || "");
@@ -471,7 +484,48 @@ export default function Subscriptions() {
               <div className="grid gap-3">
                 <div className="space-y-1"><Label>Title</Label><Input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} /></div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1"><Label>Product / Software</Label><Input placeholder="Product name" value={productName} onChange={(e) => setProductName(e.target.value)} /></div>
+                  <div className="space-y-1">
+                    <Label>Product / Software</Label>
+                    {isAddingNewProduct ? (
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="New Product Name"
+                          value={productName}
+                          onChange={(e) => setProductName(e.target.value)}
+                          autoFocus
+                        />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-10 px-2"
+                          onClick={() => {
+                            setIsAddingNewProduct(false);
+                            setProductName("");
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <SearchableSelect
+                        options={[
+                          { value: "add-new", label: "+ Add New Product" },
+                          ...uniqueProducts.map((p) => ({ value: p, label: p })),
+                        ]}
+                        value={productName}
+                        onValueChange={(val) => {
+                          if (val === "add-new") {
+                            setIsAddingNewProduct(true);
+                            setProductName("");
+                          } else {
+                            setProductName(val);
+                          }
+                        }}
+                        placeholder="Select Product"
+                        threshold={0}
+                      />
+                    )}
+                  </div>
                   <div className="space-y-1"><Label>Plan</Label><Input placeholder="Plan name" value={planName} onChange={(e) => setPlanName(e.target.value)} /></div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -481,27 +535,29 @@ export default function Subscriptions() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <Label>Client (Receivable)</Label>
-                    <Select value={clientId} onValueChange={setClientId}>
-                      <SelectTrigger><SelectValue placeholder="- Client -" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="-">- Client -</SelectItem>
-                        {clients.map((c) => (
-                          <SelectItem key={c._id} value={c._id}>{clientDisplayName(c)}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      options={[
+                        { value: "-", label: "- Client -" },
+                        ...clients.map((c) => ({ value: c._id, label: clientDisplayName(c) })),
+                      ]}
+                      value={clientId}
+                      onValueChange={setClientId}
+                      placeholder="- Client -"
+                      threshold={0}
+                    />
                   </div>
                   <div className="space-y-1">
                     <Label>Vendor (Payable)</Label>
-                    <Select value={vendorId} onValueChange={setVendorId}>
-                      <SelectTrigger><SelectValue placeholder="- Vendor -" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="-">- Vendor -</SelectItem>
-                        {vendors.map((v) => (
-                          <SelectItem key={v._id} value={v._id}>{v.name || v.company || "Unnamed"}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      options={[
+                        { value: "-", label: "- Vendor -" },
+                        ...vendors.map((v) => ({ value: v._id, label: v.name || v.company || "Unnamed" })),
+                      ]}
+                      value={vendorId}
+                      onValueChange={setVendorId}
+                      placeholder="- Vendor -"
+                      threshold={0}
+                    />
                   </div>
                 </div>
 
@@ -524,15 +580,16 @@ export default function Subscriptions() {
                   <div className="space-y-1"><Label>Payment Method</Label><Input placeholder="Bank / Cash / Stripe" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} /></div>
                   <div className="space-y-1">
                     <Label>Account Manager</Label>
-                    <Select value={accountManagerUserId} onValueChange={setAccountManagerUserId}>
-                      <SelectTrigger><SelectValue placeholder="-" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="-">-</SelectItem>
-                        {(users || []).map((u) => (
-                          <SelectItem key={u._id} value={u._id}>{u.name || u.email || u._id}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      options={[
+                        { value: "-", label: "-" },
+                        ...(users || []).map((u) => ({ value: u._id, label: u.name || u.email || u._id })),
+                      ]}
+                      value={accountManagerUserId}
+                      onValueChange={setAccountManagerUserId}
+                      placeholder="-"
+                      threshold={0}
+                    />
                   </div>
                 </div>
 

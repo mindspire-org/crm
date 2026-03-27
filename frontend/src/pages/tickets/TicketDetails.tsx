@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { CheckCircle2, Download, FileText, MoreHorizontal, Paperclip, Send, Tags } from "lucide-react";
+import { CheckCircle2, Download, FileText, MoreHorizontal, Paperclip, Send, Tags, User, Clock, MessageSquare, Activity, Calendar, ShieldCheck, ChevronRight, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { getAuthHeaders } from "@/lib/api/auth";
 import { API_BASE } from "@/lib/api/base";
@@ -525,68 +525,341 @@ export default function TicketDetails() {
     const html = `
       <html>
         <head>
-          <title>Ticket Completion - ${ticketNo}</title>
+          <title>Ticket Resolution - ${ticketNo}</title>
           <style>
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #1e293b; line-height: 1.6; max-width: 800px; margin: 0 auto; }
-            .header { border-bottom: 2px solid #4f46e5; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; }
-            .company-name { font-size: 28px; font-weight: 800; color: #4f46e5; letter-spacing: -0.025em; }
-            .doc-type { font-size: 14px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em; }
-            .ticket-info { background: #f8fafc; padding: 20px; border-radius: 12px; margin-bottom: 30px; display: grid; grid-template-cols: 1fr 1fr; gap: 10px; }
-            .info-item { font-size: 14px; }
-            .info-label { font-weight: 600; color: #64748b; margin-right: 8px; }
-            h2 { font-size: 20px; font-weight: 700; color: #0f172a; margin-top: 30px; margin-bottom: 15px; border-left: 4px solid #4f46e5; padding-left: 12px; }
-            .section { margin-bottom: 30px; }
-            ul { padding-left: 20px; }
-            li { margin-bottom: 8px; }
-            .footer { margin-top: 60px; border-top: 1px solid #e2e8f0; pt: 20px; text-align: center; font-size: 12px; color: #94a3b8; }
-            @media print { .no-print { display: none; } body { padding: 0; } }
-            .btn { background: #4f46e5; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; margin-bottom: 20px; }
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+            
+            :root {
+              --primary: #4f46e5;
+              --primary-light: #eef2ff;
+              --text-main: #0f172a;
+              --text-muted: #64748b;
+              --border: #e2e8f0;
+              --success: #10b981;
+              --bg-light: #f8fafc;
+            }
+
+            body { 
+              font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+              padding: 0; 
+              margin: 0;
+              color: var(--text-main); 
+              line-height: 1.5; 
+              background: #fff;
+            }
+
+            .page-container {
+              max-width: 850px;
+              margin: 0 auto;
+              padding: 60px 50px;
+            }
+
+            .header { 
+              display: flex; 
+              justify-content: space-between; 
+              align-items: flex-start; 
+              margin-bottom: 48px;
+            }
+
+            .logo-section {
+              display: flex;
+              align-items: center;
+              gap: 12px;
+            }
+
+            .logo-mark {
+              width: 40px;
+              height: 40px;
+              background: var(--primary);
+              border-radius: 10px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: white;
+              font-weight: 800;
+              font-size: 20px;
+            }
+
+            .company-name { 
+              font-size: 24px; 
+              font-weight: 800; 
+              color: var(--text-main); 
+              letter-spacing: -0.02em; 
+            }
+
+            .doc-badge {
+              display: inline-block;
+              padding: 6px 12px;
+              background: var(--primary-light);
+              color: var(--primary);
+              font-size: 12px;
+              font-weight: 700;
+              text-transform: uppercase;
+              letter-spacing: 0.05em;
+              border-radius: 6px;
+              margin-top: 4px;
+            }
+
+            .ticket-meta { 
+              text-align: right; 
+            }
+
+            .ticket-no { 
+              font-size: 20px; 
+              font-weight: 700; 
+              color: var(--primary);
+            }
+
+            .ticket-date { 
+              font-size: 14px; 
+              color: var(--text-muted); 
+              margin-top: 4px;
+            }
+
+            .hero-section {
+              background: var(--bg-light);
+              border: 1px solid var(--border);
+              border-radius: 16px;
+              padding: 32px;
+              margin-bottom: 40px;
+              position: relative;
+              overflow: hidden;
+            }
+
+            .hero-section::before {
+              content: '';
+              position: absolute;
+              top: 0;
+              left: 0;
+              width: 4px;
+              height: 100%;
+              background: var(--primary);
+            }
+
+            .status-banner {
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              color: var(--success);
+              font-weight: 700;
+              font-size: 14px;
+              margin-bottom: 12px;
+              text-transform: uppercase;
+              letter-spacing: 0.05em;
+            }
+
+            .hero-title {
+              font-size: 28px;
+              font-weight: 700;
+              margin: 0 0 16px 0;
+              color: var(--text-main);
+              line-height: 1.2;
+            }
+
+            .grid-info {
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 24px;
+              margin-top: 24px;
+              padding-top: 24px;
+              border-top: 1px solid var(--border);
+            }
+
+            .info-box h4 {
+              font-size: 12px;
+              color: var(--text-muted);
+              text-transform: uppercase;
+              margin: 0 0 4px 0;
+              letter-spacing: 0.05em;
+            }
+
+            .info-box p {
+              font-size: 15px;
+              font-weight: 600;
+              margin: 0;
+            }
+
+            .section-title { 
+              font-size: 18px; 
+              font-weight: 700; 
+              color: var(--text-main); 
+              margin: 40px 0 20px 0; 
+              display: flex;
+              align-items: center;
+              gap: 10px;
+            }
+
+            .section-title::after {
+              content: '';
+              flex: 1;
+              height: 1px;
+              background: var(--border);
+            }
+
+            .content-block {
+              font-size: 15px;
+              color: #334155;
+              line-height: 1.6;
+              background: #fff;
+              border: 1px solid var(--border);
+              padding: 24px;
+              border-radius: 12px;
+            }
+
+            .task-list {
+              list-style: none;
+              padding: 0;
+              margin: 0;
+            }
+
+            .task-item {
+              display: flex;
+              align-items: flex-start;
+              gap: 12px;
+              padding: 12px 0;
+              border-bottom: 1px solid var(--bg-light);
+            }
+
+            .task-item:last-child { border-bottom: none; }
+
+            .check-icon {
+              width: 20px;
+              height: 20px;
+              background: var(--success);
+              color: white;
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 12px;
+              flex-shrink: 0;
+              margin-top: 2px;
+            }
+
+            .footer { 
+              margin-top: 80px; 
+              padding-top: 32px;
+              border-top: 1px solid var(--border); 
+              text-align: center; 
+            }
+
+            .footer-text {
+              font-size: 13px;
+              color: var(--text-muted);
+            }
+
+            .footer-brand {
+              font-weight: 700;
+              color: var(--primary);
+              margin-top: 8px;
+            }
+
+            @media print { 
+              .no-print { display: none; } 
+              body { background: #fff; }
+              .page-container { padding: 40px 30px; }
+            }
+
+            .btn-print { 
+              background: var(--primary); 
+              color: white; 
+              border: none; 
+              padding: 12px 24px; 
+              border-radius: 8px; 
+              font-weight: 600; 
+              font-size: 14px;
+              cursor: pointer; 
+              transition: opacity 0.2s;
+              box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            }
+            .btn-print:hover { opacity: 0.9; }
           </style>
         </head>
         <body>
-          <div class="no-print" style="text-align: right;">
-            <button class="btn" onclick="window.print()">Print / Save as PDF</button>
+          <div class="no-print" style="padding: 20px; background: var(--bg-light); border-bottom: 1px solid var(--border); text-align: right;">
+            <button class="btn-print" onclick="window.print()">Download as PDF</button>
           </div>
-          <div class="header">
-            <div>
-              <div class="company-name">${companyName}</div>
-              <div class="doc-type">Ticket Completion Certificate</div>
+
+          <div class="page-container">
+            <div class="header">
+              <div class="logo-section">
+                <div class="logo-mark">H</div>
+                <div>
+                  <div class="company-name">${companyName}</div>
+                  <div class="doc-badge">Resolution Certificate</div>
+                </div>
+              </div>
+              <div class="ticket-meta">
+                <div class="ticket-no">${ticketNo}</div>
+                <div class="ticket-date">${date}</div>
+              </div>
             </div>
-            <div style="text-align: right;">
-              <div style="font-weight: 700; font-size: 18px;">${ticketNo}</div>
-              <div style="font-size: 14px; color: #64748b;">Date: ${date}</div>
+
+            <div class="hero-section">
+              <div class="status-banner">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                Resolved Successfully
+              </div>
+              <h1 class="hero-title">${ticket.title}</h1>
+              <p style="color: var(--text-muted); margin: 0; font-size: 15px;">
+                This document serves as official confirmation that the support request has been completed and verified by our technical team.
+              </p>
+
+              <div class="grid-info">
+                <div class="info-box">
+                  <h4>Client Name</h4>
+                  <p>${ticket.client || 'Valued Client'}</p>
+                </div>
+                <div class="info-box">
+                  <h4>Requested By</h4>
+                  <p>${ticket.requestedBy || '-'}</p>
+                </div>
+                <div class="info-box">
+                  <h4>Technical Representative</h4>
+                  <p>${ticket.assignedTo || '-'}</p>
+                </div>
+                <div class="info-box">
+                  <h4>Resolution Date</h4>
+                  <p>${date}</p>
+                </div>
+              </div>
             </div>
-          </div>
 
-          <div class="section">
-            <p>Dear <strong>${ticket.client || 'Valued Client'}</strong>,</p>
-            <p>We are pleased to inform you that your support ticket has been successfully resolved. Below is a summary of the work performed.</p>
-          </div>
+            <div class="section-title">Original Requirement</div>
+            <div class="content-block" style="white-space: pre-wrap;">${ticket.description || 'No description provided.'}</div>
 
-          <div class="ticket-info">
-            <div class="info-item"><span class="info-label">Subject:</span> ${ticket.title}</div>
-            <div class="info-item"><span class="info-label">Status:</span> Resolved & Closed</div>
-            <div class="info-item"><span class="info-label">Requested By:</span> ${ticket.requestedBy || '-'}</div>
-            <div class="info-item"><span class="info-label">Assigned To:</span> ${ticket.assignedTo || '-'}</div>
-          </div>
+            <div class="section-title">Work Performed</div>
+            <div class="content-block">
+              ${tasks.length > 0 
+                ? `<ul class="task-list">
+                    ${tasks.map(t => `
+                      <li class="task-item">
+                        <div class="check-icon">✓</div>
+                        <div>
+                          <div style="font-weight: 600;">${t.title}</div>
+                          <div style="font-size: 13px; color: var(--text-muted);">Completed successfully</div>
+                        </div>
+                      </li>
+                    `).join('')}
+                   </ul>`
+                : `<p style="margin: 0; color: var(--text-muted);">All standard resolution procedures were followed and implemented.</p>`
+              }
+            </div>
 
-          <div class="section">
-            <h2>Original Request</h2>
-            <div style="background: #fff; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; font-size: 14px; white-space: pre-wrap;">${ticket.description || 'No description provided.'}</div>
-          </div>
+            <div class="section-title">Next Steps</div>
+            <p style="font-size: 15px; color: var(--text-muted); line-height: 1.6;">
+              Your satisfaction is our top priority. If you encounter any issues related to this resolution or have additional questions, please feel free to reach out to our support team quoting the ticket reference <strong>${ticketNo}</strong>.
+            </p>
 
-          <div class="section">
-            <h2>What We Have Done</h2>
-            ${tasksHtml}
-            <p style="font-size: 14px; margin-top: 15px;">All requested changes and fixes have been implemented and verified. The ticket is now marked as complete in our system.</p>
-          </div>
-
-          <div class="section">
-            <p>Thank you for choosing <strong>${companyName}</strong>. If you have any further questions regarding this ticket, please don't hesitate to contact us.</p>
-          </div>
-
-          <div class="footer">
-            &copy; ${new Date().getFullYear()} mindspire.org • HealthSpire Management Platform
+            <div class="footer">
+              <div class="footer-text">
+                Thank you for choosing ${companyName} for your technical needs.
+              </div>
+              <div class="footer-brand">${companyName} Support Portal</div>
+              <div style="font-size: 11px; color: #94a3b8; margin-top: 16px;">
+                &copy; ${new Date().getFullYear()} HealthSpire Management • Confidential Document
+              </div>
+            </div>
           </div>
         </body>
       </html>
@@ -598,151 +871,247 @@ export default function TicketDetails() {
   };
 
   return (
-    <div className="space-y-4 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => navigate(-1)}>
-            Back
+    <div className="space-y-6 animate-fade-in pb-10">
+      {/* Enhanced Header Section */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-background p-4 rounded-xl border shadow-sm">
+        <div className="flex items-center gap-4">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={() => navigate(-1)}
+            className="rounded-full hover:bg-muted"
+          >
+            <ChevronRight className="w-5 h-5 rotate-180" />
           </Button>
-          <h1 className="text-base font-semibold">{ticketTitle}</h1>
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${statusBadge.className}`}>
+                {statusBadge.label}
+              </span>
+              <span className="text-xs text-muted-foreground font-medium">
+                {ticket?.type || "General"} Support
+              </span>
+            </div>
+            <h1 className="text-xl font-bold tracking-tight">{ticketTitle}</h1>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {ticket?.status === "closed" && (
             <Button
               variant="outline"
               size="sm"
               onClick={downloadCompletionDoc}
-              className="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+              className="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 hover:text-emerald-800 transition-colors shadow-sm"
             >
               <FileText className="w-4 h-4 mr-2" />
-              Completion Doc
+              Resolution Doc
             </Button>
           )}
-          <Button onClick={toggleClosed} disabled={!ticket} className="gap-2">
-            <CheckCircle2 className="w-4 h-4" />
-            {(ticket?.status || "open") === "closed" ? "Mark as Open" : "Mark as Closed"}
+          <Button 
+            onClick={toggleClosed} 
+            disabled={!ticket} 
+            variant={(ticket?.status || "open") === "closed" ? "outline" : "default"}
+            className="gap-2 shadow-sm"
+          >
+            {(ticket?.status || "open") === "closed" ? (
+              <Activity className="w-4 h-4" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4" />
+            )}
+            {(ticket?.status || "open") === "closed" ? "Re-open Ticket" : "Close Ticket"}
           </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2">
-          <div className="flex items-center gap-3 mb-3 flex-wrap">
-            <span className={`text-xs px-3 py-1 rounded-full ${statusBadge.className}`}>{statusBadge.label}</span>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <button type="button" className="hover:underline inline-flex items-center gap-2" onClick={() => {}}>
-                <Tags className="w-4 h-4" />
-                Add Label
-              </button>
-              <span className="text-muted-foreground">|</span>
-              <span>{ticket?.assignedTo || "-"}</span>
-              <span>{ticket?.lastActivity ? `${new Date(ticket.lastActivity).toLocaleString()}` : ""}</span>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Main Content Area */}
+        <div className="lg:col-span-8 space-y-6">
+          
+          {/* Label Management Bar */}
+          <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-xl border border-dashed">
+            <Tags className="w-4 h-4 text-muted-foreground" />
+            <div className="flex-1 flex items-center gap-2 overflow-x-auto no-scrollbar">
+              {(ticket?.labels || []).length > 0 ? (
+                (ticket?.labels || []).map((l) => (
+                  <span key={l} className="text-[11px] font-semibold bg-background border px-2.5 py-1 rounded-lg shadow-sm whitespace-nowrap">
+                    {l}
+                  </span>
+                ))
+              ) : (
+                <span className="text-xs text-muted-foreground italic">No labels applied</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 border-l pl-3 ml-1">
+              <Select value={labelDraft} onValueChange={setLabelDraft}>
+                <SelectTrigger className="h-8 w-[140px] text-xs bg-background">
+                  <SelectValue placeholder="Add Label" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="-">Select Label</SelectItem>
+                  {ticketLabels.map((l) => (
+                    <SelectItem key={l._id} value={l.name}>{l.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                onClick={addLabel} 
+                disabled={!ticket || labelSaving || labelDraft === "-"}
+                className="h-8 px-3 text-xs"
+              >
+                {labelSaving ? "..." : "Apply"}
+              </Button>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 mb-3">
-            <Select value={labelDraft} onValueChange={setLabelDraft}>
-              <SelectTrigger className="max-w-xs">
-                <SelectValue placeholder="Add label" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="-">Add label</SelectItem>
-                {ticketLabels.map((l) => (
-                  <SelectItem key={l._id} value={l.name}>{l.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button variant="outline" size="sm" onClick={addLabel} disabled={!ticket || labelSaving || labelDraft === "-"}>
-              {labelSaving ? "Saving..." : "Add"}
-            </Button>
-            <div className="flex items-center gap-1 flex-wrap">
-              {(ticket?.labels || []).map((l) => (
-                <span key={l} className="text-xs px-2 py-0.5 rounded-full border">
-                  {l}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <Card>
-            <CardContent className="p-4 space-y-3">
+          <Card className="overflow-hidden border-none shadow-md ring-1 ring-border">
+            <CardContent className="p-0">
               {loading ? (
-                <div className="text-muted-foreground">Loading...</div>
+                <div className="p-12 text-center text-muted-foreground animate-pulse">
+                  <Activity className="w-8 h-8 mx-auto mb-3 opacity-20" />
+                  Loading ticket data...
+                </div>
               ) : ticket ? (
-                <>
-                  <div className="flex items-start gap-3">
-                    <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center font-semibold">
-                      {(ticket.client || "M").slice(0, 1).toUpperCase()}
-                    </div>
-                    <div>
-                      <div className="font-medium">{ticket.client || "Mindspire"}</div>
-                      <div className="text-xs text-muted-foreground">{ticket.createdAt ? `Today at ${new Date(ticket.createdAt).toLocaleTimeString()}` : ""}</div>
-                      <div className="text-sm mt-1 whitespace-pre-wrap">{ticket.description || ""}</div>
+                <div className="flex flex-col h-full">
+                  {/* Original Request Header */}
+                  <div className="p-6 border-b bg-muted/10">
+                    <div className="flex items-start gap-4">
+                      <div className="h-12 w-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center font-bold text-lg shadow-inner">
+                        {(ticket.client || "M").slice(0, 1).toUpperCase()}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <h3 className="font-bold text-base">{ticket.client || "External User"}</h3>
+                          <span className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                            <Clock className="w-3 h-3" />
+                            {ticket.createdAt ? new Date(ticket.createdAt).toLocaleString() : ""}
+                          </span>
+                        </div>
+                        <div className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap bg-background p-4 rounded-xl border shadow-sm italic border-primary/10">
+                          {ticket.description || "No description provided."}
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="border rounded-md overflow-hidden">
-                    <Textarea
-                      placeholder="Write a comment..."
-                      value={msg}
-                      onChange={(e) => setMsg(e.target.value)}
-                      className="min-h-[180px] border-0 rounded-none"
-                    />
-                    <div className="flex items-center justify-between p-3 border-t bg-muted/20 flex-wrap gap-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <label>
-                          <input
-                            type="file"
-                            multiple
-                            className="hidden"
-                            disabled={!ticket || uploading}
-                            onChange={(e) => uploadFiles(e.target.files)}
-                          />
-                          <Button variant="outline" size="sm" className="gap-2" disabled={!ticket || uploading}>
-                            <Paperclip className="w-4 h-4" />
-                            {uploading ? "Uploading..." : "Upload File"}
-                          </Button>
-                        </label>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm" disabled={!ticket || loadingTemplates}>
-                              {loadingTemplates ? "Loading..." : "Template"}
+                  {/* Activity/Message Feed */}
+                  <div className="p-6 bg-slate-50/50">
+                    <div className="flex items-center gap-2 mb-6">
+                      <MessageSquare className="w-4 h-4 text-primary" />
+                      <h4 className="text-sm font-bold uppercase tracking-wider text-slate-500">Activity & Discussion</h4>
+                    </div>
+
+                    <div className="space-y-6 relative before:absolute before:left-[19px] before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
+                      {(ticket.messages || []).length ? (
+                        (ticket.messages || []).map((m, idx) => (
+                          <div key={idx} className="relative pl-12">
+                            <div className="absolute left-0 top-1 h-10 w-10 rounded-full bg-background border-2 border-slate-200 flex items-center justify-center z-10">
+                              <User className="w-5 h-5 text-slate-400" />
+                            </div>
+                            <div className="bg-background rounded-2xl border p-4 shadow-sm group hover:shadow-md transition-shadow">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-sm font-bold text-slate-700">{(m.createdBy || "System Agent") || ""}</span>
+                                <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                                  {m.createdAt ? new Date(m.createdAt).toLocaleString() : ""}
+                                </span>
+                              </div>
+                              <div className="text-sm text-slate-600 whitespace-pre-wrap">{m.text || ""}</div>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="pl-12 py-4">
+                          <div className="text-sm text-slate-400 italic bg-white border border-dashed p-4 rounded-xl text-center">
+                            No activity messages recorded yet.
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Reply Editor */}
+                  <div className="p-6 border-t bg-background">
+                    <div className="relative group">
+                      <Textarea
+                        placeholder="Type your response or internal note..."
+                        value={msg}
+                        onChange={(e) => setMsg(e.target.value)}
+                        className="min-h-[160px] p-4 text-sm rounded-xl border-slate-200 focus-visible:ring-primary/20 transition-all resize-none shadow-sm"
+                      />
+                      <div className="flex items-center justify-between mt-4">
+                        <div className="flex items-center gap-2">
+                          <label className="cursor-pointer">
+                            <input
+                              type="file"
+                              multiple
+                              className="hidden"
+                              disabled={!ticket || uploading}
+                              onChange={(e) => uploadFiles(e.target.files)}
+                            />
+                            <Button variant="outline" size="sm" className="h-9 gap-2 rounded-lg border-slate-200 hover:bg-slate-50" disabled={!ticket || uploading}>
+                              <Paperclip className="w-3.5 h-3.5" />
+                              <span className="text-xs">{uploading ? "Uploading..." : "Attach File"}</span>
                             </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start">
-                            {filteredTemplates.length ? (
-                              filteredTemplates.map((t) => (
-                                <DropdownMenuItem key={t._id} onClick={() => insertTemplate(t)}>
-                                  {t.name}
-                                </DropdownMenuItem>
-                              ))
-                            ) : (
-                              <DropdownMenuItem disabled>No templates</DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem onClick={() => setOpenManageTemplates(true)}>
-                              Manage templates
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={saveAsNote} disabled={!ticket || savingNote || !msg.trim()}>
-                          {savingNote ? "Saving..." : "Save as note"}
-                        </Button>
-                        <Button size="sm" className="gap-2" onClick={sendMessage} disabled={sending || !msg.trim()}>
-                          <Send className="w-4 h-4" />
-                          {sending ? "Sending..." : "Send"}
-                        </Button>
+                          </label>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="outline" size="sm" className="h-9 gap-2 rounded-lg border-slate-200 hover:bg-slate-50" disabled={!ticket || loadingTemplates}>
+                                <FileText className="w-3.5 h-3.5" />
+                                <span className="text-xs">{loadingTemplates ? "..." : "Templates"}</span>
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-56 rounded-xl p-2 shadow-xl border-slate-200">
+                              {filteredTemplates.length ? (
+                                filteredTemplates.map((t) => (
+                                  <DropdownMenuItem key={t._id} onClick={() => insertTemplate(t)} className="rounded-lg text-xs py-2">
+                                    {t.name}
+                                  </DropdownMenuItem>
+                                ))
+                              ) : (
+                                <DropdownMenuItem disabled className="text-xs">No templates found</DropdownMenuItem>
+                              )}
+                              <div className="h-px bg-slate-100 my-1" />
+                              <DropdownMenuItem onClick={() => setOpenManageTemplates(true)} className="rounded-lg text-xs py-2 font-medium text-primary">
+                                Manage Templates
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={saveAsNote} 
+                            disabled={!ticket || savingNote || !msg.trim()}
+                            className="h-9 text-xs font-medium text-slate-500 hover:text-slate-700"
+                          >
+                            {savingNote ? "Saving..." : "Save as internal note"}
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            className="h-9 gap-2 px-5 rounded-lg shadow-md hover:shadow-lg transition-all" 
+                            onClick={sendMessage} 
+                            disabled={sending || !msg.trim()}
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            <span className="text-xs font-bold">{sending ? "Sending..." : "Send Response"}</span>
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <div className="text-xs text-muted-foreground">Files</div>
+                  {/* Attached Files Section */}
+                  <div className="p-6 bg-slate-50/50 border-t">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Paperclip className="w-4 h-4 text-slate-400" />
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">Shared Files</h4>
+                    </div>
                     {loadingFiles ? (
-                      <div className="text-sm text-muted-foreground">Loading...</div>
+                      <div className="text-sm text-muted-foreground">Loading attachments...</div>
                     ) : files.length ? (
-                      <div className="flex flex-col gap-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {files.map((f) => {
                           const href = f.url || f.path || "";
                           return (
@@ -751,110 +1120,155 @@ export default function TicketDetails() {
                               href={href}
                               target="_blank"
                               rel="noreferrer"
-                              className="text-sm text-primary hover:underline"
+                              className="flex items-center gap-3 p-3 bg-background border rounded-xl hover:border-primary/30 hover:shadow-sm transition-all group"
                             >
-                              {f.name || "file"}
+                              <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center group-hover:bg-primary/5 transition-colors">
+                                <FileText className="w-4 h-4 text-slate-400 group-hover:text-primary transition-colors" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs font-bold truncate text-slate-700">{f.name || "Unnamed File"}</div>
+                                <div className="text-[10px] text-slate-400">{f.createdAt ? new Date(f.createdAt).toLocaleDateString() : "No date"}</div>
+                              </div>
+                              <Download className="w-3.5 h-3.5 text-slate-300 group-hover:text-primary" />
                             </a>
                           );
                         })}
                       </div>
                     ) : (
-                      <div className="text-sm text-muted-foreground">No files</div>
+                      <div className="text-xs text-slate-400 italic p-4 border border-dashed rounded-xl text-center bg-white">
+                        No files have been shared yet.
+                      </div>
                     )}
                   </div>
-
-                  <div className="space-y-3">
-                    {(ticket.messages || []).length ? (
-                      (ticket.messages || []).map((m, idx) => (
-                        <div key={idx} className="rounded-md border p-3">
-                          <div className="text-xs text-muted-foreground">
-                            {(m.createdBy || "") || ""}{m.createdAt ? ` • ${new Date(m.createdAt).toLocaleString()}` : ""}
-                          </div>
-                          <div className="text-sm whitespace-pre-wrap">{m.text || ""}</div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-muted-foreground text-sm">No messages</div>
-                    )}
-                  </div>
-                </>
+                </div>
               ) : (
-                <div className="text-muted-foreground">Ticket not found</div>
+                <div className="p-20 text-center text-muted-foreground">
+                  Ticket not found or has been removed.
+                </div>
               )}
             </CardContent>
           </Card>
         </div>
 
-        <div className="space-y-4">
-          <Card>
-            <CardContent className="p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="font-medium">Ticket info</div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button type="button" variant="ghost" size="icon-sm" aria-label="more">
-                      <MoreHorizontal className="w-4 h-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={openEditDialog}>Edit</DropdownMenuItem>
-                    <DropdownMenuItem onClick={openMergeDialog}>Merge</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-              <div className="rounded-md border p-2 text-center text-sm">
-                {ticket?.type || "general"}
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-md border p-3 text-center">
-                  <div className="text-xs text-muted-foreground">In messages</div>
-                  <div className="text-lg font-semibold text-red-500">{inCount}</div>
+        {/* Sidebar Info Panels */}
+        <div className="lg:col-span-4 space-y-6">
+          <Card className="shadow-md border-none ring-1 ring-border overflow-hidden">
+            <CardContent className="p-0">
+              <div className="bg-slate-900 text-white p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-primary" />
+                    <h3 className="font-bold text-sm uppercase tracking-wider">Ticket Summary</h3>
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-white hover:bg-white/10">
+                        <MoreHorizontal className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-40 rounded-xl">
+                      <DropdownMenuItem onClick={openEditDialog} className="text-xs">Edit Details</DropdownMenuItem>
+                      <DropdownMenuItem onClick={openMergeDialog} className="text-xs">Merge Ticket</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
-                <div className="rounded-md border p-3 text-center">
-                  <div className="text-xs text-muted-foreground">Out messages</div>
-                  <div className="text-lg font-semibold text-blue-600">{outCount}</div>
+                
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div className="bg-white/10 rounded-xl p-3 border border-white/10">
+                    <div className="text-[10px] text-white/50 uppercase font-bold mb-1">Incoming</div>
+                    <div className="text-xl font-bold">{inCount}</div>
+                  </div>
+                  <div className="bg-white/10 rounded-xl p-3 border border-white/10">
+                    <div className="text-[10px] text-white/50 uppercase font-bold mb-1">Outgoing</div>
+                    <div className="text-xl font-bold">{outCount}</div>
+                  </div>
                 </div>
               </div>
-              <div className="text-xs text-muted-foreground">
-                {ticket?.createdAt ? `Today at ${new Date(ticket.createdAt).toLocaleTimeString()}` : ""}
+
+              <div className="p-5 space-y-5">
+                <div className="flex items-center gap-4">
+                  <div className="h-9 w-9 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+                    <User className="w-4 h-4 text-slate-500" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Assigned Agent</div>
+                    <div className="text-sm font-bold truncate text-slate-700">{ticket?.assignedTo || "Unassigned"}</div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <div className="h-9 w-9 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+                    <Calendar className="w-4 h-4 text-slate-500" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Created On</div>
+                    <div className="text-sm font-bold truncate text-slate-700">
+                      {ticket?.createdAt ? new Date(ticket.createdAt).toLocaleDateString() : "-"}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <div className="h-9 w-9 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+                    <Activity className="w-4 h-4 text-slate-500" />
+                  </div>
+                  <div className="min-w-0 w-full">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tight mb-1">Resolution Progress</div>
+                    <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full transition-all duration-500 ${ticket?.status === "closed" ? "w-full bg-emerald-500" : "w-1/3 bg-primary"}`} 
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardContent className="p-4">
-              <div className="text-sm font-medium">Assigned</div>
-              <div className="text-sm text-muted-foreground mt-1">{ticket?.assignedTo || "-"}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-medium">Tasks</div>
-                <Button variant="ghost" size="icon-sm" aria-label="add task" onClick={() => setOpenAddTask(true)}>
-                  +
+          <Card className="shadow-md border-none ring-1 ring-border">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-primary" />
+                  <h3 className="font-bold text-sm uppercase tracking-wider">Sub-Tasks</h3>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-8 w-8 rounded-lg hover:bg-slate-100" 
+                  onClick={() => setOpenAddTask(true)}
+                >
+                  <Plus className="w-4 h-4" />
                 </Button>
               </div>
+
               {loadingTasks ? (
-                <div className="text-sm text-muted-foreground">Loading...</div>
+                <div className="text-xs text-muted-foreground animate-pulse">Updating tasks...</div>
               ) : tasks.length ? (
-                <div className="space-y-2">
-                  {tasks.slice(0, 5).map((t) => (
+                <div className="space-y-3">
+                  {tasks.map((t) => (
                     <button
                       key={t._id}
                       type="button"
-                      className="w-full text-left text-sm hover:underline"
+                      className="w-full flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-transparent hover:border-slate-200 hover:bg-white transition-all text-left group shadow-sm hover:shadow-md"
                       onClick={() => navigate(`/tasks/${t._id}`)}
                     >
-                      {t.taskNo ? `#${t.taskNo} ` : ""}{t.title}
+                      <div className={`h-2 w-2 rounded-full flex-shrink-0 ${t.status === "completed" ? "bg-emerald-500" : "bg-amber-400"}`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Task {t.taskNo ? `#${t.taskNo}` : ""}</div>
+                        <div className="text-xs font-bold truncate text-slate-700 group-hover:text-primary transition-colors">{t.title}</div>
+                      </div>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-primary transition-colors" />
                     </button>
                   ))}
                 </div>
               ) : (
-                <button type="button" className="text-sm text-primary hover:underline" onClick={() => setOpenAddTask(true)}>
-                  + Add task
-                </button>
+                <div className="text-center py-8 px-4 border border-dashed rounded-xl bg-slate-50">
+                  <p className="text-xs text-slate-400 mb-3 italic">No tasks created yet</p>
+                  <Button variant="outline" size="sm" className="h-8 text-xs font-bold rounded-lg border-slate-200" onClick={() => setOpenAddTask(true)}>
+                    Create First Task
+                  </Button>
+                </div>
               )}
             </CardContent>
           </Card>

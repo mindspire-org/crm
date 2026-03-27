@@ -17,6 +17,7 @@ import { BackButton } from "@/components/ui/back-button";
 import { Separator } from "@/components/ui/separator";
 import { getAuthHeaders } from "@/lib/api/auth";
 import { toast } from "@/components/ui/sonner";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { API_BASE } from "@/lib/api/base";
 import { cn } from "@/lib/utils";
 import ReactQuill from 'react-quill';
@@ -79,6 +80,8 @@ export default function InvoiceDetailPage() {
   const [payDate, setPayDate] = useState(() => new Date().toISOString().slice(0,10));
   const [payNote, setPayNote] = useState("");
   const [paymentEditingId, setPaymentEditingId] = useState("");
+  const [confirmDeletePaymentOpen, setConfirmDeletePaymentOpen] = useState(false);
+  const [paymentToDeleteId, setPaymentToDeleteId] = useState<string | null>(null);
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDescription, setTaskDescription] = useState("");
   const [taskStatus, setTaskStatus] = useState("Pending");
@@ -356,24 +359,55 @@ export default function InvoiceDetailPage() {
 
   const savePayment = async () => {
     try {
-      const payload = {
+      const payload: any = {
         invoiceId: invoiceDbId,
+        clientId: inv?.clientId,
         amount: Number(payAmount),
         method: payMethod,
         date: new Date(payDate),
         note: payNote,
       };
-      const r = await fetch(`${API_BASE}/api/payments`, {
-        method: "POST",
+
+      const isEditing = !!paymentEditingId;
+      const url = isEditing ? `${API_BASE}/api/payments/${paymentEditingId}` : `${API_BASE}/api/payments`;
+      const method = isEditing ? "PUT" : "POST";
+
+      const r = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify(payload)
       });
+
       if (r.ok) {
+        toast.success(isEditing ? "Payment updated" : "Payment recorded");
         setOpenPay(false);
+        setPaymentEditingId("");
+        setPayAmount("");
+        setPayNote("");
         const pRes = await fetch(`${API_BASE}/api/payments?invoiceId=${encodeURIComponent(invoiceDbId)}`, { headers: getAuthHeaders() });
         if (pRes.ok) setPayments(await pRes.json());
+      } else {
+        const err = await r.json();
+        toast.error(err.error || "Failed to save payment");
       }
-    } catch {}
+    } catch (e: any) {
+      toast.error(e.message || "An error occurred");
+    }
+  };
+
+  const deletePayment = async (pId: string) => {
+    try {
+      const r = await fetch(`${API_BASE}/api/payments/${pId}`, { method: "DELETE", headers: getAuthHeaders() });
+      if (r.ok) {
+        toast.success("Payment deleted");
+        const pRes = await fetch(`${API_BASE}/api/payments?invoiceId=${encodeURIComponent(invoiceDbId)}`, { headers: getAuthHeaders() });
+        if (pRes.ok) setPayments(await pRes.json());
+      } else {
+        toast.error("Failed to delete payment");
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Failed to delete payment");
+    }
   };
 
   if (!inv) return <div className="p-4 text-center">Loading registry…</div>;
@@ -397,7 +431,7 @@ export default function InvoiceDetailPage() {
           <h1 className="text-xl font-bold uppercase tracking-tight">Invoice Protocol #{inv.number}</h1>
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" onClick={() => setOpenPay(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white"><DollarSign className="w-4 h-4 mr-2"/>Add Payment</Button>
+          <Button size="sm" onClick={() => { setPaymentEditingId(""); setPayAmount(""); setPayNote(""); setOpenPay(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white"><DollarSign className="w-4 h-4 mr-2"/>Add Payment</Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild><Button variant="outline" size="sm">Actions</Button></DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -562,7 +596,7 @@ export default function InvoiceDetailPage() {
                   <Button 
                     variant="ghost" 
                     className="w-full mt-2 h-9 text-xs font-bold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 border border-indigo-100 rounded-lg"
-                    onClick={() => setOpenPay(true)}
+                    onClick={() => { setPaymentEditingId(""); setPayAmount(""); setPayNote(""); setOpenPay(true); }}
                   >
                     <DollarSign className="w-3.5 h-3.5 mr-2" />
                     Record Payment
@@ -576,14 +610,101 @@ export default function InvoiceDetailPage() {
         <TabsContent value="payments">
           <Card className="border-slate-200 shadow-sm"><CardHeader><CardTitle>Payment History</CardTitle></CardHeader><CardContent>
             <Table>
-              <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Method</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Method</TableHead><TableHead>Note</TableHead><TableHead className="text-right">Amount</TableHead><TableHead className="w-24"></TableHead></TableRow></TableHeader>
               <TableBody>
-                {payments.map((p, i) => (<TableRow key={i}><TableCell>{new Date(p.date).toLocaleDateString()}</TableCell><TableCell>{p.method}</TableCell><TableCell className="text-right font-bold text-emerald-600">Rs.{Number(p.amount).toLocaleString()}</TableCell></TableRow>))}
+                {payments.map((p, i) => (<TableRow key={i} className="group">
+                  <TableCell>{new Date(p.date).toLocaleDateString()}</TableCell>
+                  <TableCell>{p.method}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{p.note || "-"}</TableCell>
+                  <TableCell className="text-right font-bold text-emerald-600">Rs.{Number(p.amount).toLocaleString()}</TableCell>
+                  <TableCell className="text-right opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button variant="ghost" size="sm" onClick={() => {
+                      setPaymentEditingId(p._id);
+                      setPayAmount(String(p.amount || ""));
+                      setPayMethod(p.method || "Bank Transfer");
+                      setPayDate(p.date ? new Date(p.date).toISOString().slice(0,10) : new Date().toISOString().slice(0,10));
+                      setPayNote(p.note || "");
+                      setOpenPay(true);
+                    }}><MoreHorizontal className="w-4 h-4" /></Button>
+                    <Button variant="ghost" size="sm" onClick={() => {
+                      setPaymentToDeleteId(p._id);
+                      setConfirmDeletePaymentOpen(true);
+                    }}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                  </TableCell>
+                </TableRow>))}
+                {payments.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-10">No payments recorded yet.</TableCell></TableRow>}
               </TableBody>
             </Table>
           </CardContent></Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={openPay} onOpenChange={setOpenPay}>
+        <DialogContent className="bg-card max-w-md rounded-2xl" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold">{paymentEditingId ? "Edit Payment" : "Record Payment"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Amount Received</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">Rs.</span>
+                <Input
+                  type="number"
+                  value={payAmount}
+                  onChange={(e) => setPayAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="pl-10 h-11 rounded-xl focus-visible:ring-primary/20"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Method</Label>
+                <Select value={payMethod} onValueChange={setPayMethod}>
+                  <SelectTrigger className="h-11 rounded-xl">
+                    <SelectValue placeholder="Select Method" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl shadow-xl">
+                    <SelectItem value="Cash">Cash</SelectItem>
+                    <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                    <SelectItem value="Stripe">Stripe</SelectItem>
+                    <SelectItem value="Cheque">Cheque</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Date</Label>
+                <DatePicker value={payDate} onChange={setPayDate} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Notes / Reference</Label>
+              <Textarea
+                placeholder="Bank reference number, cheque details etc."
+                value={payNote}
+                onChange={(e) => setPayNote(e.target.value)}
+                className="min-h-[100px] rounded-xl focus-visible:ring-primary/20 resize-none"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" onClick={() => setOpenPay(false)} className="rounded-xl">Cancel</Button>
+            <Button onClick={savePayment} className="rounded-xl px-8 shadow-md">
+              {paymentEditingId ? "Update Payment" : "Save Payment"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={confirmDeletePaymentOpen}
+        onOpenChange={setConfirmDeletePaymentOpen}
+        onConfirm={() => paymentToDeleteId && deletePayment(paymentToDeleteId)}
+        title="Delete Payment"
+        description="Are you sure you want to remove this payment record? This will update the invoice balance."
+        variant="destructive"
+      />
 
       {/* Add/Edit Item Dialog - Improved Design */}
       <Dialog open={openItem} onOpenChange={setOpenItem}>
