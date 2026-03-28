@@ -81,7 +81,7 @@ type ListInvoice = {
 
 // API_BASE is centralized in lib/api/base
 export default function InvoiceList() {
-  const [tab, setTab] = useState("list");
+  const [tab, setTab] = useState("dashboard");
   const [query, setQuery] = useState("");
   const navigate = useNavigate();
   const location = useLocation();

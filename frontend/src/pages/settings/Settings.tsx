@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useMemo, useRef, useState } from "react";
-import { Upload, X, Building2, Globe, Mail, Phone, MapPin, Clock, Calendar, Check, RefreshCw, Send } from "lucide-react";
+import { Upload, X, Building2, Globe, Mail, Phone, MapPin, Clock, Calendar, Check, RefreshCw, Send, DollarSign, Target } from "lucide-react";
 import { getAuthHeaders } from "@/lib/api/auth";
 import { API_BASE } from "@/lib/api/base";
 import { motion, AnimatePresence } from "framer-motion";

@@ -193,7 +193,18 @@ router.get('/conversations/:conversationId/messages', authenticate, async (req, 
 // Send message
 router.post('/messages', authenticate, async (req, res) => {
   try {
-    const { conversationId, content, attachments = [], type = 'text', mediaUrl } = req.body;
+    let { conversationId, content, attachments = [], type = 'text', mediaUrl } = req.body;
+    
+    // Safety check: sometimes attachments might arrive as stringified JSON from some clients
+    if (typeof attachments === 'string') {
+      try {
+        attachments = JSON.parse(attachments);
+      } catch (e) {
+        // Not JSON, maybe it was already a string-based attachment (legacy)
+        attachments = [{ url: attachments, name: 'Attachment', type: '', size: 0 }];
+      }
+    }
+
     const conversation = await Conversation.findById(conversationId);
     if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
 

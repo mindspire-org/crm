@@ -50,6 +50,7 @@ import { API_BASE } from "@/lib/api/base";
 import { getAuthHeaders } from "@/lib/api/auth";
 import { COUNTRIES } from "@/data/countries";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { canViewFinancialData, getCurrentUser } from "@/utils/roleAccess";
 
 export default function ClientDetails() {
   const { id } = useParams();
@@ -58,6 +59,8 @@ export default function ClientDetails() {
   const [client, setClient] = useState<any | null>(null);
   const [tab, setTab] = useState("contacts");
   const [activeTabs, setActiveTabs] = useState<Set<string>>(new Set(["contacts"]));
+
+  const canViewPricing = useMemo(() => canViewFinancialData(), []);
   const [estimates, setEstimates] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
@@ -103,6 +106,7 @@ export default function ClientDetails() {
         if (!res.ok) {
           const e = await res.json().catch(() => null);
           toast.error(e?.error || "Failed to load client");
+          setLoading(false);
           return;
         }
         const row = await res.json().catch(() => null);
@@ -446,7 +450,11 @@ export default function ClientDetails() {
         </div>
       </div>
     );
-  };
+  }
+
+  const displayName = client?.company || client?.person || "Client";
+  const clientType = client?.type === "person" ? "Individual" : "Organization";
+
   if (!client) return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
       <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
@@ -461,9 +469,6 @@ export default function ClientDetails() {
       </Button>
     </div>
   );
-
-  const displayName = client.company || client.person || "Client";
-  const clientType = client.type === "person" ? "Individual" : "Organization";
 
   return (
     <div className="space-y-6 animate-fade-in p-4 sm:p-6 max-w-7xl mx-auto">
@@ -529,16 +534,18 @@ export default function ClientDetails() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button 
-                variant="secondary" 
-                className="bg-white/20 text-white border-0 hover:bg-white/30 backdrop-blur-sm"
-                asChild
-              >
-                <NavLink to={`/invoices?clientId=${encodeURIComponent(String(id || ""))}`}>
-                  <Receipt className="mr-2 h-4 w-4" />
-                  Invoices
-                </NavLink>
-              </Button>
+              {canViewPricing && (
+                <Button 
+                  variant="secondary" 
+                  className="bg-white/20 text-white border-0 hover:bg-white/30 backdrop-blur-sm"
+                  asChild
+                >
+                  <NavLink to={`/invoices?clientId=${encodeURIComponent(String(id || ""))}`}>
+                    <Receipt className="mr-2 h-4 w-4" />
+                    Invoices
+                  </NavLink>
+                </Button>
+              )}
               <Button 
                 className="bg-white text-indigo-600 hover:bg-white/90 shadow-lg"
                 asChild
@@ -567,24 +574,46 @@ export default function ClientDetails() {
               color="from-sky-500 to-blue-600" 
               icon={<CheckSquare className="h-4 w-4" />}
             />
-            <Stat 
-              title="Invoices" 
-              value={dashboard.invoiceCount} 
-              color="from-emerald-500 to-teal-600" 
-              icon={<FileText className="h-4 w-4" />}
-            />
-            <Stat 
-              title="Invoiced" 
-              value={`PKR ${Math.max(0, Math.round(totals.totalInvoiced)).toLocaleString()}`} 
-              color="from-slate-600 to-slate-700" 
-              icon={<span className="text-xs font-bold">PKR</span>}
-            />
-            <Stat 
-              title="Due" 
-              value={`PKR ${Math.max(0, Math.round(totals.due)).toLocaleString()}`} 
-              color="from-rose-500 to-red-600" 
-              icon={<AlertCircle className="h-4 w-4" />}
-            />
+            {canViewPricing && (
+              <Stat 
+                title="Invoices" 
+                value={dashboard.invoiceCount} 
+                color="from-emerald-500 to-teal-600" 
+                icon={<FileText className="h-4 w-4" />}
+              />
+            )}
+            {canViewPricing && (
+              <Stat 
+                title="Invoiced" 
+                value={`PKR ${Math.max(0, Math.round(totals.totalInvoiced)).toLocaleString()}`} 
+                color="from-slate-600 to-slate-700" 
+                icon={<span className="text-xs font-bold">PKR</span>}
+              />
+            )}
+            {canViewPricing && (
+              <Stat 
+                title="Due" 
+                value={`PKR ${Math.max(0, Math.round(totals.due)).toLocaleString()}`} 
+                color="from-rose-500 to-red-600" 
+                icon={<AlertCircle className="h-4 w-4" />}
+              />
+            )}
+            {!canViewPricing && (
+              <>
+                <Stat 
+                  title="Tickets" 
+                  value={dashboard.openTickets} 
+                  color="from-orange-500 to-red-600" 
+                  icon={<Ticket className="h-4 w-4" />}
+                />
+                <Stat 
+                  title="Events" 
+                  value={events.length} 
+                  color="from-blue-500 to-indigo-600" 
+                  icon={<Calendar className="h-4 w-4" />}
+                />
+              </>
+            )}
           </div>
         </div>
       </Card>
@@ -623,30 +652,36 @@ export default function ClientDetails() {
                   <span className="hidden sm:inline font-medium text-sm whitespace-nowrap">Tasks</span>
                   <span className="sm:hidden text-xs font-medium">Tasks</span>
                 </TabsTrigger>
-                <TabsTrigger 
-                  value="invoices" 
-                  className="gap-2 rounded-xl px-3 py-2.5 h-auto data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-indigo/25 transition-all duration-300 snap-start"
-                >
-                  <FileText className="h-4 w-4 shrink-0" />
-                  <span className="hidden sm:inline font-medium text-sm whitespace-nowrap">Invoices</span>
-                  <span className="sm:hidden text-xs font-medium">Invoices</span>
-                </TabsTrigger>
-                <TabsTrigger 
-                  value="estimates" 
-                  className="gap-2 rounded-xl px-3 py-2.5 h-auto data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-indigo/25 transition-all duration-300 snap-start"
-                >
-                  <FileSignature className="h-4 w-4 shrink-0" />
-                  <span className="hidden sm:inline font-medium text-sm whitespace-nowrap">Estimates</span>
-                  <span className="sm:hidden text-xs font-medium">Estimates</span>
-                </TabsTrigger>
-                <TabsTrigger 
-                  value="proposals" 
-                  className="gap-2 rounded-xl px-3 py-2.5 h-auto data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-indigo/25 transition-all duration-300 snap-start"
-                >
-                  <Briefcase className="h-4 w-4 shrink-0" />
-                  <span className="hidden sm:inline font-medium text-sm whitespace-nowrap">Proposals</span>
-                  <span className="sm:hidden text-xs font-medium">Proposals</span>
-                </TabsTrigger>
+                {canViewPricing && (
+                  <TabsTrigger 
+                    value="invoices" 
+                    className="gap-2 rounded-xl px-3 py-2.5 h-auto data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-indigo/25 transition-all duration-300 snap-start"
+                  >
+                    <FileText className="h-4 w-4 shrink-0" />
+                    <span className="hidden sm:inline font-medium text-sm whitespace-nowrap">Invoices</span>
+                    <span className="sm:hidden text-xs font-medium">Invoices</span>
+                  </TabsTrigger>
+                )}
+                {canViewPricing && (
+                  <TabsTrigger 
+                    value="estimates" 
+                    className="gap-2 rounded-xl px-3 py-2.5 h-auto data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-indigo/25 transition-all duration-300 snap-start"
+                  >
+                    <FileSignature className="h-4 w-4 shrink-0" />
+                    <span className="hidden sm:inline font-medium text-sm whitespace-nowrap">Estimates</span>
+                    <span className="sm:hidden text-xs font-medium">Estimates</span>
+                  </TabsTrigger>
+                )}
+                {canViewPricing && (
+                  <TabsTrigger 
+                    value="proposals" 
+                    className="gap-2 rounded-xl px-3 py-2.5 h-auto data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-indigo/25 transition-all duration-300 snap-start"
+                  >
+                    <Briefcase className="h-4 w-4 shrink-0" />
+                    <span className="hidden sm:inline font-medium text-sm whitespace-nowrap">Proposals</span>
+                    <span className="sm:hidden text-xs font-medium">Proposals</span>
+                  </TabsTrigger>
+                )}
                 <TabsTrigger 
                   value="tickets" 
                   className="gap-2 rounded-xl px-3 py-2.5 h-auto data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-indigo/25 transition-all duration-300 snap-start"
@@ -655,22 +690,26 @@ export default function ClientDetails() {
                   <span className="hidden sm:inline font-medium text-sm whitespace-nowrap">Tickets</span>
                   <span className="sm:hidden text-xs font-medium">Tickets</span>
                 </TabsTrigger>
-                <TabsTrigger 
-                  value="contracts" 
-                  className="gap-2 rounded-xl px-3 py-2.5 h-auto data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-indigo/25 transition-all duration-300 snap-start"
-                >
-                  <FileSignature className="h-4 w-4 shrink-0" />
-                  <span className="hidden sm:inline font-medium text-sm whitespace-nowrap">Contracts</span>
-                  <span className="sm:hidden text-xs font-medium">Contracts</span>
-                </TabsTrigger>
-                <TabsTrigger 
-                  value="subscriptions" 
-                  className="gap-2 rounded-xl px-3 py-2.5 h-auto data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-indigo/25 transition-all duration-300 snap-start"
-                >
-                  <CreditCard className="h-4 w-4 shrink-0" />
-                  <span className="hidden sm:inline font-medium text-sm whitespace-nowrap">Subscriptions</span>
-                  <span className="sm:hidden text-xs font-medium">Subs</span>
-                </TabsTrigger>
+                {canViewPricing && (
+                  <TabsTrigger 
+                    value="contracts" 
+                    className="gap-2 rounded-xl px-3 py-2.5 h-auto data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-indigo/25 transition-all duration-300 snap-start"
+                  >
+                    <FileSignature className="h-4 w-4 shrink-0" />
+                    <span className="hidden sm:inline font-medium text-sm whitespace-nowrap">Contracts</span>
+                    <span className="sm:hidden text-xs font-medium">Contracts</span>
+                  </TabsTrigger>
+                )}
+                {canViewPricing && (
+                  <TabsTrigger 
+                    value="subscriptions" 
+                    className="gap-2 rounded-xl px-3 py-2.5 h-auto data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-indigo/25 transition-all duration-300 snap-start"
+                  >
+                    <CreditCard className="h-4 w-4 shrink-0" />
+                    <span className="hidden sm:inline font-medium text-sm whitespace-nowrap">Subscriptions</span>
+                    <span className="sm:hidden text-xs font-medium">Subs</span>
+                  </TabsTrigger>
+                )}
                 <TabsTrigger 
                   value="licenses" 
                   className="gap-2 rounded-xl px-3 py-2.5 h-auto data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-indigo/25 transition-all duration-300 snap-start"
@@ -712,7 +751,7 @@ export default function ClientDetails() {
                 <Plus className="h-4 w-4" />
                 Add Project
               </Button>
-            ) : tab === "estimates" ? (
+            ) : tab === "estimates" && canViewPricing ? (
               <Button asChild size="sm" className="gap-2">
                 <NavLink to={`/prospects/estimates?clientId=${encodeURIComponent(String(id || ""))}&add=1`}>
                   <Plus className="h-4 w-4" />
@@ -724,28 +763,28 @@ export default function ClientDetails() {
                 <Plus className="h-4 w-4" />
                 Add License
               </Button>
-            ) : tab === "invoices" ? (
+            ) : tab === "invoices" && canViewPricing ? (
               <Button asChild size="sm" className="gap-2">
                 <NavLink to={`/invoices?clientId=${encodeURIComponent(String(id || ""))}&add=1`}>
                   <Plus className="h-4 w-4" />
                   Add Invoice
                 </NavLink>
               </Button>
-            ) : tab === "contracts" ? (
+            ) : tab === "contracts" && canViewPricing ? (
               <Button asChild size="sm" className="gap-2">
                 <NavLink to={`/sales/contracts`}>
                   <Plus className="h-4 w-4" />
                   Add Contract
                 </NavLink>
               </Button>
-            ) : tab === "subscriptions" ? (
+            ) : tab === "subscriptions" && canViewPricing ? (
               <Button asChild size="sm" className="gap-2">
                 <NavLink to={`/subscriptions`}>
                   <Plus className="h-4 w-4" />
                   Add Subscription
                 </NavLink>
               </Button>
-            ) : tab === "proposals" ? (
+            ) : tab === "proposals" && canViewPricing ? (
               <Button asChild size="sm" className="gap-2">
                 <NavLink to={`/prospects/proposals`}>
                   <Plus className="h-4 w-4" />

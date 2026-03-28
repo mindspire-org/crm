@@ -1,4 +1,4 @@
-﻿import { Bell, Search, Menu, Plus, LayoutGrid, Briefcase, Globe, Mail, Settings, CheckCircle, Sun, Moon, Eye, Check, Trash2 } from "lucide-react";
+import { Bell, Search, Menu, Plus, LayoutGrid, Briefcase, Globe, Mail, Settings, CheckCircle, Sun, Moon, Eye, Check, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -32,7 +32,6 @@ interface TopNavProps {
 
 const normalizeAvatarSrc = (input: string, timestamp?: string) => {
   const s = String(input || "").trim();
-  console.log("TopNav avatar input:", input, "cleaned:", s);
   if (!s || s.startsWith("<")) return "/placeholder.svg";
   // Always use API_BASE for avatar URLs (works for both local and production)
   const base = API_BASE;
@@ -42,21 +41,15 @@ const normalizeAvatarSrc = (input: string, timestamp?: string) => {
       const u = new URL(s);
       // If it's already an absolute URL pointing to uploads, extract the path
       if (u.pathname.includes("/uploads/")) {
-        const result = timestamp ? `${base}${u.pathname}?t=${timestamp}` : `${base}${u.pathname}`;
-        console.log("TopNav avatar absolute URL:", result);
-        return result;
+        return timestamp ? `${base}${u.pathname}?t=${timestamp}` : `${base}${u.pathname}`;
       }
       return s;
     }
     const rel = s.startsWith("/") ? s : `/${s}`;
-    const result = timestamp ? `${base}${rel}?t=${timestamp}` : `${base}${rel}`;
-    console.log("TopNav avatar relative URL:", result);
-    return result;
+    return timestamp ? `${base}${rel}?t=${timestamp}` : `${base}${rel}`;
   } catch {
     const rel = s.startsWith("/") ? s : `/${s}`;
-    const result = timestamp ? `${base}${rel}?t=${timestamp}` : `${base}${rel}`;
-    console.log("TopNav avatar catch URL:", result);
-    return result;
+    return timestamp ? `${base}${rel}?t=${timestamp}` : `${base}${rel}`;
   }
 };
 
@@ -308,7 +301,7 @@ export function TopNav({ onMenuClick }: TopNavProps) {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
 
-  const role = useMemo(() => String(me?.role || "").trim().toLowerCase(), [me?.role]);
+  const role = useMemo(() => String(me?.role || "guest").trim().toLowerCase(), [me?.role]);
   const canSearchProjects = useMemo(() => ["admin", "staff", "marketer", "sales", "finance", "developer"].includes(role), [role]);
   const canSearchTickets = useMemo(() => ["admin", "staff", "marketer"].includes(role), [role]);
   const canSearchClients = useMemo(() => ["admin", "staff", "marketer"].includes(role), [role]);

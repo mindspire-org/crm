@@ -207,7 +207,6 @@ export default function Messaging() {
       stopVoicePreview();
       setShowEmojiPicker(false);
       scrollToBottom();
-      toast({ title: 'Message sent' });
     } catch (error) {
       toast({ title: 'Error', description: 'Failed to send message', variant: 'destructive' });
     }
@@ -805,10 +804,22 @@ export default function Messaging() {
                                 {message.content && <p className="whitespace-pre-wrap break-words">{message.content}</p>}
                                 {Array.isArray(message.attachments) && message.attachments.map((att: any, idx: number) => {
                                   if (att.type?.startsWith('audio/')) {
-                                    return <AudioPlayer key={idx} src={att.url.startsWith('http') ? att.url : `${API_BASE}${att.url}`} mine={isOwn} />;
+                                    return (
+                                      <div key={idx} className="my-2">
+                                        <AudioPlayer src={att.url.startsWith('http') ? att.url : `${API_BASE}${att.url}`} mine={isOwn} />
+                                      </div>
+                                    );
                                   }
                                   if (att.isSticker) {
-                                    return <img key={idx} src={att.url} alt="sticker" className="w-32 h-32 object-contain" />;
+                                    return (
+                                      <div key={idx} className="flex justify-center my-2 group/sticker relative">
+                                        <img 
+                                          src={att.url} 
+                                          alt="sticker" 
+                                          className="w-44 h-44 object-contain hover:scale-110 transition-transform duration-300 drop-shadow-lg" 
+                                        />
+                                      </div>
+                                    );
                                   }
                                   if (att.type?.startsWith('image/')) {
                                     const imgUrl = att.url.startsWith('http') ? att.url : `${API_BASE}${att.url}`;
@@ -857,16 +868,29 @@ export default function Messaging() {
                                         href={fileUrl} 
                                         target="_blank" 
                                         rel="noopener noreferrer" 
-                                        className="flex items-center gap-2 bg-black/10 hover:bg-black/20 p-2 rounded-lg text-xs font-medium transition-colors border border-white/10 group/file mt-1"
+                                        className={cn(
+                                          "flex items-center gap-3 p-3 rounded-xl text-xs font-bold transition-all border group/file mt-2 shadow-sm",
+                                          isOwn 
+                                            ? "bg-white/10 hover:bg-white/20 border-white/10 text-white" 
+                                            : "bg-black/5 hover:bg-black/10 border-black/5"
+                                        )}
                                       >
-                                        <div className="p-1.5 bg-white/10 rounded-md">
-                                          <FileIcon className="w-3.5 h-3.5" />
+                                        <div className={cn(
+                                          "p-2 rounded-lg flex-shrink-0 shadow-inner",
+                                          isOwn ? "bg-white/20" : "bg-black/10"
+                                        )}>
+                                          <FileIcon className="w-5 h-5" />
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                          <p className="truncate">{att.name || "Download file"}</p>
-                                          <p className="opacity-50 text-[10px]">{(att.size / 1024).toFixed(1)} KB</p>
+                                          <p className="truncate text-sm tracking-tight">{att.name || "Download file"}</p>
+                                          <p className="opacity-60 text-[10px] uppercase tracking-widest font-black mt-0.5">{(att.size / 1024).toFixed(1)} KB</p>
                                         </div>
-                                        <Download className="w-3.5 h-3.5 opacity-0 group-hover/file:opacity-100 transition-opacity" />
+                                        <div className={cn(
+                                          "p-1.5 rounded-full opacity-0 group-hover/file:opacity-100 transition-opacity",
+                                          isOwn ? "bg-white/20" : "bg-black/10"
+                                        )}>
+                                          <Download className="w-4 h-4" />
+                                        </div>
                                       </a>
                                     );
                                   }
@@ -880,7 +904,11 @@ export default function Messaging() {
                             )}>
                               {format(new Date(message.createdAt), 'p')}
                               {isOwn && (
-                                <span className={`text-${themeTokens.bubbleMineText}/80`}>
+                                <span className={cn(
+                                  message.readBy && message.readBy.length > 1 
+                                    ? "text-sky-400" 
+                                    : `text-${themeTokens.bubbleMineText}/80`
+                                )}>
                                   {message.readBy && message.readBy.length > 1 ? <CheckCheck className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />}
                                 </span>
                               )}

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import Setting from "../models/Setting.js";
+import { authenticate } from "../middleware/auth.js";
 
 const router = Router();
 
@@ -24,7 +25,7 @@ const upload = multer({ storage });
 import { logActivity } from "../utils/auditLogger.js";
 
 // Logo upload MUST come before /:section to avoid being caught by the parameter
-router.post("/logo", upload.single("logo"), async (req, res) => {
+router.post("/logo", authenticate, upload.single("logo"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
     const logoUrl = `/uploads/${req.file.filename}`;
@@ -61,7 +62,7 @@ router.post("/logo", upload.single("logo"), async (req, res) => {
 });
 
 // GET current settings
-router.get("/", async (_req, res) => {
+router.get("/", authenticate, async (_req, res) => {
   try {
     const doc = await Setting.findOne({ key: "global" }).lean();
     res.json(doc?.data || {});
@@ -71,7 +72,7 @@ router.get("/", async (_req, res) => {
 });
 
 // PUT replace/merge full settings document
-router.put("/", async (req, res) => {
+router.put("/", authenticate, async (req, res) => {
   try {
     const payload = req.body?.data || req.body;
     if (!payload || typeof payload !== "object") {
@@ -92,7 +93,7 @@ import { sendEmail } from "../utils/emailService.js";
 
 // ... existing routes
 
-router.post("/test-email", async (req, res) => {
+router.post("/test-email", authenticate, async (req, res) => {
   try {
     const { to } = req.body;
     if (!to) return res.status(400).json({ error: "Recipient email is required" });
@@ -118,7 +119,7 @@ router.post("/test-email", async (req, res) => {
 });
 
 // PATCH update a specific section, e.g. /api/settings/general
-router.patch("/:section", async (req, res) => {
+router.patch("/:section", authenticate, async (req, res) => {
   try {
     const section = String(req.params.section || "").trim();
     if (!section) return res.status(400).json({ error: "Missing section" });

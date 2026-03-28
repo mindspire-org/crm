@@ -45,12 +45,14 @@ export interface Conversation {
   updatedAt: string;
 }
 
-export const getAuthHeaders = () => {
+export const getAuthHeaders = (extra: Record<string, string> = {}) => {
   const token = localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token');
-  return {
-    'Authorization': `Bearer ${token}`,
+  const headers: Record<string, string> = { 
     'Content-Type': 'application/json',
+    ...extra 
   };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
 };
 
 export const fetchConversations = async (): Promise<Conversation[]> => {
@@ -138,7 +140,10 @@ export const sendMessage = async (
             url: a.url,
             name: a.name || "Attachment",
             type: a.type || "",
-            size: a.size || 0
+            size: a.size || 0,
+            isSticker: !!a.isSticker,
+            projectId: a.projectId,
+            progress: a.progress
           };
         }
         return null;

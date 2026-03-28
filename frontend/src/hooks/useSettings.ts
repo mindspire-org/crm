@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { API_BASE } from "@/lib/api/base";
+import { getAuthHeaders } from "@/lib/api/auth";
 
 export type Settings = {
   general: {
@@ -303,7 +304,10 @@ export function useSettings() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/settings`, { cache: "no-store" });
+        const res = await fetch(`${API_BASE}/api/settings`, { 
+          cache: "no-store",
+          headers: getAuthHeaders()
+        });
         if (!res.ok) return;
         const remote = (await res.json()) as Partial<Settings>;
         if (cancelled) return;
@@ -336,7 +340,7 @@ export function useSettings() {
     try {
       fetch(`${API_BASE}/api/settings/${String(section)}` as string, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(data),
       }).catch(() => {});
     } catch {

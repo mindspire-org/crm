@@ -21,6 +21,10 @@ import {
   DollarSign,
   Edit,
   Save,
+  Activity,
+  ChevronRight,
+  Sparkles,
+  AlertCircle,
 } from "lucide-react";
 
 import {
@@ -44,6 +48,7 @@ import { forwardRef, useEffect, useMemo, useRef, useState, type ComponentPropsWi
 import { useNavigate } from "react-router-dom";
 import { getAuthHeaders } from "@/lib/api/auth";
 import { API_BASE } from "@/lib/api/base";
+import { cn } from "@/lib/utils";
 import { canViewFinancialData, getCurrentUser, maskFinancialData } from "@/utils/roleAccess";
 
 const revenueData = [
@@ -207,6 +212,39 @@ const FancyTooltip = ({ active, payload, label }: any) => {
     </div>
   );
 };
+
+// Strategic Sub-components
+function BriefStat({ title, value, icon: Icon, color }: any) {
+  return (
+    <GlassCard className="p-4 flex items-center gap-4 transition-all hover:scale-[1.02] hover:shadow-lg cursor-default">
+      <div className={cn("p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800 shadow-inner", color)}>
+        <Icon className="w-5 h-5" />
+      </div>
+      <div className="min-w-0">
+        <div className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none mb-1.5">{title}</div>
+        <div className="text-lg font-black tracking-tight text-slate-900 dark:text-white truncate">{value}</div>
+      </div>
+    </GlassCard>
+  );
+}
+
+function PulseCard({ title, icon: Icon, children, color }: any) {
+  return (
+    <GlassCard className="overflow-hidden border-none shadow-xl">
+      <div className={cn("h-1.5 w-full", color)} />
+      <CardHeader className="p-5 pb-2 flex flex-row items-center justify-between">
+        <CardTitle className="text-sm font-black uppercase tracking-[0.15em] text-slate-500 flex items-center gap-2">
+          <Icon className="w-4 h-4" />
+          {title}
+        </CardTitle>
+        <div className="h-2 w-2 rounded-full animate-pulse bg-emerald-500" />
+      </CardHeader>
+      <CardContent className="p-5 pt-2">
+        {children}
+      </CardContent>
+    </GlassCard>
+  );
+}
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -840,889 +878,268 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 animate-fade-in max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 pb-10">
-      {/* Welcome Header */}
-      <div className="relative overflow-hidden rounded-2xl border border-white/30 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-6 text-white shadow-[0_18px_45px_rgba(2,6,23,0.25)]">
+      {/* Strategic Header - Brief Version */}
+      <div className="relative overflow-hidden rounded-[40px] border border-white/30 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-6 text-white shadow-[0_22px_60px_rgba(2,6,23,0.35)]">
         <div
           className="absolute inset-0 opacity-40"
           style={{
             backgroundImage:
-              "radial-gradient(circle at 15% 25%, rgba(99,102,241,0.55) 0, rgba(99,102,241,0) 45%), radial-gradient(circle at 85% 30%, rgba(168,85,247,0.45) 0, rgba(168,85,247,0) 40%), radial-gradient(circle at 45% 90%, rgba(34,197,94,0.25) 0, rgba(34,197,94,0) 45%)",
+              "radial-gradient(circle at 15% 25%, rgba(99,102,241,0.55) 0, rgba(99,102,241,0) 45%), radial-gradient(circle at 85% 30%, rgba(168,85,247,0.45) 0, rgba(168,85,247,0) 40%)",
           }}
         />
-        <DashboardOrb className="absolute -right-10 -top-14 opacity-60 hidden lg:block" />
-
-        <div className="relative grid gap-6 lg:grid-cols-12 lg:items-center">
-          <div className="lg:col-span-7">
-            <div className="text-xs uppercase tracking-wide text-white/70">Overview</div>
-            <h1 className="mt-1 text-2xl sm:text-3xl font-extrabold tracking-tight">{meName}</h1>
-            <p className="mt-1 text-white/70 max-w-xl">{meEmail || "Dashboard summary for today."}</p>
-
-            <div className="mt-5 flex flex-wrap gap-2">
-              {!isTeamMember && (
-                <Button className="bg-white/10 text-white hover:bg-white/20" variant="outline" onClick={() => navigate("/projects")}>
-                  <Briefcase className="w-4 h-4 mr-2" />
-                  Projects
-                </Button>
-              )}
-              {canAccessSales && (
-                <Button className="bg-white/10 text-white hover:bg-white/20" variant="outline" onClick={() => navigate("/sales/recurring")}>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Recurring
-                </Button>
-              )}
+        <div className="relative flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex items-center gap-6">
+            <div className="relative group">
+              <div className="absolute -inset-1 rounded-3xl bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500 opacity-75 blur transition duration-1000 group-hover:opacity-100 group-hover:duration-200"></div>
+              <Avatar className="h-20 w-20 border-2 border-white/20 bg-slate-900 shadow-2xl relative">
+                <AvatarImage src={adminAvatarSrc} alt="Director" />
+                <AvatarFallback className="bg-gradient-to-br from-indigo-600 to-purple-700 text-white text-2xl font-black">{meInitials}</AvatarFallback>
+              </Avatar>
+            </div>
+            <div>
+              <div className="flex items-center gap-2 mb-1.5">
+                <div className="h-5 w-5 rounded-lg bg-indigo-500/20 backdrop-blur-md border border-indigo-500/30 flex items-center justify-center">
+                  <Target className="w-3 h-3 text-indigo-400" />
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-300/80">Executive Command Center</span>
+              </div>
+              <h1 className="text-3xl font-black tracking-tight leading-none">
+                Director <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 to-emerald-300">{meName.split(' ')[0]}</span>
+              </h1>
+              <div className="flex items-center gap-3 mt-3 text-xs font-bold text-white/50 uppercase tracking-widest">
+                <span className="flex items-center gap-1.5"><Activity className="w-3.5 h-3.5 text-emerald-400" /> Operational Efficiency: 94%</span>
+              </div>
             </div>
           </div>
 
-          <div className="lg:col-span-5">
-            <div className="flex items-center justify-between gap-4">
-              <div className="min-w-0">
-                {canAccessSales ? (
-                  <>
-                    <div className="text-xs text-white/70">
-                      {isAdmin ? "Admin Sales Overview" : "Total Sales"}
-                    </div>
-                    <div className="mt-1 text-2xl font-extrabold truncate">
-                      {isAdmin ? `${displayMoney(monthlyCollected)} this month` : displayMoney(salesTotal)}
-                    </div>
-                    <div className="mt-1 text-xs text-white/60">
-                      {isAdmin ? "Monthly collected" : "All time"}
-                    </div>
-                    {isAdmin && monthlyTarget > 0 && (
-                      <div className="mt-2 flex items-center gap-2">
-                        <div className="text-xs text-white/70">Target:</div>
-                        <div className="text-sm font-semibold">{displayMoney(monthlyTarget)}</div>
-                        <div className="text-xs text-white/60">({targetProgress}% achieved)</div>
-                      </div>
-                    )}
-                  </>
-                ) : isTeamMember ? (
-                  <>
-                    <div className="text-xs text-white/70">Tasks Overview</div>
-                    <div className="mt-1 text-2xl font-extrabold truncate">
-                      {openTasksCount} Open Tasks
-                    </div>
-                    <div className="mt-1 text-xs text-white/60">
-                      {tasksPie.completed} completed, {tasksPie.inProgress} in progress
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="text-xs text-white/70">Projects Overview</div>
-                    <div className="mt-1 text-2xl font-extrabold truncate">
-                      {runningProjects} Active Projects
-                    </div>
-                    <div className="mt-1 text-xs text-white/60">
-                      {openTasksCount} open tasks
-                    </div>
-                  </>
-                )}
-              </div>
-              <div className="flex items-center gap-3">
-                {isAdmin && (
-                  <div className="text-right">
-                    <div className="text-xs text-white/70">Orders this month</div>
-                    <div className="text-lg font-bold">{ordersThisMonth}</div>
-                  </div>
-                )}
-                <Avatar className="h-14 w-14 border-2 border-white/40 bg-white/10 shadow-lg">
-                  <AvatarImage
-                    src={adminAvatarSrc}
-                    alt="Admin"
-                    onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).src = "/placeholder.svg";
-                    }}
-                  />
-                  <AvatarFallback className="bg-white text-indigo-600 text-lg font-bold">{meInitials}</AvatarFallback>
-                </Avatar>
-              </div>
-            </div>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" className="h-10 rounded-xl bg-white text-slate-950 hover:bg-white/90 font-bold px-4 shadow-lg shadow-black/10 transition-all active:scale-95" onClick={() => navigate("/projects")}>
+              <Briefcase className="w-3.5 h-3.5 mr-2" /> Strategic Projects
+            </Button>
+            <Button size="sm" variant="outline" className="h-10 rounded-xl border-white/20 bg-white/5 text-white hover:bg-white/10 backdrop-blur-md font-bold px-4 transition-all active:scale-95" onClick={() => setOpenAddTask(true)}>
+              <Plus className="w-3.5 h-3.5 mr-2" /> Deploy Objective
+            </Button>
           </div>
         </div>
       </div>
 
-      {/* Stats Cards - Responsive: 1 col mobile, 2 col tablet, auto-fit desktop */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {!isTeamMember && (
-          <GlassCard className="bg-gradient-to-br from-indigo-50/90 to-indigo-100/70 dark:from-indigo-950/40 dark:to-indigo-900/20 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate("/projects")}>
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-indigo-700 dark:text-indigo-200 font-medium">Running projects</p>
-                  <p className="text-3xl font-bold text-indigo-900 dark:text-white mt-1">{runningProjects}</p>
-                  <p className="text-xs text-indigo-700 mt-1">Open + In Progress</p>
-                </div>
-                <div className="rounded-2xl bg-white/60 p-3 shadow-sm dark:bg-white/10">
-                  <Briefcase className="w-6 h-6 text-indigo-700 dark:text-indigo-300" />
-                </div>
-              </div>
-            </CardContent>
-          </GlassCard>
-        )}
-
-        {canAccessSales && (
-          <GlassCard className="bg-gradient-to-br from-emerald-50/90 to-emerald-100/70 dark:from-emerald-950/40 dark:to-emerald-900/20 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate("/sales/payments")}>
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-emerald-700 dark:text-emerald-200 font-medium">
-                    {isAdmin ? "Admin Monthly Sales" : "Collected (this month)"}
-                  </p>
-                  <p className="text-2xl font-bold text-emerald-900 dark:text-white mt-1">{displayMoney(monthlyCollected)}</p>
-                  <p className="text-xs text-emerald-700 mt-1">
-                    {isAdmin ? "Total collected" : "Payments"}
-                  </p>
-                  {isAdmin && (
-                    <div className="mt-1 flex items-center gap-1">
-                      <TrendingUp className="w-3 h-3 text-emerald-600" />
-                      <span className="text-xs text-emerald-600">{ordersThisMonth} orders</span>
-                    </div>
-                  )}
-                </div>
-                <div className="rounded-2xl bg-white/60 p-3 shadow-sm dark:bg-white/10">
-                  <DollarSign className="w-6 h-6 text-emerald-700 dark:text-emerald-300" />
-                </div>
-              </div>
-            </CardContent>
-          </GlassCard>
-        )}
-
-        {canAccessSales && (
-          <Dialog open={targetDialogOpen} onOpenChange={setTargetDialogOpen}>
-            <DialogTrigger asChild>
-              <GlassCard className="bg-gradient-to-br from-slate-50/90 to-slate-100/70 dark:from-slate-950/40 dark:to-slate-900/20 cursor-pointer hover:shadow-md transition-shadow">
-                <CardContent className="p-5">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-slate-700 dark:text-slate-200 font-medium">Target (month)</p>
-                      <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{displayMoney(monthlyTarget)}</p>
-                      <p className="text-xs text-slate-600 mt-1">
-                        {monthlyTarget > 0 ? `${targetProgress}% achieved` : "Click to set target"}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl bg-white/60 p-3 shadow-sm dark:bg-white/10 flex items-center gap-2">
-                      <Target className="w-6 h-6 text-slate-700 dark:text-slate-200" />
-                      {isAdmin && <Edit className="w-3 h-3 text-slate-500" />}
-                    </div>
-                  </div>
-                </CardContent>
-              </GlassCard>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
-              <DialogHeader>
-                <DialogTitle>Set Monthly Target</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium">Target Amount ({currencyCode})</label>
-                  <Input
-                    type="number"
-                    value={tempTarget}
-                    onChange={(e) => setTempTarget(Number(e.target.value) || 0)}
-                    placeholder="Enter monthly target"
-                    className="mt-1"
-                  />
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setTargetDialogOpen(false)}>Cancel</Button>
-                  <Button onClick={handleSaveTarget}>
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Target
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
-        )}
-
-        {canAccessSales && !isTeamMember && (
-          <GlassCard className="bg-gradient-to-br from-sky-50/90 to-sky-100/70 dark:from-sky-950/40 dark:to-sky-900/20 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate("/sales/recurring")}>
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-sky-700 dark:text-sky-200 font-medium">Recurring amount</p>
-                  <p className="text-2xl font-bold text-sky-900 dark:text-white mt-1">{displayMoney(recurringMrr)}</p>
-                  <p className="text-xs text-sky-700 mt-1">MRR</p>
-                </div>
-                <div className="rounded-2xl bg-white/60 p-3 shadow-sm dark:bg-white/10">
-                  <RefreshCw className="w-6 h-6 text-sky-700 dark:text-sky-300" />
-                </div>
-              </div>
-            </CardContent>
-          </GlassCard>
-        )}
-
-        {canAccessSales && !isTeamMember && (
-          <GlassCard className="bg-gradient-to-br from-rose-50/90 to-rose-100/70 dark:from-rose-950/40 dark:to-rose-900/20 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate("/invoices")}>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between w-full gap-2">
-                <div className="min-w-0 flex-1 overflow-hidden">
-                  <p className="text-sm text-rose-700 dark:text-rose-200 font-medium">Amount pending</p>
-                  <p className="text-xl sm:text-2xl font-bold text-rose-900 dark:text-white mt-1 truncate">{displayMoney(pendingAmount)}</p>
-                  <p className="text-xs text-rose-700 mt-1">Unpaid invoices</p>
-                </div>
-                <div className="rounded-xl bg-white/60 p-2 shadow-sm dark:bg-white/10 flex-shrink-0">
-                  <FileText className="w-5 h-5 text-rose-600" />
-                </div>
-              </div>
-            </CardContent>
-          </GlassCard>
-        )}
-
-        {canAccessSales && !isTeamMember && (
-          <GlassCard className="bg-gradient-to-br from-amber-50/90 to-amber-100/70 dark:from-amber-950/40 dark:to-amber-900/20 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate("/sales/orders")}>
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-amber-700 dark:text-amber-200 font-medium">Orders near deadline</p>
-                  <p className="text-3xl font-bold text-amber-900 dark:text-white mt-1">{nearDeadlineOrders.length}</p>
-                  <p className="text-xs text-amber-700 mt-1">Next 3 days (est.)</p>
-                </div>
-                <div className="rounded-2xl bg-white/60 p-3 shadow-sm dark:bg-white/10">
-                  <Clock className="w-6 h-6 text-amber-700 dark:text-amber-300" />
-                </div>
-              </div>
-            </CardContent>
-          </GlassCard>
-        )}
+      {/* Brief KPI Ribbon */}
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+        <BriefStat title="Revenue" value={displayMoney(monthlyCollected)} icon={DollarSign} color="text-emerald-500" />
+        <BriefStat title="Operations" value={runningProjects} icon={Briefcase} color="text-indigo-500" />
+        <BriefStat title="Pending Due" value={displayMoney(pendingAmount)} icon={AlertCircle} color="text-rose-500" />
+        <BriefStat title="Total Team" value={teamMembers} icon={Users} color="text-purple-500" />
       </div>
 
-      {/* Today's Tasks Section */}
-      <GlassCard className="border-indigo-100 dark:border-indigo-900/30">
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <div className="space-y-1">
-            <CardTitle className="text-xl font-bold flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-indigo-600" />
-              Today's Tasks
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">Manage and track your workload for today</p>
-          </div>
-          {(isAdmin || role === "project_manager") && (
-            <Dialog open={openAddTask} onOpenChange={setOpenAddTask}>
-              <DialogTrigger asChild>
-                <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2">
-                  <Plus className="w-4 h-4" />
-                  Assign Task
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px]">
-                <DialogHeader>
-                  <DialogTitle>Assign New Task</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Task Title</label>
-                    <Input
-                      value={newTaskTitle}
-                      onChange={(e) => setNewTaskTitle(e.target.value)}
-                      placeholder="What needs to be done?"
+      {/* Strategic Pulse Grid */}
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-12">
+        {/* Finance Pulse */}
+        <div className="lg:col-span-6 space-y-6">
+          <PulseCard title="Financial Pulse" icon={DollarSign} color="bg-emerald-500">
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
+                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Monthly MRR</div>
+                <div className="text-xl font-black text-slate-900 dark:text-white">{displayMoney(recurringMrr)}</div>
+              </div>
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
+                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Expenses</div>
+                <div className="text-xl font-black text-slate-900 dark:text-white">{displayMoney(expensesTotal)}</div>
+              </div>
+            </div>
+
+            {isAdmin && monthlyTarget > 0 && (
+              <div className="space-y-3 p-4 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/10 border border-emerald-100 dark:border-emerald-900/30">
+                <div className="flex justify-between items-end">
+                  <div className="text-[10px] font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-[0.2em]">Target Progress</div>
+                  <div className="text-sm font-black text-emerald-700 dark:text-emerald-400">{targetProgress}%</div>
+                </div>
+                <div className="h-2 w-full bg-emerald-200/50 dark:bg-emerald-900/30 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600 transition-all duration-1000" 
+                    style={{ width: `${targetProgress}%` }} 
+                  />
+                </div>
+                <div className="flex justify-between text-[9px] font-black text-emerald-700/60 uppercase tracking-widest">
+                  <span>Collected: {displayMoney(monthlyCollected)}</span>
+                  <span>Goal: {displayMoney(monthlyTarget)}</span>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-6 space-y-3">
+              <div className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer" onClick={() => navigate("/invoices")}>
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center"><AlertCircle className="w-4 h-4" /></div>
+                  <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Overdue Invoices</span>
+                </div>
+                <Badge variant="secondary" className="bg-rose-100 text-rose-700 font-black px-2 py-0.5">{invoiceOverview.overdue > 0 ? displayMoney(invoiceOverview.overdue) : "Clean"}</Badge>
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer" onClick={() => navigate("/sales/orders")}>
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center"><Clock className="w-4 h-4" /></div>
+                  <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Pipeline Value</span>
+                </div>
+                <Badge variant="secondary" className="bg-indigo-100 text-indigo-700 font-black px-2 py-0.5">{displayMoney(salesTotal)}</Badge>
+              </div>
+            </div>
+          </PulseCard>
+        </div>
+
+        {/* Operations Pulse */}
+        <div className="lg:col-span-6 space-y-6">
+          <PulseCard title="Operations Pulse" icon={Briefcase} color="bg-indigo-500">
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
+                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Live Projects</div>
+                <div className="text-xl font-black text-slate-900 dark:text-white">{runningProjects}</div>
+              </div>
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
+                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Open Tickets</div>
+                <div className="text-xl font-black text-slate-900 dark:text-white">{ticketsStatus.open}</div>
+              </div>
+            </div>
+
+            <div className="h-[120px] w-full mb-6 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
+              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Resource Velocity</div>
+              <div className="flex items-end gap-2 h-12">
+                {Object.entries(tasksPie).map(([key, value], idx) => (
+                  <div key={key} className="flex-1 flex flex-col gap-1.5 items-center group">
+                    <div 
+                      className={cn(
+                        "w-full rounded-t-lg transition-all duration-1000 group-hover:opacity-80",
+                        idx === 0 ? "bg-amber-400" : idx === 1 ? "bg-indigo-500" : idx === 2 ? "bg-emerald-500" : "bg-rose-500"
+                      )} 
+                      style={{ height: `${Math.max(10, Math.min(100, (value / (openTasksCount || 1)) * 100))}%` }} 
                     />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Assign To</label>
-                    <Select value={newTaskAssignee} onValueChange={setNewTaskAssignee}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select team member" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {employees.map((emp) => (
-                          <SelectItem key={emp._id} value={emp._id}>
-                            {emp.name || `${emp.firstName} ${emp.lastName}`}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setOpenAddTask(false)}>Cancel</Button>
-                  <Button onClick={handleCreateTask} disabled={savingTask || !newTaskTitle.trim()}>
-                    {savingTask ? "Assigning..." : "Assign Task"}
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          )}
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {todayTasks.length > 0 ? (
-              <div className="grid gap-3">
-                {todayTasks.map((task) => (
-                  <div
-                    key={task._id}
-                    className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50/50 dark:bg-slate-800/30 dark:border-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors group"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className={`p-2 rounded-lg ${
-                        task.status === "completed" ? "bg-emerald-100 text-emerald-600" : "bg-amber-100 text-amber-600"
-                      }`}>
-                        {task.status === "completed" ? <CheckCircle className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-slate-900 dark:text-slate-100">{task.title}</h4>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Badge variant="outline" className="text-[10px] py-0 h-4 border-slate-200">
-                            {task.priority || "Medium"}
-                          </Badge>
-                          {task.assignees?.length > 0 && (
-                            <span className="text-xs text-muted-foreground flex items-center gap-1">
-                              <Users className="w-3 h-3" />
-                              {task.assignees[0].name}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => navigate(`/tasks/${task._id}`)}
-                    >
-                      View Details
-                    </Button>
+                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">{key}</span>
                   </div>
                 ))}
               </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-full mb-4">
-                  <Briefcase className="w-8 h-8 text-slate-400" />
-                </div>
-                <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100">No tasks for today</h3>
-                <p className="text-slate-500 max-w-xs mx-auto mt-1">
-                  Enjoy your day! Or click "Assign Task" to create a new one.
-                </p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </GlassCard>
+            </div>
 
-      {/* KPI Cards - Dynamic columns based on role */}
-      <div className={`grid gap-4 grid-cols-1 sm:grid-cols-2 ${canAccessSales ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
-        {!isProjectManager && (
-          <GlassCard className="bg-gradient-to-br from-slate-50/90 to-slate-100/70 dark:from-slate-950/40 dark:to-slate-900/20 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate("/hrm/attendance")}>
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-slate-700 dark:text-slate-200 font-medium">Clock</p>
-                  <p className="text-lg font-bold text-slate-900 dark:text-white mt-1">
-                    {clockMembers.find((m) => m.clockedIn)?.startTime
-                      ? `Started at: ${clockMembers.find((m) => m.clockedIn)!.startTime}`
-                      : "Not clocked in"}
-                  </p>
-                  <p className="text-xs text-slate-600 mt-1">Today</p>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/10 border border-indigo-100 dark:border-indigo-900/30">
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center"><Users className="w-4 h-4" /></div>
+                  <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Active Team</span>
                 </div>
-                <div className="rounded-2xl bg-white/60 p-3 shadow-sm dark:bg-white/10">
-                  <Clock className="w-6 h-6 text-slate-700 dark:text-slate-200" />
+                <div className="flex items-center gap-1">
+                  <span className="text-sm font-black text-indigo-700 dark:text-indigo-400">{teamMembers - onLeaveToday}</span>
+                  <span className="text-[10px] font-bold text-slate-400">/ {teamMembers}</span>
                 </div>
               </div>
-            </CardContent>
-          </GlassCard>
-        )}
-
-        <GlassCard className="bg-gradient-to-br from-emerald-50/90 to-emerald-100/70 dark:from-emerald-950/40 dark:to-emerald-900/20 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate("/tasks")}>
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-green-700 dark:text-green-200 font-medium">My open tasks</p>
-                <p className="text-3xl font-bold text-green-900 dark:text-white mt-1">{openTasksCount}</p>
-                <p className="text-xs text-green-700 mt-1">All tasks</p>
-              </div>
-              <div className="rounded-2xl bg-white/60 p-3 shadow-sm dark:bg-white/10">
-                <CheckCircle className="w-6 h-6 text-emerald-700 dark:text-emerald-300" />
+              <div className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer" onClick={() => navigate("/calendar")}>
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center"><Calendar className="w-4 h-4" /></div>
+                  <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Events Today</span>
+                </div>
+                <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 font-black px-2 py-0.5">{eventsCountToday}</Badge>
               </div>
             </div>
-          </CardContent>
-        </GlassCard>
-
-        <GlassCard className="bg-gradient-to-br from-indigo-50/90 to-indigo-100/70 dark:from-indigo-950/40 dark:to-indigo-900/20 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate("/calendar")}>
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-indigo-700 dark:text-indigo-200 font-medium">Events today</p>
-                <p className="text-3xl font-bold text-indigo-900 dark:text-white mt-1">{Math.max(eventsToday, eventsCountToday)}</p>
-                <p className="text-xs text-indigo-700 mt-1">{todayIso}</p>
-              </div>
-              <div className="rounded-2xl bg-white/60 p-3 shadow-sm dark:bg-white/10">
-                <Calendar className="w-6 h-6 text-indigo-700 dark:text-indigo-300" />
-              </div>
-            </div>
-          </CardContent>
-        </GlassCard>
-
-        {canAccessSales && !isDeveloper && (
-          <GlassCard className="bg-gradient-to-br from-rose-50/90 to-rose-100/70 dark:from-rose-950/40 dark:to-rose-900/20 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate("/invoices")}>
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-rose-700 dark:text-rose-200 font-medium">Due</p>
-                  <p className="text-2xl font-bold text-rose-900 dark:text-white mt-1">{displayMoney(pendingAmount)}</p>
-                  <p className="text-xs text-rose-700 mt-1">Invoices unpaid</p>
-                </div>
-                <div className="rounded-2xl bg-white/60 p-3 shadow-sm dark:bg-white/10">
-                  <FileText className="w-6 h-6 text-rose-600" />
-                </div>
-              </div>
-            </CardContent>
-          </GlassCard>
-        )}
-      </div>
-
-      {/* Charts Row - Adaptive layout based on role */}
-      <div className={`grid gap-4 grid-cols-1 ${canAccessSales ? 'lg:grid-cols-12' : isTeamMember ? 'lg:grid-cols-2' : 'lg:grid-cols-2'}`}>
-        <div className={`space-y-4 ${canAccessSales ? 'lg:col-span-4' : ''}`}>
-          {!isTeamMember && (
-            <GlassCard>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Projects Overview</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="grid grid-cols-4 gap-3 text-center">
-                  <div>
-                    <div className="text-lg font-extrabold text-emerald-600">{projectCounts.open}</div>
-                    <div className="text-xs text-muted-foreground">Open</div>
-                  </div>
-                  <div>
-                    <div className="text-lg font-extrabold text-sky-600">{projectCounts.inProgress}</div>
-                    <div className="text-xs text-muted-foreground">In Progress</div>
-                  </div>
-                  <div>
-                    <div className="text-lg font-extrabold text-indigo-600">{projectCounts.completed}</div>
-                    <div className="text-xs text-muted-foreground">Completed</div>
-                  </div>
-                  <div>
-                    <div className="text-lg font-extrabold text-amber-600">{projectCounts.hold}</div>
-                    <div className="text-xs text-muted-foreground">Hold</div>
-                  </div>
-                </div>
-                <div className="mt-3 h-[150px] rounded-lg bg-white/80 dark:bg-slate-950/40">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={[
-                        { name: "Open", value: projectCounts.open },
-                        { name: "In Progress", value: projectCounts.inProgress },
-                        { name: "Completed", value: projectCounts.completed },
-                        { name: "Hold", value: projectCounts.hold },
-                      ]}
-                      margin={{ top: 12, right: 12, left: 0, bottom: 6 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
-                      <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} width={34} />
-                      <Tooltip content={<FancyTooltip />} />
-                      <Bar dataKey="value" fill="#3b82f6" radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </GlassCard>
-          )}
-
-          <GlassCard>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">All Tasks Overview</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="h-[170px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={[
-                        { name: "To do", value: tasksPie.todo },
-                        { name: "In progress", value: tasksPie.inProgress },
-                        { name: "Done", value: tasksPie.completed },
-                        { name: "Expired", value: tasksPie.expired },
-                      ]}
-                      dataKey="value"
-                      nameKey="name"
-                      innerRadius={48}
-                      outerRadius={70}
-                      paddingAngle={2}
-                    >
-                      {["#f59e0b", "#3b82f6", "#22c55e", "#ef4444"].map((c) => (
-                        <Cell key={c} fill={c} />
-                      ))}
-                    </Pie>
-                    <Tooltip content={<FancyTooltip />} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </GlassCard>
+          </PulseCard>
         </div>
 
-        {canAccessSales && (
-          <div className="lg:col-span-4 space-y-4">
-            <GlassCard>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Invoice Overview</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Overdue</span>
-                    <span className="font-semibold text-rose-600">{displayMoney(invoiceOverview.overdue)}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Unpaid</span>
-                    <span className="font-semibold">{displayMoney(invoiceOverview.unpaid)}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Paid</span>
-                    <span className="font-semibold text-emerald-600">{displayMoney(invoiceOverview.paid)}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Draft</span>
-                    <span className="font-semibold">{displayMoney(invoiceOverview.draft)}</span>
-                  </div>
-                </div>
-                <div className="mt-3 h-[140px] rounded-lg bg-white/80 dark:bg-slate-950/40">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart
-                      data={[
-                        { name: "Overdue", value: invoiceOverview.overdue },
-                        { name: "Unpaid", value: invoiceOverview.unpaid },
-                        { name: "Paid", value: invoiceOverview.paid },
-                        { name: "Draft", value: invoiceOverview.draft },
-                      ]}
-                      margin={{ top: 12, right: 12, left: 0, bottom: 6 }}
-                    >
-                      <defs>
-                        <linearGradient id="invFill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#6366f1" stopOpacity={0.45} />
-                          <stop offset="95%" stopColor="#6366f1" stopOpacity={0.05} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
-                      <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} width={34} />
-                      <Tooltip content={<FancyTooltip />} />
-                      <Area type="monotone" dataKey="value" stroke="#6366f1" fill="url(#invFill)" strokeWidth={2} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </GlassCard>
-
-            <GlassCard>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Income vs Expenses</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-xl border border-white/30 bg-white/50 p-3 backdrop-blur dark:border-white/10 dark:bg-white/5">
-                    <div className="text-xs text-muted-foreground">Income</div>
-                    <div className="mt-1 text-sm font-semibold">{displayMoney(salesTotal)}</div>
-                  </div>
-                  <div className="rounded-xl border border-white/30 bg-white/50 p-3 backdrop-blur dark:border-white/10 dark:bg-white/5">
-                    <div className="text-xs text-muted-foreground">Expenses</div>
-                    <div className="mt-1 text-sm font-semibold">{displayMoney(expensesTotal)}</div>
-                  </div>
-                </div>
-                <div className="mt-3 h-[120px] rounded-lg bg-white/80 dark:bg-slate-950/40">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart
-                      data={[
-                        { name: "Income", a: salesTotal },
-                        { name: "Expenses", a: expensesTotal },
-                        { name: "Net", a: salesTotal - expensesTotal },
-                      ]}
-                      margin={{ top: 12, right: 12, left: 0, bottom: 6 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
-                      <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} width={34} />
-                      <Tooltip content={<FancyTooltip />} />
-                      <Line type="monotone" dataKey="a" stroke="#22c55e" strokeWidth={2} dot={{ r: 3 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </GlassCard>
-          </div>
-        )}
-
-        <div className={`space-y-4 ${canAccessSales ? 'lg:col-span-4' : ''}`}>
-          {!isProjectManager && (
-            <GlassCard>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Tickets Status</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="h-[170px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={[
-                          { name: "Open", value: ticketsStatus.open },
-                          { name: "Closed", value: ticketsStatus.closed },
-                          { name: "Other", value: ticketsStatus.other },
-                        ]}
-                        dataKey="value"
-                        nameKey="name"
-                        innerRadius={48}
-                        outerRadius={70}
-                        paddingAngle={2}
-                      >
-                        {["#f59e0b", "#22c55e", "#94a3b8"].map((c) => (
-                          <Cell key={c} fill={c} />
-                        ))}
-                      </Pie>
-                      <Tooltip content={<FancyTooltip />} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="mt-2 grid grid-cols-3 gap-2 text-center text-xs">
-                  <div>
-                    <div className="font-semibold">{ticketsStatus.open}</div>
-                    <div className="text-muted-foreground">Open</div>
-                  </div>
-                  <div>
-                    <div className="font-semibold">{ticketsStatus.closed}</div>
-                    <div className="text-muted-foreground">Closed</div>
-                  </div>
-                  <div>
-                    <div className="font-semibold">{ticketsStatus.other}</div>
-                    <div className="text-muted-foreground">Other</div>
-                  </div>
-                </div>
-              </CardContent>
-            </GlassCard>
-          )}
-
-          <GlassCard>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-sm">Announcements</CardTitle>
-              <Button variant="outline" size="sm" className="bg-white/60 dark:bg-white/10" onClick={() => navigate("/announcements")}>
-                <Eye className="w-4 h-4 mr-2" />
-                View
-              </Button>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="space-y-2">
-                {announcements.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">No announcements</div>
-                ) : (
-                  announcements.map((a) => (
-                    <div key={a._id} className="rounded-xl border border-white/30 bg-white/50 p-3 text-sm backdrop-blur dark:border-white/10 dark:bg-white/5">
-                      <div className="font-medium">{a.title || "Announcement"}</div>
-                      <div className="text-xs text-muted-foreground line-clamp-2">{a.message || ""}</div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </GlassCard>
-        </div>
-      </div>
-
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-12">
+        {/* Strategic Intelligence - Lower Section */}
         <div className="lg:col-span-8 space-y-6">
-          {!isProjectManager && !isDeveloper && !isTeamMember && (
-            <GlassCard>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-lg">Recent Leads</CardTitle>
-                <Button variant="outline" size="sm" className="bg-white/60 dark:bg-white/10" onClick={() => navigate("/crm/leads") }>
-                  <Eye className="w-4 h-4 mr-2" />
-                  View All
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto rounded-xl border border-white/30 bg-white/40 backdrop-blur dark:border-white/10 dark:bg-white/5">
-                  <table className="w-full text-sm min-w-[520px]">
-                    <thead>
-                      <tr className="border-b border-white/30 dark:border-white/10">
-                        <th className="text-left py-3 px-4">Name</th>
-                        <th className="text-left py-3 px-4">Status</th>
-                        <th className="text-left py-3 px-4">Created</th>
-                        <th className="text-left py-3 px-4">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {recentLeads.length === 0 ? (
-                        <tr>
-                          <td colSpan={4} className="py-6 px-4 text-center text-muted-foreground">No leads found</td>
-                        </tr>
-                      ) : (
-                        recentLeads.map((l) => (
-                          <tr key={l.id} className="border-b border-white/30 hover:bg-white/60 dark:border-white/10 dark:hover:bg-white/10">
-                            <td className="py-3 px-4 font-medium text-primary">{l.name}</td>
-                            <td className="py-3 px-4">
-                              <Badge variant="secondary">{l.status}</Badge>
-                            </td>
-                            <td className="py-3 px-4 text-muted-foreground">{l.createdAt}</td>
-                            <td className="py-3 px-4">
-                              <Button size="sm" variant="outline" onClick={() => navigate(`/crm/leads/${l.id}`)}>
-                                <Eye className="w-3 h-3" />
-                              </Button>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </GlassCard>
-          )}
-
-          <GlassCard>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-lg">Recent Tasks</CardTitle>
-              <Button variant="outline" size="sm" className="bg-white/60 dark:bg-white/10" onClick={() => navigate("/tasks")}>
-                <Eye className="w-4 h-4 mr-2" />
-                View All Tasks
-              </Button>
+          <GlassCard className="border-none shadow-xl">
+            <CardHeader className="flex flex-row items-center justify-between pb-4">
+              <div className="space-y-1">
+                <CardTitle className="text-lg font-black flex items-center gap-2 uppercase tracking-widest">
+                  <Activity className="w-5 h-5 text-indigo-600" />
+                  Live Strategic Pipeline
+                </CardTitle>
+              </div>
+              <Button variant="ghost" size="sm" className="font-bold text-xs hover:bg-slate-100 rounded-xl" onClick={() => navigate("/projects")}>View All <ChevronRight className="w-3.5 h-3.5 ml-1" /></Button>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto rounded-xl border border-white/30 bg-white/40 backdrop-blur dark:border-white/10 dark:bg-white/5">
-                <table className="w-full text-sm min-w-[600px]">
-                  <thead>
-                    <tr className="border-b border-white/30 dark:border-white/10">
-                      <th className="text-left py-3 px-4">ID</th>
-                      <th className="text-left py-3 px-4">Title</th>
-                      <th className="text-left py-3 px-4">Start Date</th>
-                      <th className="text-left py-3 px-4">Deadline</th>
-                      <th className="text-left py-3 px-4">Status</th>
-                      <th className="text-left py-3 px-4">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tasksTable.slice(0, 5).length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="py-6 px-4 text-center text-muted-foreground">No tasks found</td>
-                      </tr>
-                    ) : (
-                      tasksTable.slice(0, 5).map((task) => (
-                        <tr key={task.id} className="border-b border-white/30 hover:bg-white/60 dark:border-white/10 dark:hover:bg-white/10">
-                          <td className="py-3 px-4">{task.id}</td>
-                          <td className="py-3 px-4 text-primary font-medium">{task.title}</td>
-                          <td className="py-3 px-4">{task.startDate}</td>
-                          <td className="py-3 px-4">{task.deadline}</td>
-                          <td className="py-3 px-4">
-                            <Badge
-                              variant={task.status === "done" ? "default" : task.status === "in-progress" ? "secondary" : "outline"}
-                            >
-                              {task.status}
-                            </Badge>
-                          </td>
-                          <td className="py-3 px-4">
-                            <div className="flex items-center gap-2">
-                              <Button size="sm" variant="outline" onClick={() => navigate(`/tasks/${task.id}`)}>
-                                <Eye className="w-3 h-3" />
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {projectsList.slice(0, 4).map((p) => (
+                  <div 
+                    key={p.id} 
+                    className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/30 border border-slate-100 dark:border-slate-700/50 hover:border-indigo-200 transition-all cursor-pointer group"
+                    onClick={() => navigate(`/projects/overview/${p.id}`)}
+                  >
+                    <div className="min-w-0">
+                      <div className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-indigo-600 transition-colors truncate">{p.name}</div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Clock className="w-3 h-3 text-slate-400" />
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{p.estimate}</span>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 transition-all" />
+                  </div>
+                ))}
               </div>
             </CardContent>
           </GlassCard>
         </div>
 
+        {/* Executive Briefing Sidebar */}
         <div className="lg:col-span-4 space-y-6">
-          <GlassCard>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-lg">Upcoming Events</CardTitle>
-              <Button variant="outline" size="sm" className="bg-white/60 dark:bg-white/10" onClick={() => navigate("/events")}>
-                <Eye className="w-4 h-4 mr-2" />
-                View All
-              </Button>
+          <GlassCard className="bg-slate-900 text-white border-none shadow-2xl overflow-hidden h-full">
+            <div className="absolute top-0 right-0 p-8 opacity-10"><Sparkles className="w-24 h-24" /></div>
+            <CardHeader>
+              <CardTitle className="text-lg font-black flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-amber-400" />
+                Director Briefing
+              </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {upcomingEvents.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">No upcoming events</div>
-                ) : (
-                  upcomingEvents.map((e) => (
-                    <div key={e._id} className="rounded-xl border border-white/30 bg-white/50 p-3 text-sm backdrop-blur dark:border-white/10 dark:bg-white/5">
-                      <div className="font-medium">{e.title || "Event"}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {e.start ? new Date(e.start).toLocaleString() : ""}
-                      </div>
-                    </div>
-                  ))
-                )}
+            <CardContent className="space-y-4">
+              {announcements.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 text-center space-y-3 opacity-50">
+                  <CheckCircle className="w-10 h-10 text-emerald-400" />
+                  <p className="text-xs font-bold uppercase tracking-widest">System Optimal</p>
+                </div>
+              ) : (
+                announcements.map((a) => (
+                  <div key={a._id} className="p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all group cursor-pointer">
+                    <div className="text-[10px] font-black text-amber-400 uppercase tracking-widest mb-2">Priority Intel</div>
+                    <div className="font-bold text-sm mb-1">{a.title}</div>
+                    <div className="text-xs text-white/50 line-clamp-2 leading-relaxed font-medium">{a.message}</div>
+                  </div>
+                ))
+              )}
+              
+              <div className="pt-4 border-t border-white/10">
+                <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-4">Quick Governance</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button variant="ghost" size="sm" className="h-9 rounded-lg bg-white/5 text-white text-[10px] font-black uppercase tracking-widest hover:bg-white/10" onClick={() => navigate("/settings")}>Settings</Button>
+                  <Button variant="ghost" size="sm" className="h-9 rounded-lg bg-white/5 text-white text-[10px] font-black uppercase tracking-widest hover:bg-white/10" onClick={() => navigate("/reports")}>Audit</Button>
+                </div>
               </div>
             </CardContent>
           </GlassCard>
-
-          <GlassCard>
-            <CardHeader>
-              <CardTitle className="text-lg">Quick Actions</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {!isTeamMember && (
-                <Button className="w-full justify-start bg-white/60 dark:bg-white/10" variant="outline" onClick={() => navigate("/projects")}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  New Project
-                </Button>
-              )}
-              <Button className="w-full justify-start bg-white/60 dark:bg-white/10" variant="outline" onClick={() => navigate("/tasks")}>
-                <CheckCircle className="w-4 h-4 mr-2" />
-                New Task
-              </Button>
-              {!isProjectManager && !isTeamMember && (
-                <Button className="w-full justify-start bg-white/60 dark:bg-white/10" variant="outline" onClick={() => navigate("/hrm/employees")}>
-                  <Users className="w-4 h-4 mr-2" />
-                  View Team Members
-                </Button>
-              )}
-              {canAccessSales && (
-                <Button className="w-full justify-start bg-white/60 dark:bg-white/10" variant="outline" onClick={() => navigate("/invoices")}>
-                  <FileText className="w-4 h-4 mr-2" />
-                  Create Invoice
-                </Button>
-              )}
-              {isAdmin && (
-                <Button className="w-full justify-start bg-white/60 dark:bg-white/10" variant="outline" onClick={() => navigate("/settings")}>
-                  <Settings className="w-4 h-4 mr-2" />
-                  System Settings
-                </Button>
-              )}
-            </CardContent>
-          </GlassCard>
-
-          {!isTeamMember && (
-            <GlassCard>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-lg">Open Projects</CardTitle>
-                <Button variant="outline" size="sm" className="bg-white/60 dark:bg-white/10" onClick={() => navigate("/projects")}>
-                  <Eye className="w-4 h-4 mr-2" />
-                  View All
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {projectsList.slice(0, 5).length === 0 ? (
-                    <div className="text-sm text-muted-foreground">No projects</div>
-                  ) : (
-                    projectsList.slice(0, 5).map((project) => (
-                      <div key={project.id} className="text-xs rounded-xl border border-white/30 bg-white/50 p-3 backdrop-blur dark:border-white/10 dark:bg-white/5">
-                        <button
-                          type="button"
-                          className="text-primary font-medium hover:underline text-left"
-                          onClick={() => navigate(`/projects/overview/${project.id}`)}
-                        >
-                          {project.name}
-                        </button>
-                        <p className="text-muted-foreground">Estimate: {project.estimate}</p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </CardContent>
-            </GlassCard>
-          )}
         </div>
       </div>
     </div>
   );
 }
+
+// Strategic Sub-components
+function StrategicActionButton({ icon: Icon, label, onClick, color }: any) {
+  const colors: any = {
+    indigo: "bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white",
+    emerald: "bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white",
+    rose: "bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white",
+    slate: "bg-slate-50 text-slate-600 hover:bg-slate-900 hover:text-white"
+  };
+
+  return (
+    <Button 
+      variant="ghost" 
+      className={cn(
+        "w-full justify-start h-14 px-4 rounded-2xl font-bold transition-all duration-300 active:scale-95 group",
+        colors[color]
+      )}
+      onClick={onClick}
+    >
+      <div className="p-2 rounded-xl bg-white/50 group-hover:bg-white/20 mr-4 transition-colors">
+        <Icon className="w-5 h-5" />
+      </div>
+      {label}
+    </Button>
+  );
+}
+
 
 

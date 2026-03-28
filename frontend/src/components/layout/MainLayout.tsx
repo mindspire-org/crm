@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Sidebar } from "./Sidebar";
 import { TopNav } from "./TopNav";
 import { MobileBottomNav } from "./MobileBottomNav";
 import { cn } from "@/lib/utils";
-import { Bell, Megaphone, X } from "lucide-react";
+import { Bell, Megaphone, RefreshCw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { API_BASE } from "@/lib/api/base";
@@ -128,7 +128,16 @@ export function MainLayout() {
         <TopNav onMenuClick={handleMenuClick} />
         <main className="flex-1 p-4 sm:p-5 lg:p-6 pb-20 lg:pb-6">
           <div className="w-full max-w-full min-w-0 mx-auto box-border">
-            <Outlet />
+            <Suspense fallback={
+              <div className="flex h-[60vh] w-full items-center justify-center">
+                <div className="text-center space-y-4">
+                  <RefreshCw className="w-10 h-10 animate-spin text-indigo-600 mx-auto" />
+                  <p className="text-muted-foreground font-medium animate-pulse">Loading secure content...</p>
+                </div>
+              </div>
+            }>
+              <Outlet />
+            </Suspense>
           </div>
         </main>
 

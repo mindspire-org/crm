@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import { Card } from "@/components/ui/card";
+import { useNavigate, useParams, Link } from "react-router-dom";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -8,7 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, RefreshCcw, Settings, Printer, FileDown, LayoutGrid, ChevronLeft, ChevronRight, Paperclip, Mic, CalendarDays, Plus, MoreVertical, Pencil, Trash2, AlertCircle, Eye } from "lucide-react";
+import { 
+  Search, RefreshCcw, Settings, Printer, FileDown, LayoutGrid, ChevronLeft, ChevronRight, 
+  Paperclip, Mic, CalendarDays, Plus, MoreVertical, Pencil, Trash2, AlertCircle, Eye, Edit2,
+  Clock, CheckCircle2, Users, LayoutDashboard, Target, Activity, FileText, Briefcase, 
+  MessageSquare, History, Timer, CreditCard, Box, Quote, ScrollText, Sparkles, FolderKanban
+} from "lucide-react";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { BackButton } from "@/components/ui/back-button";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -18,6 +24,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { API_BASE } from "@/lib/api/base";
 import { getAuthHeaders } from "@/lib/api/auth";
 import { getCurrentUser } from "@/utils/roleAccess";
+import { cn } from "@/lib/utils";
+import { Progress } from "@/components/ui/progress";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface Project {
   id: string;
@@ -164,6 +174,7 @@ interface FeedbackItem {
 
 export default function ProjectOverviewPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   // Persist the current project id for cross-page context (Proposal Editor uses this)
   useEffect(() => {
     if (id) {
@@ -180,8 +191,8 @@ export default function ProjectOverviewPage() {
     }
   }, []);
   const normalizedRole = role === "finance manager" ? "finance_manager" : role;
+  const canViewProjectFinancials = normalizedRole === "admin" || normalizedRole === "finance_manager" || normalizedRole === "project_manager";
   const isMarketer = normalizedRole === "marketer";
-  const canViewProjectFinancials = normalizedRole === "admin" || normalizedRole === "finance_manager";
   const [projectLoading, setProjectLoading] = useState(true);
   const [projectError, setProjectError] = useState<string>("");
   const [project, setProject] = useState<Project | null>(null);
@@ -317,7 +328,7 @@ export default function ProjectOverviewPage() {
     }
   };
 
-  type ItemKind = "task" | "milestone" | "note" | "comment" | "file" | "feedback" | "timesheet" | "invoice" | "payment" | "expense" | "contract";
+  type ItemKind = "project" | "task" | "milestone" | "note" | "comment" | "file" | "feedback" | "timesheet" | "invoice" | "payment" | "expense" | "contract";
   const [editOpen, setEditOpen] = useState(false);
   const [editKind, setEditKind] = useState<ItemKind | null>(null);
   const [editId, setEditId] = useState("");
@@ -1288,6 +1299,7 @@ export default function ProjectOverviewPage() {
   };
 
   const kindEndpoint = (k: ItemKind) => {
+    if (k === "project") return "projects";
     if (k === "task") return "tasks";
     if (k === "milestone") return "milestones";
     if (k === "note") return "notes";
@@ -1459,14 +1471,24 @@ export default function ProjectOverviewPage() {
     const url = `${API_BASE}/api/${endpoint}/${editId}`;
     const payload: any = { projectId: id };
 
-    if (editKind === "task") {
+    if (editKind === "project") {
+      payload.title = editFields.title;
+      payload.status = editFields.status;
+      payload.price = editFields.price;
+      payload.start = editFields.start;
+      payload.deadline = editFields.deadline;
+      payload.description = editFields.description;
+      setProject((p) => (p ? { ...p, ...payload } : p));
+    } else if (editKind === "task") {
       payload.title = editFields.title;
       payload.status = editFields.status;
       payload.start = editFields.start && editFields.start !== "-" ? editFields.start : undefined;
       payload.deadline = editFields.deadline && editFields.deadline !== "-" ? editFields.deadline : undefined;
       payload.priority = editFields.priority;
       payload.labels = editFields.labels || undefined;
-      setTasks((prev) => prev.map((t) => (t.id === editId ? { ...t, title: editFields.title, status: editFields.status, start: editFields.start || "-", deadline: editFields.deadline || "-", priority: editFields.priority, labels: editFields.labels || undefined } : t)));
+      payload.assignedTo = editFields.assignedTo || "";
+      payload.collaborators = String(editFields.collaborators || "").split(",").map(s=>s.trim()).filter(Boolean);
+      setTasks((prev) => prev.map((t) => (t.id === editId ? { ...t, title: editFields.title, status: editFields.status, start: editFields.start || "-", deadline: editFields.deadline || "-", priority: editFields.priority, labels: editFields.labels || undefined, assignedTo: editFields.assignedTo || "", collaborators: payload.collaborators } : t)));
       
       // Upload new files if any
       if (editTaskNewFiles.length > 0) {
@@ -1626,6 +1648,19 @@ export default function ProjectOverviewPage() {
     const url = deleteKind === "comment"
       ? `${API_BASE}/api/${endpoint}/${deleteId}?projectId=${id}`
       : `${API_BASE}/api/${endpoint}/${deleteId}`;
+
+    if (deleteKind === "project") {
+      try {
+        const r = await fetch(url, { method: "DELETE", headers: getAuthHeaders() });
+        if (!r.ok) throw new Error("delete failed");
+        toast.success("Project deleted");
+        navigate("/projects");
+        return;
+      } catch (e: any) {
+        toast.error(e.message || "Failed to delete project");
+        return;
+      }
+    }
 
     if (deleteKind === "task") setTasks((prev) => prev.filter((t) => t.id !== deleteId));
     else if (deleteKind === "milestone") setMilestones((prev) => prev.filter((m) => m.id !== deleteId));
@@ -2243,32 +2278,50 @@ export default function ProjectOverviewPage() {
 
   if (projectLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px] p-6">
-        <Card className="w-full max-w-md p-6">
-          <div className="text-sm text-muted-foreground">Loading project…</div>
-          <div className="mt-2 text-base font-semibold">Please wait</div>
-        </Card>
+      <div className="flex h-[80vh] w-full items-center justify-center">
+        <div className="text-center space-y-6 animate-in fade-in zoom-in duration-500">
+          <div className="relative mx-auto w-16 h-16">
+            <div className="absolute inset-0 rounded-2xl bg-indigo-600/20 animate-ping" />
+            <div className="relative flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-600 shadow-xl shadow-indigo-500/20">
+              <RefreshCcw className="w-8 h-8 animate-spin text-white" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white">Analyzing Project Data</h2>
+            <p className="text-slate-500 dark:text-slate-400 font-medium">Please wait while we prepare your dashboard...</p>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (projectError) {
     return (
-      <div className="flex items-center justify-center min-h-[400px] p-6">
-        <Card className="w-full max-w-lg p-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="text-sm text-muted-foreground">Could not open project</div>
-              <div className="mt-1 text-base font-semibold">{projectError}</div>
-              <div className="mt-2 text-xs text-muted-foreground font-mono break-all">{String(id || "")}</div>
+      <div className="flex h-[80vh] w-full items-center justify-center p-6">
+        <Card className="w-full max-w-lg border-none shadow-2xl bg-white dark:bg-slate-900 rounded-[32px] overflow-hidden animate-in fade-in slide-in-from-bottom-10 duration-500">
+          <div className="h-2 bg-rose-500" />
+          <div className="p-8 sm:p-10 text-center space-y-6">
+            <div className="mx-auto w-20 h-20 rounded-full bg-rose-50 dark:bg-rose-900/20 flex items-center justify-center">
+              <AlertCircle className="h-10 w-10 text-rose-500" />
             </div>
-            <AlertCircle className="h-5 w-5 text-red-500" />
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button asChild variant="outline">
-              <Link to="/projects">Back to Projects</Link>
-            </Button>
-            <Button onClick={() => window.location.reload()}>Reload</Button>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Access Denied or Error</h2>
+              <p className="text-slate-500 dark:text-slate-400">{projectError}</p>
+              <div className="mt-4 inline-block px-4 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-[10px] font-mono text-slate-400 break-all">
+                ID: {String(id || "")}
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3 pt-4">
+              <Button asChild variant="outline" className="flex-1 h-12 rounded-2xl border-slate-200 dark:border-slate-800 font-bold">
+                <Link to="/projects">
+                  <ChevronLeft className="w-4 h-4 mr-2" />
+                  Back to Projects
+                </Link>
+              </Button>
+              <Button onClick={() => window.location.reload()} className="flex-1 h-12 rounded-2xl bg-indigo-600 hover:bg-indigo-700 font-bold shadow-lg shadow-indigo-500/20">
+                Try Again
+              </Button>
+            </div>
           </div>
         </Card>
       </div>
@@ -2276,262 +2329,356 @@ export default function ProjectOverviewPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-900 dark:via-slate-800 dark:to-indigo-900">
-      <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 dark:from-blue-800 dark:via-indigo-800 dark:to-purple-800">
-        <div
-          className="absolute inset-0 opacity-30"
-          style={{
-            backgroundImage:
-              "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.12'%3E%3Ccircle cx='30' cy='30' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")",
-          }}
-        />
+    <div className="min-h-screen bg-[#f8fafc] dark:bg-slate-950 pb-20 lg:pb-10">
+      {/* Premium Hero Header */}
+      <div className="relative bg-indigo-600 dark:bg-indigo-900 overflow-hidden">
+        {/* Abstract Background Elements */}
+        <div className="absolute inset-0">
+          <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+          <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-indigo-400/10 rounded-full blur-2xl translate-y-1/2 -translate-x-1/2" />
+          <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '24px 24px' }} />
+        </div>
 
-        <div className="relative mx-auto w-full max-w-7xl px-3 py-6 sm:px-4 sm:py-8 lg:px-6 lg:py-10">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-            <div className="min-w-0 space-y-4">
-              <div className="flex items-center gap-3">
-                <BackButton to="/projects" variant="ghost" className="text-white/80 hover:text-white hover:bg-white/10" />
-                <div className="flex items-center gap-2 text-white/80 min-w-0 text-sm">
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+            <div className="space-y-6 max-w-3xl">
+              <div className="flex items-center gap-4">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  asChild
+                  className="h-10 w-10 rounded-2xl bg-white/10 text-white hover:bg-white/20 hover:text-white border border-white/10 backdrop-blur-sm"
+                >
+                  <Link to="/projects"><ChevronLeft className="w-5 h-5" /></Link>
+                </Button>
+                <div className="flex items-center gap-2 text-white/70 text-sm font-medium">
                   <Link to="/projects" className="hover:text-white transition-colors">Projects</Link>
-                  <span>/</span>
-                  <span className="text-white font-medium truncate">{project?.title || "Project"}</span>
+                  <ChevronRight className="w-4 h-4 opacity-50" />
+                  <span className="text-white truncate">{project?.title}</span>
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-white truncate">
-                  {project?.title || "Project"}
-                </h1>
-                <p className="text-white/80 text-sm sm:text-base">
-                  {project?.clientId ? (
-                    <Link to={`/clients/${encodeURIComponent(String(project.clientId))}`} className="hover:underline">
-                      Client: {project?.client || "Client"}
-                    </Link>
-                  ) : (
-                    <span>Client: {project?.client || "-"}</span>
-                  )}
-                </p>
-              </div>
-
-              <div className="flex flex-wrap gap-2 justify-start lg:justify-end">
-                <Badge className="bg-white/20 text-white border-white/30 hover:bg-white/30">
-                  {project?.status || "-"}
-                </Badge>
-                {(() => {
-                  const first = String(project?.labels || "")
-                    .split(",")
-                    .map((x) => x.trim())
-                    .filter(Boolean)[0];
-                  return first ? (
-                    <Badge className="bg-white/20 text-white border-white/30 hover:bg-white/30">{first}</Badge>
-                  ) : null;
-                })()}
-                <Badge className="bg-white/20 text-white border-white/30 hover:bg-white/30">
-                  Progress: {progress}%
-                </Badge>
-                <Badge className="bg-white/20 text-white border-white/30 hover:bg-white/30">
-                  Days left: {daysLeft}
-                </Badge>
-                {canViewProjectFinancials ? (
-                  <Badge className="bg-white/20 text-white border-white/30 hover:bg-white/30">
-                    Budget: {project?.price != null ? String(project.price) : "-"}
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <Badge className={cn(
+                    "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border-none",
+                    project?.status === 'Open' ? "bg-emerald-400 text-emerald-950" : "bg-white/20 text-white"
+                  )}>
+                    {project?.status || "Active"}
                   </Badge>
-                ) : null}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="rounded-lg bg-white/10 border border-white/20 p-3">
-                  <div className="text-xs text-white/70">Start</div>
-                  <div className="text-sm font-medium text-white whitespace-nowrap">{project?.start ? project.start.slice(0, 10) : "-"}</div>
+                  {project?.clientId && (
+                    <Link 
+                      to={`/clients/${project.clientId}`}
+                      className="inline-flex items-center gap-1.5 text-white/80 hover:text-white text-sm font-medium bg-white/5 hover:bg-white/10 px-3 py-1 rounded-full backdrop-blur-sm transition-all border border-white/5"
+                    >
+                      <Users className="w-3.5 h-3.5" />
+                      {project?.client}
+                    </Link>
+                  )}
                 </div>
-                <div className="rounded-lg bg-white/10 border border-white/20 p-3">
-                  <div className="text-xs text-white/70">Deadline</div>
-                  <div className="text-sm font-medium text-white whitespace-nowrap">{project?.deadline ? project.deadline.slice(0, 10) : "-"}</div>
-                </div>
-                <div className="rounded-lg bg-white/10 border border-white/20 p-3">
-                  <div className="text-xs text-white/70">Tasks</div>
-                  <div className="text-sm font-medium text-white whitespace-nowrap">{tasks.length || 0}</div>
-                </div>
-                <div className="rounded-lg bg-white/10 border border-white/20 p-3">
-                  <div className="text-xs text-white/70">Completed</div>
-                  <div className="text-sm font-medium text-white whitespace-nowrap">{statusCounts.done}</div>
+                <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight leading-tight">
+                  {project?.title}
+                </h1>
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-3 pt-2">
+                  <div className="flex items-center gap-2 text-white/70 text-sm">
+                    <CalendarDays className="w-4 h-4" />
+                    <span>{project?.start ? new Date(project.start).toLocaleDateString() : '-'}</span>
+                    <span>—</span>
+                    <span className={cn(countdown && countdown.diff < 0 ? "text-rose-300 font-bold" : "")}>
+                      {project?.deadline ? new Date(project.deadline).toLocaleDateString() : 'No deadline'}
+                    </span>
+                  </div>
+                  {canViewProjectFinancials && project?.price && (
+                    <div className="flex items-center gap-2 text-white/70 text-sm">
+                      <CreditCard className="w-4 h-4" />
+                      <span className="font-bold text-white">PKR {project.price.toLocaleString()}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2 lg:justify-end">
-              <Button asChild variant="secondary" className="bg-white/10 text-white border-white/20 hover:bg-white/20 backdrop-blur-sm">
+            <div className="flex flex-wrap items-center gap-3 lg:self-end">
+              <Button asChild className="h-12 px-6 rounded-2xl bg-white text-indigo-600 hover:bg-white/90 font-bold shadow-xl shadow-black/10 transition-all active:scale-95">
                 <Link to="/projects/timeline">
-                  <CalendarDays className="w-4 h-4 mr-2" />
+                  <History className="w-4 h-4 mr-2" />
                   Timeline
                 </Link>
               </Button>
-              <Button variant="outline" className="bg-white/10 text-white hover:bg-white/20 border-white/20" onClick={() => window.location.reload()}>
+              <Button 
+                variant="outline" 
+                className="h-12 px-6 rounded-2xl bg-white/10 text-white border-white/20 hover:bg-white/20 backdrop-blur-sm font-bold"
+                onClick={() => window.location.reload()}
+              >
                 <RefreshCcw className="w-4 h-4 mr-2" />
                 Refresh
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="bg-white/10 text-white hover:bg-white/20 border-white/20">
-                    <MoreVertical className="w-4 h-4 mr-2" />
-                    Actions
+                  <Button variant="outline" className="h-12 w-12 rounded-2xl bg-white/10 text-white border-white/20 hover:bg-white/20 backdrop-blur-sm">
+                    <MoreVertical className="w-5 h-5" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  {!isMarketer ? <DropdownMenuItem onClick={() => setMembersOpen(true)}>Manage members</DropdownMenuItem> : null}
-                  {!isMarketer ? <DropdownMenuItem onClick={() => setEditDescOpen(true)}>Edit description</DropdownMenuItem> : null}
-                  {!isMarketer ? (
-                    <DropdownMenuItem
-                      onClick={() => {
-                        setActiveTab("tasks-list");
-                        setOpenManageLabels(true);
-                      }}
-                    >
-                      Manage task labels
-                    </DropdownMenuItem>
-                  ) : null}
-                  {!isMarketer ? <DropdownMenuSeparator /> : null}
-                  <DropdownMenuItem asChild>
-                    <Link to="/projects">Back to Projects</Link>
+                <DropdownMenuContent align="end" className="w-64 p-2 rounded-2xl border-slate-200 dark:border-slate-800 shadow-2xl">
+                  <DropdownMenuItem className="rounded-xl py-3 font-medium" onClick={() => setMembersOpen(true)}>
+                    <Users className="w-4 h-4 mr-3 text-slate-400" /> Manage Members
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="rounded-xl py-3 font-medium" onClick={() => setEditDescOpen(true)}>
+                    <FileText className="w-4 h-4 mr-3 text-slate-400" /> Edit Description
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="rounded-xl py-3 font-medium text-indigo-600 dark:text-indigo-400" onClick={() => {
+                    setEditKind("project");
+                    setEditId(id || "");
+                    setEditFields({
+                      title: project?.title || "",
+                      status: project?.status || "Open",
+                      price: project?.price || 0,
+                      start: project?.start?.slice(0, 10) || "",
+                      deadline: project?.deadline?.slice(0, 10) || "",
+                      description: project?.description || ""
+                    });
+                    setEditOpen(true);
+                  }}>
+                    <Edit2 className="w-4 h-4 mr-3" /> Edit Project
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="rounded-xl py-3 font-medium text-rose-600 dark:text-rose-400" onClick={() => {
+                    setDeleteKind("project");
+                    setDeleteId(id || "");
+                    setDeleteLabel(project?.title || "this project");
+                    setDeleteOpen(true);
+                  }}>
+                    <Trash2 className="w-4 h-4 mr-3" /> Delete Project
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
           </div>
+
+          {/* Key Stats Overlay */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-12">
+            <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-[24px] p-5 space-y-2">
+              <div className="text-white/60 text-xs font-bold uppercase tracking-widest">Progress</div>
+              <div className="flex items-end gap-2">
+                <span className="text-3xl font-black text-white">{progress}%</span>
+                <div className="flex-1 pb-2">
+                  <Progress value={progress} className="h-1.5 bg-white/20" />
+                </div>
+              </div>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-[24px] p-5 space-y-2">
+              <div className="text-white/60 text-xs font-bold uppercase tracking-widest">Tasks</div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-black text-white">{statusCounts.done}</span>
+                <span className="text-white/40 font-bold">/ {tasks.length}</span>
+                <Badge className="ml-auto bg-emerald-400/20 text-emerald-300 border-none text-[10px]">
+                  {Math.round((statusCounts.done / (tasks.length || 1)) * 100)}%
+                </Badge>
+              </div>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-[24px] p-5 space-y-2">
+              <div className="text-white/60 text-xs font-bold uppercase tracking-widest">Time Remaining</div>
+              <div className="flex items-baseline gap-2">
+                <span className={cn("text-2xl font-black text-white", countdown && countdown.diff < 0 ? "text-rose-300" : "")}>
+                  {countdown ? `${countdown.days}d ${countdown.hours}h` : '--'}
+                </span>
+                <Clock className="w-4 h-4 text-white/40 ml-auto" />
+              </div>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-[24px] p-5 space-y-2">
+              <div className="text-white/60 text-xs font-bold uppercase tracking-widest">Next Milestone</div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-white truncate max-w-[120px]">
+                  {milestones.find(m => m.status !== 'Done')?.title || 'All Clear'}
+                </span>
+                <Target className="w-4 h-4 text-white/40 ml-auto shrink-0" />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-6">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 -mt-8 relative z-10">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <div className="flex flex-col lg:flex-row gap-6">
+            {/* Standard Sidebar Navigation */}
+            <aside className="w-full lg:w-72 shrink-0">
+              <Card className="border-none shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-[32px] overflow-hidden p-3 sticky top-6">
+                <TabsList className="flex flex-col h-auto bg-transparent gap-1 p-0">
+                  <ProjectNavButton value="overview" icon={LayoutDashboard} label="Overview" />
+                  <ProjectNavButton value="tasks-list" icon={CheckCircle2} label="Tasks & Workflow" count={tasks.length} />
+                  <ProjectNavButton value="milestones" icon={Target} label="Milestones" count={milestones.length} />
+                  <ProjectNavButton value="gantt" icon={Activity} label="Gantt Chart" />
+                  
+                  <div className="my-2 h-px bg-slate-100 dark:bg-slate-800 mx-3" />
+                  <div className="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Documentation</div>
+                  
+                  <ProjectNavButton value="client-requirements" icon={Quote} label="Requirements" />
+                  <ProjectNavButton value="delivery-document" icon={Box} label="Delivery Plan" />
+                  <ProjectNavButton value="contracts" icon={ScrollText} label="Contracts" count={contracts.length} />
+                  
+                  <div className="my-2 h-px bg-slate-100 dark:bg-slate-800 mx-3" />
+                  <div className="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Resources</div>
+                  
+                  <ProjectNavButton value="files" icon={Paperclip} label="Shared Files" count={files.length} />
+                  <ProjectNavButton value="notes" icon={FileText} label="Team Notes" count={notes.length} />
+                  <ProjectNavButton value="comments" icon={MessageSquare} label="Discussions" count={comments.length} />
+                  <ProjectNavButton value="timesheets" icon={Timer} label="Time Logs" />
+                  
+                  {canViewProjectFinancials && (
+                    <>
+                      <div className="my-2 h-px bg-slate-100 dark:bg-slate-800 mx-3" />
+                      <div className="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Finance</div>
+                      <ProjectNavButton value="invoices" icon={FileText} label="Invoices" />
+                      <ProjectNavButton value="payments" icon={CreditCard} label="Payments" />
+                      <ProjectNavButton value="expenses" icon={Briefcase} label="Expenses" />
+                    </>
+                  )}
+                  
+                  <ProjectNavButton value="customer-feedback" icon={Sparkles} label="Feedback" />
+                </TabsList>
+              </Card>
+            </aside>
 
-      <div className="space-y-6">
-        {project?.deadline && countdownTarget && countdown && countdown.diff <= 0 && (
-          <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-destructive">
-            <div className="font-medium">Deadline reached</div>
-            <div className="text-sm text-destructive/90">This project is overdue. Deadline was {countdownTarget.toLocaleString()}.</div>
-          </div>
-        )}
-
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:grid-cols-[260px_1fr]">
-            <div className="lg:sticky lg:top-4 h-fit">
-              <TabsList className="w-full flex h-auto flex-nowrap items-center justify-start gap-1 overflow-x-auto bg-muted/40 lg:flex-col lg:items-stretch lg:overflow-visible lg:bg-muted/20 lg:border lg:rounded-lg lg:p-2">
-                <TabsTrigger className="whitespace-nowrap lg:w-full lg:justify-start" value="overview">Overview</TabsTrigger>
-                <TabsTrigger className="whitespace-nowrap lg:w-full lg:justify-start" value="client-requirements">Client requirements</TabsTrigger>
-                <TabsTrigger className="whitespace-nowrap lg:w-full lg:justify-start" value="delivery-document">Delivery document</TabsTrigger>
-                <TabsTrigger className="whitespace-nowrap lg:w-full lg:justify-start" value="tasks-list">Tasks List</TabsTrigger>
-                <TabsTrigger className="whitespace-nowrap lg:w-full lg:justify-start" value="milestones">Milestones</TabsTrigger>
-                <TabsTrigger className="whitespace-nowrap lg:w-full lg:justify-start" value="gantt">Gantt</TabsTrigger>
-                <TabsTrigger className="whitespace-nowrap lg:w-full lg:justify-start" value="notes">Notes</TabsTrigger>
-                <TabsTrigger className="whitespace-nowrap lg:w-full lg:justify-start" value="files">Files</TabsTrigger>
-                <TabsTrigger className="whitespace-nowrap lg:w-full lg:justify-start" value="comments">Comments</TabsTrigger>
-                <TabsTrigger className="whitespace-nowrap lg:w-full lg:justify-start" value="customer-feedback">Customer feedback</TabsTrigger>
-                <TabsTrigger className="whitespace-nowrap lg:w-full lg:justify-start" value="timesheets">Timesheets</TabsTrigger>
-                {canViewProjectFinancials ? <TabsTrigger className="whitespace-nowrap lg:w-full lg:justify-start" value="invoices">Invoices</TabsTrigger> : null}
-                {canViewProjectFinancials ? <TabsTrigger className="whitespace-nowrap lg:w-full lg:justify-start" value="payments">Payments</TabsTrigger> : null}
-                {canViewProjectFinancials ? <TabsTrigger className="whitespace-nowrap lg:w-full lg:justify-start" value="expenses">Expenses</TabsTrigger> : null}
-                <TabsTrigger className="whitespace-nowrap lg:w-full lg:justify-start" value="contracts">Contracts</TabsTrigger>
-              </TabsList>
-            </div>
-
-            <div className="min-w-0">
-
-              <TabsContent value="overview" className="mt-0">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <Card className="p-4 border-0 shadow-lg bg-background/80 backdrop-blur-sm rounded-xl">
-              <div className="rounded-lg border border-sky-200 bg-sky-50/40 dark:border-sky-800/50 dark:bg-sky-950/30 px-3 py-2 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-xs uppercase tracking-wide text-sky-700 dark:text-sky-200">Tasks</div>
-                  <div className="text-sm font-semibold text-foreground">Status overview</div>
-                </div>
-                <Badge variant="secondary" className="bg-white/70 border border-sky-200 text-sky-800 dark:bg-slate-900/60 dark:border-sky-800/50 dark:text-sky-200">Total: {tasks.length || 0}</Badge>
-              </div>
-
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-4 items-center">
-                <div className="text-xs space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: "#e4e4e7" }} />
-                      <span>Todo</span>
+            {/* Content Area */}
+            <main className="flex-1 min-w-0 space-y-6">
+              <TabsContent value="overview" className="m-0 focus-visible:outline-none animate-in fade-in slide-in-from-right-4 duration-500">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {/* Status Card */}
+                  <Card className="col-span-1 border-none shadow-xl bg-white dark:bg-slate-900 rounded-[32px] overflow-hidden p-6 hover:shadow-2xl transition-all duration-300 group">
+                    <div className="flex items-center justify-between mb-8">
+                      <div className="p-3 bg-indigo-50 dark:bg-indigo-900/30 rounded-2xl group-hover:scale-110 transition-transform">
+                        <Activity className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                      </div>
+                      <Badge variant="secondary" className="bg-slate-100 dark:bg-slate-800 text-[10px] font-bold uppercase tracking-wider">
+                        Real-time Status
+                      </Badge>
                     </div>
-                    <div className="text-sm font-semibold text-foreground tabular-nums">{statusCounts.todo}</div>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 text-sky-800 dark:text-sky-200">
-                      <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: "#60a5fa" }} />
-                      <span className="whitespace-nowrap">In progress</span>
+                    <div className="space-y-6">
+                      <div className="flex items-center justify-center py-4">
+                        <DonutChart
+                          size={140}
+                          stroke={16}
+                          segments={[
+                            { value: statusCounts.todo, color: "#e2e8f0" },
+                            { value: statusCounts.in_progress, color: "#6366f1" },
+                            { value: statusCounts.done, color: "#10b981" },
+                          ]}
+                          centerText={`${Math.round((statusCounts.done / (tasks.length || 1)) * 100)}%`}
+                        />
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 pt-4 border-t border-slate-50 dark:border-slate-800">
+                        <div className="text-center">
+                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Todo</div>
+                          <div className="text-lg font-black text-slate-900 dark:text-white">{statusCounts.todo}</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-[10px] font-bold uppercase tracking-widest mb-1 text-indigo-500">Active</div>
+                          <div className="text-lg font-black text-slate-900 dark:text-white">{statusCounts.in_progress}</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-[10px] font-bold uppercase tracking-widest mb-1 text-emerald-500">Done</div>
+                          <div className="text-lg font-black text-slate-900 dark:text-white">{statusCounts.done}</div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-sm font-semibold text-foreground tabular-nums">{statusCounts.in_progress}</div>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-200">
-                      <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: "#34d399" }} />
-                      <span>Done</span>
+                  </Card>
+
+                  {/* Team Card */}
+                  <Card className="col-span-1 lg:col-span-2 border-none shadow-xl bg-white dark:bg-slate-900 rounded-[32px] overflow-hidden p-6 hover:shadow-2xl transition-all duration-300">
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="space-y-1">
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white">Active Team Members</h3>
+                        <p className="text-xs text-slate-500 font-medium">Collaborating on {tasks.length} tasks</p>
+                      </div>
+                      <Button variant="outline" size="sm" className="rounded-xl font-bold h-9" onClick={() => setMembersOpen(true)}>
+                        <Users className="w-4 h-4 mr-2" /> Manage Team
+                      </Button>
                     </div>
-                    <div className="text-sm font-semibold text-foreground tabular-nums">{statusCounts.done}</div>
-                  </div>
-                </div>
-
-                <div className="justify-self-center sm:justify-self-end">
-                  <DonutChart
-                    segments={[
-                      { value: statusCounts.todo, color: "#e4e4e7" },
-                      { value: statusCounts.in_progress, color: "#60a5fa" },
-                      { value: statusCounts.done, color: "#34d399" },
-                    ]}
-                    centerText={`${tasks.length || 0}`}
-                  />
-                </div>
-              </div>
-            </Card>
-
-            <Card className="p-4 space-y-3 lg:col-span-2 border-0 shadow-lg bg-background/80 backdrop-blur-sm rounded-xl">
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-medium text-sky-600">Project members</div>
-                <Button size="sm" variant="outline" onClick={() => setMembersOpen(true)} disabled={isMarketer}>Manage</Button>
-              </div>
-              {project?.members && project.members.length > 0 ? (
-                <div className="flex flex-wrap gap-2 justify-start lg:justify-end">
-                  {project.members.map((m, idx) => (
-                    <Badge key={`${m}-${idx}`} variant="secondary">{m}</Badge>
-                  ))}
-                </div>
-              ) : (
-                <div className="rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">No members yet. Add people to keep delivery transparent.</div>
-              )}
-            </Card>
-
-            <Card className="p-4 space-y-2 lg:col-span-2 border-0 shadow-lg bg-background/80 backdrop-blur-sm rounded-xl">
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-medium text-sky-600">Description</div>
-                <Button size="sm" variant="outline" onClick={() => setEditDescOpen(true)} disabled={isMarketer}>Edit</Button>
-              </div>
-              <div className="text-sm whitespace-pre-wrap text-foreground/90">
-                {project?.description ? project.description : (
-                  <div className="rounded-lg border bg-muted/20 p-4 text-muted-foreground">No description. Add a short brief so your team stays aligned.</div>
-                )}
-              </div>
-            </Card>
-
-            <Card className="p-4 space-y-3 lg:col-span-1 border-0 shadow-lg bg-background/80 backdrop-blur-sm rounded-xl">
-              <div>
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">Tasks</div>
-                <div className="text-sm font-semibold">Priorities</div>
-              </div>
-              <div className="space-y-3 text-sm">
-                {(["high","medium","low"] as const).map((k) => (
-                  <div key={k} className="space-y-1">
-                    <div className="flex items-center justify-between"><span className="capitalize">{k}</span><span className="text-muted-foreground">{priorityCounts[k]}</span></div>
-                    <div className="h-2 bg-muted/40 rounded-full overflow-hidden">
-                      <div className={`h-2 rounded ${k === 'high' ? 'bg-rose-400' : k === 'medium' ? 'bg-amber-400' : 'bg-emerald-400'}`} style={{ width: `${tasks.length ? Math.round((priorityCounts[k] / tasks.length) * 100) : 0}%` }} />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {project?.members && project.members.length > 0 ? (
+                        project.members.map((member, i) => (
+                          <div key={i} className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors group">
+                            <Avatar className="h-12 w-12 border-2 border-white dark:border-slate-700 shadow-sm">
+                              <AvatarFallback className="bg-indigo-100 text-indigo-700 font-bold">
+                                {getInitials(member)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0 flex-1">
+                              <div className="text-sm font-bold text-slate-900 dark:text-white truncate">{member}</div>
+                              <div className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider">Project Member</div>
+                            </div>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                              <MessageSquare className="w-4 h-4 text-slate-400" />
+                            </Button>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="col-span-2 py-12 text-center space-y-4">
+                          <div className="mx-auto w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                            <Users className="w-8 h-8 text-slate-300" />
+                          </div>
+                          <p className="text-sm text-slate-400 font-medium">No team members assigned yet.</p>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          </div>
+                  </Card>
+
+                  {/* Description Card */}
+                  <Card className="col-span-1 lg:col-span-2 border-none shadow-xl bg-white dark:bg-slate-900 rounded-[32px] overflow-hidden p-8 hover:shadow-2xl transition-all duration-300">
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-amber-50 dark:bg-amber-900/30 rounded-xl">
+                          <FileText className="w-5 h-5 text-amber-600" />
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white">Project Scope & Brief</h3>
+                      </div>
+                      <Button variant="ghost" size="sm" className="rounded-xl font-bold h-9 text-slate-500" onClick={() => setEditDescOpen(true)}>
+                        <Pencil className="w-4 h-4 mr-2" /> Edit Brief
+                      </Button>
+                    </div>
+                    <div className="prose prose-slate dark:prose-invert max-w-none">
+                      {project?.description ? (
+                        <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed whitespace-pre-wrap">
+                          {project.description}
+                        </p>
+                      ) : (
+                        <div className="py-10 text-center rounded-[24px] border-2 border-dashed border-slate-100 dark:border-slate-800">
+                          <p className="text-sm text-slate-400 font-medium italic">No description provided yet. Define the project scope to help your team stay aligned.</p>
+                          <Button variant="link" className="text-indigo-600 font-bold mt-2" onClick={() => setEditDescOpen(true)}>
+                            Add Description Now
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+
+                  {/* Priority Breakdown */}
+                  <Card className="col-span-1 border-none shadow-xl bg-white dark:bg-slate-900 rounded-[32px] overflow-hidden p-6 hover:shadow-2xl transition-all duration-300">
+                    <div className="flex items-center justify-between mb-8">
+                      <div className="p-3 bg-rose-50 dark:bg-rose-900/30 rounded-2xl">
+                        <Target className="w-5 h-5 text-rose-600" />
+                      </div>
+                      <Badge variant="secondary" className="bg-rose-50 text-rose-600 border-none text-[10px] font-bold uppercase tracking-wider">
+                        Risk Analysis
+                      </Badge>
+                    </div>
+                    <div className="space-y-6">
+                      <PriorityItem label="High Risk" count={priorityCounts.high} color="bg-rose-500" total={tasks.length} />
+                      <PriorityItem label="Medium Priority" count={priorityCounts.medium} color="bg-amber-500" total={tasks.length} />
+                      <PriorityItem label="Low Priority" count={priorityCounts.low} color="bg-emerald-500" total={tasks.length} />
+                    </div>
+                    <div className="mt-8 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+                      <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Health Score</div>
+                      <div className="text-xl font-black text-slate-900 dark:text-white">
+                        {Math.round(((statusCounts.done + (statusCounts.in_progress * 0.5)) / (tasks.length || 1)) * 100)}%
+                      </div>
+                    </div>
+                  </Card>
+                </div>
               </TabsContent>
-
-              <TabsContent value="client-requirements">
+              
+              <TabsContent value="client-requirements" className="m-0 focus-visible:outline-none animate-in fade-in slide-in-from-right-4 duration-500">
           <Card className="p-4 space-y-4">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -2884,20 +3031,26 @@ export default function ProjectOverviewPage() {
                   </div>
                   <div className="grid gap-2 sm:grid-cols-5 items-center">
                     <div className="text-sm text-muted-foreground sm:col-span-1">Assign to</div>
-                    <Select value={newTaskAssignee || "__none__"} onValueChange={(v)=>setNewTaskAssignee(v === "__none__" ? "" : v)}>
-                      <SelectTrigger className="sm:col-span-4"><SelectValue placeholder="Select assignee"/></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">None</SelectItem>
-                        {employeeNames.map((n) => (
-                          <SelectItem key={n} value={n}>{n}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="sm:col-span-4">
+                      <SearchableSelect
+                        options={[
+                          { value: "__none__", label: "None" },
+                          ...employeeNames.map((n) => ({ value: n, label: n })),
+                        ]}
+                        value={newTaskAssignee || "__none__"}
+                        onValueChange={(v) => setNewTaskAssignee(v === "__none__" ? "" : v)}
+                        placeholder="Select assignee"
+                      />
+                    </div>
                   </div>
                   <div className="grid gap-2 sm:grid-cols-5 items-center">
                     <div className="text-sm text-muted-foreground sm:col-span-1">Collaborators</div>
                     <div className="sm:col-span-4 grid gap-2">
-                      <Select
+                      <SearchableSelect
+                        options={[
+                          { value: "__none__", label: "Select..." },
+                          ...employeeNames.map((n) => ({ value: n, label: n })),
+                        ]}
                         value={newTaskCollaboratorPick}
                         onValueChange={(v) => {
                           setNewTaskCollaboratorPick(v);
@@ -2911,15 +3064,8 @@ export default function ProjectOverviewPage() {
                             return list.join(", ");
                           });
                         }}
-                      >
-                        <SelectTrigger><SelectValue placeholder="Add collaborator"/></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">Select...</SelectItem>
-                          {employeeNames.map((n) => (
-                            <SelectItem key={n} value={n}>{n}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        placeholder="Add collaborator"
+                      />
                       <Input
                         placeholder="Collaborators (comma separated)"
                         value={newTaskCollaborators}
@@ -3099,11 +3245,11 @@ export default function ProjectOverviewPage() {
             <div className="p-3 border-t bg-muted/10">
               <div className="text-sm font-medium text-sky-600">Analytics</div>
               <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="rounded-md border bg-background p-3 rounded-lg">
+                <div className="rounded-lg border bg-background p-3">
                   <div className="text-xs text-muted-foreground">Tasks created (7d)</div>
                   <div className="mt-1"><MiniBarChart values={tasksLast7Created} width={220} /></div>
                 </div>
-                <div className="rounded-md border bg-background p-3 rounded-lg">
+                <div className="rounded-lg border bg-background p-3">
                   <div className="text-xs text-muted-foreground">Tasks done (7d)</div>
                   <div className="mt-1"><MiniBarChart values={tasksLast7Done} width={220} /></div>
                 </div>
@@ -3247,11 +3393,11 @@ export default function ProjectOverviewPage() {
             <div className="p-3 border-t bg-muted/10">
               <div className="text-sm font-medium text-sky-600">Analytics</div>
               <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="rounded-md border bg-background p-3 rounded-lg">
+                <div className="rounded-lg border bg-background p-3">
                   <div className="text-xs text-muted-foreground">Milestones due (7d)</div>
                   <div className="mt-1"><MiniBarChart values={milestonesLast7Due} width={220} /></div>
                 </div>
-                <div className="rounded-md border bg-background p-3 rounded-lg">
+                <div className="rounded-lg border bg-background p-3">
                   <div className="text-xs text-muted-foreground">Milestones done (7d)</div>
                   <div className="mt-1"><MiniBarChart values={milestonesLast7Done} width={220} /></div>
                 </div>
@@ -3304,11 +3450,11 @@ export default function ProjectOverviewPage() {
             <div className="p-3 border-t bg-muted/10">
               <div className="text-sm font-medium text-sky-600">Analytics</div>
               <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="rounded-md border bg-background p-3 rounded-lg">
+                <div className="rounded-lg border bg-background p-3">
                   <div className="text-xs text-muted-foreground">Tasks created (7d)</div>
                   <div className="mt-1"><MiniBarChart values={tasksLast7Created} width={220} /></div>
                 </div>
-                <div className="rounded-md border bg-background p-3 rounded-lg">
+                <div className="rounded-lg border bg-background p-3">
                   <div className="text-xs text-muted-foreground">Tasks done (7d)</div>
                   <div className="mt-1"><MiniBarChart values={tasksLast7Done} width={220} /></div>
                 </div>
@@ -3435,11 +3581,11 @@ export default function ProjectOverviewPage() {
             <div className="p-3 border-t bg-muted/10">
               <div className="text-sm font-medium text-sky-600">Analytics</div>
               <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="rounded-md border bg-background p-3 rounded-lg">
+                <div className="rounded-lg border bg-background p-3">
                   <div className="text-xs text-muted-foreground">Notes created (7d)</div>
                   <div className="mt-1"><MiniBarChart values={notesLast7} width={220} /></div>
                 </div>
-                <div className="rounded-md border bg-background p-3 rounded-lg">
+                <div className="rounded-lg border bg-background p-3">
                   <div className="text-xs text-muted-foreground">Characters written (7d)</div>
                   <div className="mt-1"><MiniBarChart values={notesLast7Chars} width={220} /></div>
                 </div>
@@ -3580,11 +3726,11 @@ export default function ProjectOverviewPage() {
             <div className="p-3 border-t bg-muted/10">
               <div className="text-sm font-medium text-sky-600">Analytics</div>
               <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="rounded-md border bg-background p-3 rounded-lg">
+                <div className="rounded-lg border bg-background p-3">
                   <div className="text-xs text-muted-foreground">Largest files</div>
                   <div className="mt-1"><MiniBarChart values={files.slice().sort((a,b)=>(Number((b as any).size)||0)-(Number((a as any).size)||0)).slice(0,7).map((f)=>Number((f as any).size)||1)} width={220} /></div>
                 </div>
-                <div className="rounded-md border bg-background p-3 rounded-lg">
+                <div className="rounded-lg border bg-background p-3">
                   <div className="text-xs text-muted-foreground">All file sizes</div>
                   <div className="mt-1"><MiniBarChart values={files.slice(0, 7).map((f)=>Number((f as any).size)||0)} width={220} /></div>
                 </div>
@@ -3681,11 +3827,11 @@ export default function ProjectOverviewPage() {
             <div className="p-3 border-t bg-muted/10">
               <div className="text-sm font-medium text-sky-600">Analytics</div>
               <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="rounded-md border bg-background p-3 rounded-lg">
+                <div className="rounded-lg border bg-background p-3">
                   <div className="text-xs text-muted-foreground">Comments created (7d)</div>
                   <div className="mt-1"><MiniBarChart values={commentsLast7} width={220} /></div>
                 </div>
-                <div className="rounded-md border bg-background p-3 rounded-lg">
+                <div className="rounded-lg border bg-background p-3">
                   <div className="text-xs text-muted-foreground">Characters written (7d)</div>
                   <div className="mt-1"><MiniBarChart values={commentsLast7Chars} width={220} /></div>
                 </div>
@@ -3826,11 +3972,11 @@ export default function ProjectOverviewPage() {
             <div className="p-3 border-t bg-muted/10">
               <div className="text-sm font-medium text-sky-600">Analytics</div>
               <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="rounded-md border bg-background p-3 rounded-lg">
+                <div className="rounded-lg border bg-background p-3">
                   <div className="text-xs text-muted-foreground">Feedback received (7d)</div>
                   <div className="mt-1"><MiniBarChart values={feedbackLast7} width={220} /></div>
                 </div>
-                <div className="rounded-md border bg-background p-3 rounded-lg">
+                <div className="rounded-lg border bg-background p-3">
                   <div className="text-xs text-muted-foreground">Avg rating (7d)</div>
                   <div className="mt-1"><MiniBarChart values={feedbackLast7AvgRating} width={220} /></div>
                 </div>
@@ -3950,11 +4096,11 @@ export default function ProjectOverviewPage() {
             <div className="p-3 border-t bg-muted/10">
               <div className="text-sm font-medium text-sky-600">Analytics</div>
               <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="rounded-md border bg-background p-3 rounded-lg">
+                <div className="rounded-lg border bg-background p-3">
                   <div className="text-xs text-muted-foreground">Hours logged (7d)</div>
                   <div className="mt-1"><MiniBarChart values={timesheetsLast7Hours} width={220} /></div>
                 </div>
-                <div className="rounded-md border bg-background p-3 rounded-lg">
+                <div className="rounded-lg border bg-background p-3">
                   <div className="text-xs text-muted-foreground">Billable hours (7d)</div>
                   <div className="mt-1"><MiniBarChart values={timesheetsLast7BillableHours} width={220} /></div>
                 </div>
@@ -4095,11 +4241,11 @@ export default function ProjectOverviewPage() {
             <div className="p-3 border-t bg-muted/10">
               <div className="text-sm font-medium text-sky-600">Analytics</div>
               <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="rounded-md border bg-background p-3 rounded-lg">
+                <div className="rounded-lg border bg-background p-3">
                   <div className="text-xs text-muted-foreground">Invoice totals (7d)</div>
                   <div className="mt-1"><MiniBarChart values={invoicesLast7Totals} width={220} /></div>
                 </div>
-                <div className="rounded-md border bg-background p-3 rounded-lg">
+                <div className="rounded-lg border bg-background p-3">
                   <div className="text-xs text-muted-foreground">Invoices created (7d)</div>
                   <div className="mt-1"><MiniBarChart values={invoicesLast7Counts} width={220} /></div>
                 </div>
@@ -4310,11 +4456,11 @@ export default function ProjectOverviewPage() {
             <div className="p-3 border-t bg-muted/10">
               <div className="text-sm font-medium text-sky-600">Analytics</div>
               <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="rounded-md border bg-background p-3 rounded-lg">
+                <div className="rounded-lg border bg-background p-3">
                   <div className="text-xs text-muted-foreground">Amounts (7d)</div>
                   <div className="mt-1"><MiniBarChart values={paymentsLast7Amounts} width={220} /></div>
                 </div>
-                <div className="rounded-md border bg-background p-3 rounded-lg">
+                <div className="rounded-lg border bg-background p-3">
                   <div className="text-xs text-muted-foreground">Payments count (7d)</div>
                   <div className="mt-1"><MiniBarChart values={paymentsLast7Counts} width={220} /></div>
                 </div>
@@ -4440,11 +4586,11 @@ export default function ProjectOverviewPage() {
             <div className="p-3 border-t bg-muted/10">
               <div className="text-sm font-medium text-sky-600">Analytics</div>
               <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="rounded-md border bg-background p-3 rounded-lg">
+                <div className="rounded-lg border bg-background p-3">
                   <div className="text-xs text-muted-foreground">Amounts (7d)</div>
                   <div className="mt-1"><MiniBarChart values={expensesLast7Amounts} width={220} /></div>
                 </div>
-                <div className="rounded-md border bg-background p-3 rounded-lg">
+                <div className="rounded-lg border bg-background p-3">
                   <div className="text-xs text-muted-foreground">Reimbursable (7d)</div>
                   <div className="mt-1"><MiniBarChart values={expensesLast7ReimbursableAmounts} width={220} /></div>
                 </div>
@@ -4592,11 +4738,11 @@ export default function ProjectOverviewPage() {
             <div className="p-3 border-t bg-muted/10">
               <div className="text-sm font-medium text-sky-600">Analytics</div>
               <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="rounded-md border bg-background p-3 rounded-lg">
+                <div className="rounded-lg border bg-background p-3">
                   <div className="text-xs text-muted-foreground">Contracts created (7d)</div>
                   <div className="mt-1"><MiniBarChart values={contractsLast7Counts} width={220} /></div>
                 </div>
-                <div className="rounded-md border bg-background p-3 rounded-lg">
+                <div className="rounded-lg border bg-background p-3">
                   <div className="text-xs text-muted-foreground">Status counts</div>
                   <div className="mt-1"><MiniBarChart values={Object.values(contractStatusCounts).slice(0, 7).map((v)=>Number(v)||0)} width={220} /></div>
                 </div>
@@ -4610,11 +4756,11 @@ export default function ProjectOverviewPage() {
               </div>
             </div>
           </Card>
-              </TabsContent>
-
-            </div>
+        </TabsContent>
+            </main>
           </div>
-      </Tabs>
+        </Tabs>
+      </div>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-2xl">
@@ -5035,6 +5181,53 @@ export default function ProjectOverviewPage() {
                     </Select>
                   </div>
                 </div>
+                <div className="grid gap-2 sm:grid-cols-5 items-center">
+                  <div className="text-sm text-muted-foreground sm:col-span-2">Assign to</div>
+                  <div className="sm:col-span-3">
+                    <SearchableSelect
+                      options={[
+                        { value: "__none__", label: "None" },
+                        ...employeeNames.map((n) => ({ value: n, label: n })),
+                      ]}
+                      value={editFields.assignedTo || "__none__"}
+                      onValueChange={(v) => setEditFields((p: any) => ({ ...p, assignedTo: v === "__none__" ? "" : v }))}
+                      placeholder="Select assignee"
+                      disabled={editKind === "task" && !canEditTask(tasks.find(t => t.id === editId) || null)}
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-5 items-center">
+                  <div className="text-sm text-muted-foreground sm:col-span-2">Collaborators</div>
+                  <div className="sm:col-span-3">
+                    <SearchableSelect
+                      options={[
+                        { value: "__none__", label: "Select..." },
+                        ...employeeNames.map((n) => ({ value: n, label: n })),
+                      ]}
+                      value="__none__"
+                      onValueChange={(v) => {
+                        if (!v || v === "__none__") return;
+                        setEditFields((p: any) => {
+                          const list = String(p.collaborators || "")
+                            .split(",")
+                            .map((s) => s.trim())
+                            .filter(Boolean);
+                          if (!list.some((x) => x.toLowerCase() === v.toLowerCase())) list.push(v);
+                          return { ...p, collaborators: list.join(", ") };
+                        });
+                      }}
+                      placeholder="Add collaborator"
+                      disabled={editKind === "task" && !canEditTask(tasks.find(t => t.id === editId) || null)}
+                    />
+                    <Input
+                      className="mt-2"
+                      placeholder="Collaborators (comma separated)"
+                      value={String(editFields.collaborators || "")}
+                      onChange={(e) => setEditFields((p: any) => ({ ...p, collaborators: e.target.value }))}
+                      disabled={editKind === "task" && !canEditTask(tasks.find(t => t.id === editId) || null)}
+                    />
+                  </div>
+                </div>
                 <div className="grid gap-2 sm:grid-cols-5 items-start">
                   <div className="text-sm text-muted-foreground sm:col-span-2">Files</div>
                   <div className="sm:col-span-3 space-y-2">
@@ -5294,8 +5487,13 @@ export default function ProjectOverviewPage() {
           </DialogHeader>
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <Input placeholder="Member name or email" value={newMember} onChange={(e)=>setNewMember(e.target.value)} />
-              <Button variant="outline" onClick={()=>{ const v = newMember.trim(); if (!v) return; setMembersDraft(prev=> [v, ...prev]); setNewMember(""); }}>Add</Button>
+              <SearchableSelect
+                options={employees.map(e => ({ value: e.name || "", label: e.name || "" }))}
+                value={newMember}
+                onValueChange={setNewMember}
+                placeholder="Select team member"
+              />
+              <Button variant="outline" onClick={()=>{ const v = newMember.trim(); if (!v) return; if (membersDraft.includes(v)) return; setMembersDraft(prev=> [v, ...prev]); setNewMember(""); }}>Add</Button>
             </div>
             <div className="space-y-2">
               {membersDraft.length === 0 ? (
@@ -5318,8 +5516,40 @@ export default function ProjectOverviewPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      </div>
-    </div>
     </div>
   );
 }
+
+// Sub-components for cleaner code
+function ProjectNavButton({ value, icon: Icon, label, count }: { value: string; icon: any; label: string; count?: number }) {
+  return (
+    <TabsTrigger 
+      value={value} 
+      className="w-full justify-start gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-indigo-500/20 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+    >
+      <Icon className="w-4 h-4 shrink-0" />
+      <span className="truncate">{label}</span>
+      {count !== undefined && (
+        <Badge variant="secondary" className="ml-auto bg-slate-100 dark:bg-slate-800 text-[10px] border-none group-data-[state=active]:bg-white/20 group-data-[state=active]:text-white">
+          {count}
+        </Badge>
+      )}
+    </TabsTrigger>
+  );
+}
+
+function PriorityItem({ label, count, color, total }: { label: string; count: number; color: string; total: number }) {
+  const percentage = total > 0 ? (count / total) * 100 : 0;
+  return (
+    <div className="space-y-2">
+      <div className="flex justify-between items-center text-xs font-bold uppercase tracking-wider">
+        <span className="text-slate-500">{label}</span>
+        <span className="text-slate-900 dark:text-white">{count}</span>
+      </div>
+      <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+        <div className={cn("h-full rounded-full transition-all duration-500", color)} style={{ width: `${percentage}%` }} />
+      </div>
+    </div>
+  );
+}
+

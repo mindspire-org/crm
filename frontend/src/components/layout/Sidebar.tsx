@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
@@ -305,8 +305,8 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onClose }: SidebarPro
       return ["admin", "marketer", "sales", "sales_manager", "marketing_manager", "finance", "finance_manager"].includes(role);
     }
     
-    // Hide Subscription & Reports for marketer/sales
-    if ((item.title === "Subscriptions" || item.title === "Reports") && (role === "marketer" || role === "sales" || role === "sales_manager")) {
+    // Hide Subscription & Reports for marketer/sales/pm
+    if ((item.title === "Subscriptions" || item.title === "Reports") && (role === "marketer" || role === "sales" || role === "sales_manager" || role === "project_manager")) {
       return false;
     }
     

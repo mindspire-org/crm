@@ -11,19 +11,27 @@ if (isProd && (!process.env.JWT_SECRET || String(process.env.JWT_SECRET).trim() 
 
 export const authenticate = async (req, res, next) => {
   try {
+    let token = null;
     const authHeader = req.headers.authorization;
     
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1]?.trim();
+    }
+
+    // If no token in header, or token is empty, try query parameter
+    if (!token && req.query && req.query.token) {
+      token = req.query.token;
+    }
+
+    if (!token || token === 'undefined' || token === 'null') {
+      if (!isProd && (req.originalUrl || "").includes('/realtime/stream')) {
+        console.warn('[auth] Realtime stream request missing token in header and query');
+      }
       return res.status(401).json({ error: 'Authentication required' });
     }
 
-    const token = authHeader.split(' ')[1]?.trim();
-
-    if (!token || token === 'undefined' || token === 'null') {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-
     if (token.split('.').length !== 3) {
+      if (!isProd) console.warn('[auth] Token does not have 3 parts:', token.substring(0, 10) + '...');
       return res.status(401).json({ error: 'Invalid token' });
     }
 
@@ -48,6 +56,7 @@ export const authenticate = async (req, res, next) => {
     next();
   } catch (err) {
     if (err.name === 'JsonWebTokenError') {
+      if (!isProd) console.error('[auth] JWT Verification Error:', err.message, 'token:', token?.substring(0, 15) + '...');
       return res.status(401).json({ error: 'Invalid token' });
     }
     if (err.name === 'TokenExpiredError') {

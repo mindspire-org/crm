@@ -27,7 +27,10 @@ const MessageSchema = new mongoose.Schema(
       url: String,
       name: String,
       type: String,
-      size: Number
+      size: Number,
+      isSticker: Boolean,
+      projectId: String,
+      progress: Number
     }],
     type: {
       type: String,
@@ -58,5 +61,15 @@ const MessageSchema = new mongoose.Schema(
 // Index for faster querying of messages in a conversation
 MessageSchema.index({ conversationId: 1, createdAt: -1 });
 
-const Message = mongoose.models.Message || mongoose.model('Message', MessageSchema);
+// Robust model cleaning to ensure CastErrors don't occur when changing attachments from [String] to objects
+if (mongoose.models && mongoose.models.Message) {
+  Object.keys(mongoose.models).forEach(key => {
+    if (key === 'Message') delete mongoose.models[key];
+  });
+}
+if (mongoose.connection && mongoose.connection.models && mongoose.connection.models.Message) {
+  delete mongoose.connection.models.Message;
+}
+
+const Message = mongoose.model('Message', MessageSchema);
 export default Message;

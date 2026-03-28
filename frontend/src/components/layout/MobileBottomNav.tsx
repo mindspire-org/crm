@@ -85,9 +85,9 @@ const getRoleBasedNav = (role: string): NavItem[] => {
     return [
       { title: "Dashboard", href: "/", icon: LayoutDashboard },
       { title: "Projects", href: "/projects", icon: FolderKanban },
+      { title: "Clients", href: "/clients", icon: Building2 },
       { title: "HRM", href: "/hrm", icon: Users },
       { title: "Tasks", href: "/tasks", icon: CheckSquare },
-      { title: "Reports", href: "/reports", icon: BarChart3 },
       { title: "Profile", href: "/profile", icon: User },
     ];
   }

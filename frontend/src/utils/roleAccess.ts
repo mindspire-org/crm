@@ -134,7 +134,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, PermissionLevel> = {
   sales_manager: PermissionLevel.LIMITED_ACCESS,
   manager: PermissionLevel.LIMITED_ACCESS,
   developer: PermissionLevel.LIMITED_ACCESS,
-  project_manager: PermissionLevel.LIMITED_ACCESS,
+  project_manager: PermissionLevel.FULL_ACCESS,
   staff: PermissionLevel.LIMITED_ACCESS,
   team_member: PermissionLevel.LIMITED_ACCESS,
   client: PermissionLevel.NO_ACCESS
@@ -225,10 +225,7 @@ export const ROLE_PERMISSION_MAP: Record<UserRole, string[]> = {
     PERMISSIONS.LEADS_READ, PERMISSIONS.PIPELINE_VIEW, PERMISSIONS.REPORTS_VIEW_LIMITED,
     PERMISSIONS.TICKETS_READ, PERMISSIONS.TICKETS_CREATE, PERMISSIONS.TICKETS_UPDATE
   ],
-  project_manager: [
-    PERMISSIONS.LEADS_READ, PERMISSIONS.PIPELINE_VIEW, PERMISSIONS.REPORTS_VIEW_LIMITED,
-    PERMISSIONS.TICKETS_READ, PERMISSIONS.TICKETS_CREATE, PERMISSIONS.TICKETS_UPDATE
-  ],
+  project_manager: Object.values(PERMISSIONS),
   staff: [
     PERMISSIONS.LEADS_READ, PERMISSIONS.PIPELINE_VIEW,
     PERMISSIONS.TICKETS_READ, PERMISSIONS.TICKETS_CREATE, PERMISSIONS.TICKETS_UPDATE
@@ -358,7 +355,7 @@ export function canAccessModule(module: ModuleKey, user?: User | null): boolean 
   }
 
   if (role === 'project_manager') {
-    const allowed = new Set<ModuleKey>(['dashboard', 'messages', 'announcements', 'calendar', 'tasks', 'profile', 'files', 'notes', 'projects', 'crm', 'tickets', 'events', 'clients', 'hrm', 'accounting', 'sales', 'reports']);
+    const allowed = new Set<ModuleKey>(['dashboard', 'messages', 'announcements', 'calendar', 'tasks', 'profile', 'files', 'notes', 'projects', 'crm', 'tickets', 'events', 'clients', 'hrm', 'accounting', 'sales']);
     return allowed.has(module);
   }
 

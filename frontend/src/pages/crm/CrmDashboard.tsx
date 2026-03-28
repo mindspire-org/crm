@@ -546,8 +546,9 @@ export default function CrmDashboard() {
                       </ResponsiveContainer>
                     </div>
                     <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                      {STATUS_ORDER.map((s) => (
+                      {STATUS_ORDER.map((s, idx) => (
                         <button
+                          key={s || idx}
                           type="button"
                           className="group rounded-xl border border-slate-200/70 dark:border-slate-800 bg-white dark:bg-slate-950 p-3 text-left hover:border-indigo-300/60 dark:hover:border-indigo-700/60 hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors"
                           onClick={() => goLeads({ status: s, createdFrom: formatDayKey(range.from), createdTo: formatDayKey(range.to) })}

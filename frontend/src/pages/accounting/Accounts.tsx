@@ -5,13 +5,14 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { 
   Sheet, 
   SheetContent, 
@@ -103,7 +104,7 @@ export default function Accounts() {
     
     if (query) {
       const byCode = new Map(balances.map((r) => [r.code, r]));
-      const matched = base.filter((r) => 
+      const matched = balances.filter((r) => 
         String(r.code).toLowerCase().includes(query) || 
         String(r.name).toLowerCase().includes(query)
       );
@@ -121,15 +122,17 @@ export default function Accounts() {
     }
 
     const hidden = new Set<string>();
-    for (const r of base) {
-      let p = r.parentCode || null;
-      while (p) {
-        if (collapsed[p]) {
-          hidden.add(r.code);
-          break;
+    if (!query) {
+      for (const r of base) {
+        let p = r.parentCode || null;
+        while (p) {
+          if (collapsed[p]) {
+            hidden.add(r.code);
+            break;
+          }
+          const pr = balances.find((x) => x.code === p);
+          p = pr?.parentCode || null;
         }
-        const pr = balances.find((x) => x.code === p);
-        p = pr?.parentCode || null;
       }
     }
 
@@ -338,13 +341,13 @@ export default function Accounts() {
         className="flex flex-col md:flex-row items-center gap-6"
       >
         <div className="relative group flex-1 w-full">
-          <div className="absolute inset-0 bg-indigo-100 blur-xl group-focus-within:bg-indigo-200 transition-colors rounded-3xl" />
-          <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+          <div className="absolute inset-0 bg-indigo-100 blur-xl group-focus-within:bg-indigo-200 transition-colors rounded-3xl pointer-events-none" />
+          <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors z-10" />
           <Input
             placeholder="Universal Protocol Search (Code, Name, Meta)..."
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            className="pl-16 h-16 bg-white border-slate-200 rounded-[1.5rem] focus-visible:ring-indigo-500/50 text-lg font-bold placeholder:text-slate-400 shadow-sm transition-all"
+            className="pl-16 h-16 bg-white border-slate-200 rounded-[1.5rem] focus-visible:ring-indigo-500/50 text-lg font-bold placeholder:text-slate-400 shadow-sm transition-all relative z-10"
           />
         </div>
         <div className="flex items-center gap-3 p-1.5 bg-white rounded-[1.5rem] border border-slate-200 shadow-sm h-16 w-full md:w-fit">
@@ -605,13 +608,34 @@ export default function Accounts() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-3">
+                  <div className="space-y-3 md:col-span-2">
                     <Label className="text-[10px] font-bold uppercase tracking-[0.3em] text-indigo-600 ml-1">Hierarchy Link</Label>
-                    <Input
+                    <SearchableSelect
+                      options={[
+                        { value: "", label: "ROOT_NODE" },
+                        ...items.map(i => ({ value: i.code, label: `${i.code} - ${i.name}` }))
+                      ]}
                       value={form.parentCode || ""}
-                      onChange={(e) => setForm(p => ({ ...p, parentCode: e.target.value }))}
-                      placeholder="ROOT_NODE"
-                      className="h-14 rounded-2xl border-slate-200 bg-slate-50 focus-visible:ring-indigo-500 font-bold font-mono tracking-widest transition-all focus:bg-white shadow-sm text-slate-900"
+                      onValueChange={(v) => {
+                        setForm(p => ({ ...p, parentCode: v }));
+                        if (!isEditing && v) {
+                          const children = items.filter(i => i.parentCode === v);
+                          const lastChild = children.sort((a, b) => String(a.code).localeCompare(String(b.code))).pop();
+                          let nextCode = `${v}-01`;
+                          if (lastChild) {
+                            const parts = lastChild.code.split("-");
+                            if (parts.length > 1) {
+                              const lastNum = parseInt(parts.pop() || "0", 10);
+                              nextCode = `${v}-${String(lastNum + 1).padStart(2, "0")}`;
+                            } else {
+                              nextCode = `${v}-01`;
+                            }
+                          }
+                          setForm(p => ({ ...p, code: nextCode }));
+                        }
+                      }}
+                      placeholder="Select Parent Account"
+                      threshold={10}
                     />
                   </div>
                 </div>

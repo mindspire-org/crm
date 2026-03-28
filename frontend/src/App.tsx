@@ -17,6 +17,7 @@ import NotFound from "./pages/NotFound";
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const UserSettings = lazy(() => import("./pages/UserSettings"));
 const ClientDashboard = lazy(() => import("./pages/dashboard/ClientDashboard"));
+const ProjectManagerDashboard = lazy(() => import("./pages/dashboard/ProjectManagerDashboard"));
 const TeamMemberDashboard = lazy(() => import("./pages/team-member/TeamMemberDashboard"));
 const MarketerDashboard = lazy(() => import("./pages/marketer/MarketerDashboard"));
 const ClientTickets = lazy(() => import("./pages/client/ClientTickets"));
@@ -236,6 +237,16 @@ const EstimatePreviewAccess = () => {
     : <Navigate to={`/auth?returnTo=${encodeURIComponent(location.pathname + location.search)}`} replace />;
 };
 
+const AnnouncementPosterAccess = () => {
+  const hasToken = Boolean(localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token"));
+  const location = useLocation();
+  const sp = new URLSearchParams(location.search || "");
+  const isPrintMode = sp.get("print") === "1";
+  return hasToken || isPrintMode
+    ? <AnnouncementPoster />
+    : <Navigate to={`/auth?returnTo=${encodeURIComponent(location.pathname + location.search)}`} replace />;
+};
+
 const RequireAuth = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const hasToken = Boolean(localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token"));
@@ -257,6 +268,9 @@ const DashboardByRole = () => {
     case "marketing_manager":
     case "marketing manager":
       return <MarketerDashboard />;
+    case "project_manager":
+    case "project manager":
+      return <ProjectManagerDashboard />;
     case "staff":
       return <TeamMemberDashboard />;
     default:
@@ -290,6 +304,9 @@ const App = () => (
 
           {/* Public/print-safe contract preview */}
           <Route path="/sales/contracts/:id/preview" element={<ContractPreviewAccess />} />
+
+          {/* Public/print-safe announcement poster */}
+          <Route path="/announcements/:id/poster" element={<AnnouncementPosterAccess />} />
 
           {/* Public appointment booking form */}
           <Route path="/public/appointments/book" element={<AppointmentsBook />} />
@@ -368,7 +385,6 @@ const App = () => (
               element={getStoredAuthUser()?.role === "admin" ? <AddAnnouncement /> : <Navigate to="/announcements" replace />}
             />
             <Route path="/announcements/:id" element={<AnnouncementView />} />
-            <Route path="/announcements/:id/poster" element={<AnnouncementPoster />} />
             <Route path="/subscriptions" element={<Subscriptions />} />
             <Route path="/subscriptions/:id" element={<SubscriptionDetails />} />
           <Route path="/subscriptions/:id/print" element={<SubscriptionPrint />} />

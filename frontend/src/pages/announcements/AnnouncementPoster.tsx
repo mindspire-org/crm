@@ -23,9 +23,10 @@ export default function AnnouncementPoster() {
     const load = async () => {
       try {
         const token = localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
-        const res = await fetch(`${API_BASE}/api/announcements/${id}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const headers: any = {};
+        if (token) headers.Authorization = `Bearer ${token}`;
+
+        const res = await fetch(`${API_BASE}/api/announcements/${id}`, { headers });
         if (res.ok) {
           const json = await res.json();
           setItem(json);
@@ -181,7 +182,15 @@ export default function AnnouncementPoster() {
 
       <div className="max-w-[210mm] mx-auto space-y-6">
         <div className="flex items-center justify-between no-print bg-white/80 backdrop-blur p-4 rounded-2xl border border-slate-200 shadow-sm">
-          <Button variant="outline" size="sm" onClick={() => navigate(-1)} className="rounded-xl font-bold uppercase text-[10px] tracking-widest">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => {
+              if (window.history.length > 1) navigate(-1);
+              else navigate("/");
+            }} 
+            className="rounded-xl font-bold uppercase text-[10px] tracking-widest"
+          >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back
           </Button>

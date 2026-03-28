@@ -28,9 +28,10 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/sonner";
-import { ExternalLink, Mic, Paperclip, Pencil, Plus, RefreshCw, Trash2, Tag, Clock, MessageSquare, Users, Calendar, Flag, Link2, CheckSquare, ListTodo, Image as ImageIcon, FileText, Activity, Play, Pause, RotateCcw, Bell, User, Send, Copy } from "lucide-react";
+import { ExternalLink, Mic, Paperclip, Pencil, Plus, RefreshCw, Trash2, Tag, Clock, MessageSquare, Users, Calendar, Flag, Link2, CheckSquare, ListTodo, Image as ImageIcon, FileText, Activity, Play, Pause, RotateCcw, Bell, User, Send, Copy, Zap } from "lucide-react";
 import { getAuthHeaders } from "@/lib/api/auth";
 import { API_BASE } from "@/lib/api/base";
+import { cn } from "@/lib/utils";
 
 const getCurrentUser = () => {
   try {
@@ -77,6 +78,7 @@ type TaskDoc = {
   activity?: Array<{ _id?: string; type?: string; message?: string; authorName?: string; createdAt?: string }>;
   createdByUserId?: string;
   createdByEmail?: string;
+  progress?: number;
 };
 
 export default function Tasks() {
@@ -87,7 +89,7 @@ export default function Tasks() {
   const currentUserRole = getCurrentUserRole();
   const canManage = currentUserRole === "admin" || currentUserRole === "project_manager";
 
-  const [view, setView] = useState<"list" | "kanban" | "gantt">("list");
+  const [view, setView] = useState<"list" | "kanban" | "gantt" | "dashboard">("dashboard");
 
   const [filters, setFilters] = useState({
     status: "",
@@ -437,6 +439,43 @@ export default function Tasks() {
     }
     return m;
   }, [rows, columns]);
+
+  const dashboardMetrics = useMemo(() => {
+    const total = rows.length;
+    const completed = rows.filter(t => (t.status || "").toLowerCase() === "done").length;
+    const inProgress = rows.filter(t => (t.status || "").toLowerCase() === "in-progress").length;
+    const todo = rows.filter(t => (t.status || "").toLowerCase() === "todo").length;
+    const highPriority = rows.filter(t => (t.priority || "").toLowerCase() === "high" || (t.priority || "").toLowerCase() === "urgent").length;
+    
+    // Team activity calculation
+    const allActivities: any[] = [];
+    rows.forEach(t => {
+      if (t.activity && Array.isArray(t.activity)) {
+        t.activity.forEach(a => {
+          allActivities.push({
+            ...a,
+            taskId: t._id,
+            taskTitle: t.title
+          });
+        });
+      }
+    });
+    
+    const sortedActivities = allActivities.sort((a, b) => {
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateB - dateA;
+    }).slice(0, 20);
+
+    return {
+      total,
+      completed,
+      inProgress,
+      todo,
+      highPriority,
+      activities: sortedActivities
+    };
+  }, [rows]);
 
   const updateTaskStatus = async (taskId: string, nextStatus: string) => {
     const prev = items.find((x) => x._id === taskId);
@@ -1024,6 +1063,7 @@ export default function Tasks() {
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                 <div className="text-2xl font-bold">Tasks</div>
                 <TabsList className="bg-muted/60">
+                  <TabsTrigger value="dashboard" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">Dashboard</TabsTrigger>
                   <TabsTrigger value="list" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">List</TabsTrigger>
                   <TabsTrigger value="kanban" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">Kanban</TabsTrigger>
                   <TabsTrigger value="gantt" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">Gantt</TabsTrigger>
@@ -1050,73 +1090,77 @@ export default function Tasks() {
           </CardHeader>
 
           <CardContent className="p-0">
-            <TabsContent value="list" className="m-0">
-              <div className="overflow-x-auto">
+            <TabsContent value="list" className="m-0 border-t">
+              <div className="w-full">
                 <Table>
                 <TableHeader>
-                  <TableRow className="bg-muted/50">
-                    <TableHead className="w-20">ID</TableHead>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Start date</TableHead>
-                    <TableHead>Deadline</TableHead>
-                    <TableHead>Assigned to</TableHead>
-                    <TableHead>Collaborators</TableHead>
-                    <TableHead>Related to</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Attachments</TableHead>
-                    <TableHead className="w-28"></TableHead>
+                  <TableRow className="bg-muted/30">
+                    <TableHead className="w-12 px-2 text-[10px] uppercase font-black tracking-widest opacity-50">ID</TableHead>
+                    <TableHead className="min-w-[180px] px-2 text-[10px] uppercase font-black tracking-widest opacity-50">Title</TableHead>
+                    <TableHead className="w-24 px-2 text-[10px] uppercase font-black tracking-widest opacity-50">Deadline</TableHead>
+                    <TableHead className="w-32 px-2 text-[10px] uppercase font-black tracking-widest opacity-50">Assigned</TableHead>
+                    <TableHead className="w-28 px-2 text-[10px] uppercase font-black tracking-widest opacity-50 text-center">Status</TableHead>
+                    <TableHead className="w-16 px-2 text-[10px] uppercase font-black tracking-widest opacity-50 text-right">Files</TableHead>
+                    <TableHead className="w-20 px-2"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {rows.length ? (
                     rows.map((t) => (
-                      <TableRow key={t._id} className="hover:bg-muted/30">
-                        <TableCell className="text-xs text-muted-foreground">{t.taskNo ? `#${t.taskNo}` : String(t._id || "").slice(-6)}</TableCell>
-                        <TableCell>
+                      <TableRow key={t._id} className="hover:bg-muted/20 transition-colors">
+                        <TableCell className="px-2 text-[10px] font-bold text-muted-foreground italic">#{t.taskNo || String(t._id || "").slice(-4)}</TableCell>
+                        <TableCell className="px-2">
                           <button
                             type="button"
-                            className="text-primary underline"
+                            className="text-sm font-bold text-primary hover:underline text-left truncate max-w-[250px] block"
                             onClick={() => openTaskInfoDialog(t)}
                           >
                             {t.title || "-"}
                           </button>
+                          {t.leadId && (
+                            <p className="text-[9px] text-muted-foreground truncate max-w-[200px]">
+                              Rel: {leadNameByLeadId.get(String(t.leadId)) || "Lead"}
+                            </p>
+                          )}
                         </TableCell>
-                        <TableCell className="whitespace-nowrap">{fmt(t.start)}</TableCell>
-                        <TableCell className="whitespace-nowrap">{fmt(t.deadline)}</TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          <PersonChip name={t.assignees?.[0]?.name} />
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          {Array.isArray(t.collaborators) && t.collaborators.length ? (
-                            <div className="flex items-center gap-2">
-                              {t.collaborators.slice(0, 3).map((n) => (
-                                <PersonChip key={n} name={n} />
-                              ))}
-                              {t.collaborators.length > 3 ? (
-                                <span className="text-xs text-muted-foreground">+{t.collaborators.length - 3}</span>
-                              ) : null}
+                        <TableCell className="px-2 text-xs font-medium">
+                          {t.deadline ? (
+                            <div className={cn(
+                              "flex flex-col",
+                              new Date(t.deadline) < new Date() && t.status !== 'done' ? "text-rose-500" : ""
+                            )}>
+                              <span>{new Date(t.deadline).toLocaleDateString()}</span>
+                              <span className="text-[9px] opacity-50">{new Date(t.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                             </div>
-                          ) : (
-                            <span className="text-muted-foreground">-</span>
-                          )}
+                          ) : "-"}
                         </TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          {t.leadId ? (
-                            <button
-                              type="button"
-                              className="text-primary underline truncate max-w-[220px] text-left"
-                              onClick={() => navigate(`/crm/leads/${t.leadId}`)}
-                            >
-                              {leadNameByLeadId.get(String(t.leadId)) || "Lead"}
-                            </button>
-                          ) : (
-                            <span className="text-muted-foreground">-</span>
-                          )}
+                        <TableCell className="px-2">
+                          <div className="flex items-center gap-1.5">
+                            <Avatar className="h-6 w-6 shrink-0 border shadow-sm">
+                              {(() => {
+                                const name = t.assignees?.[0]?.name;
+                                const emp = name ? employeeByName.get(String(name).trim()) : undefined;
+                                const img = emp?.avatar || emp?.image;
+                                return img ? <AvatarImage src={`${API_BASE}${img}`} /> : null;
+                              })()}
+                              <AvatarFallback className="text-[10px] bg-primary/10 text-primary font-bold">
+                                {getInitials(t.assignees?.[0]?.name)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="text-xs font-bold truncate max-w-[80px]">{t.assignees?.[0]?.name || "Unassigned"}</span>
+                          </div>
                         </TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          <Badge variant="outline">{statusLabel(t.status)}</Badge>
+                        <TableCell className="px-2 text-center">
+                          <Badge variant="outline" className={cn(
+                            "text-[9px] uppercase font-black tracking-tighter px-2 py-0 h-5",
+                            t.status === 'done' ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                            t.status === 'in-progress' ? "bg-blue-50 text-blue-700 border-blue-200" :
+                            "bg-slate-50 text-slate-600 border-slate-200"
+                          )}>
+                            {statusLabel(t.status)}
+                          </Badge>
                         </TableCell>
-                        <TableCell className="whitespace-nowrap">
+                        <TableCell className="px-2 text-right">
                           {(() => {
                             const count = typeof t.attachments === "number" 
                               ? t.attachments 
@@ -1124,26 +1168,23 @@ export default function Tasks() {
                                 ? t.attachments.length 
                                 : 0;
                             return count > 0 ? (
-                              <span className="flex items-center gap-1 text-sm text-muted-foreground">
-                                <Paperclip className="w-3 h-3" />
-                                {count}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground">-</span>
-                            );
+                              <Badge variant="secondary" className="bg-slate-100 text-slate-600 text-[9px] h-5 px-1.5 font-bold">
+                                <Paperclip className="w-2.5 h-2.5 mr-1" /> {count}
+                              </Badge>
+                            ) : <span className="text-[10px] opacity-20">-</span>;
                           })()}
                         </TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1">
+                        <TableCell className="px-2 text-right">
+                          <div className="flex items-center justify-end">
                             {canEditTask(t) && (
-                              <>
-                                <Button type="button" size="icon" variant="ghost" onClick={() => handleEdit(t)}>
-                                  <Pencil className="w-4 h-4" />
+                              <div className="flex gap-0.5">
+                                <Button type="button" size="icon" variant="ghost" className="h-7 w-7 rounded-full hover:bg-indigo-50 hover:text-indigo-600" onClick={() => handleEdit(t)}>
+                                  <Pencil className="w-3.5 h-3.5" />
                                 </Button>
-                                <Button type="button" size="icon" variant="ghost" onClick={() => { setTaskToDelete(t._id); setConfirmDeleteOpen(true); }}>
-                                  <Trash2 className="w-4 h-4" />
+                                <Button type="button" size="icon" variant="ghost" className="h-7 w-7 rounded-full hover:bg-rose-50 hover:text-rose-600" onClick={() => { setTaskToDelete(t._id); setConfirmDeleteOpen(true); }}>
+                                  <Trash2 className="w-3.5 h-3.5" />
                                 </Button>
-                              </>
+                              </div>
                             )}
                           </div>
                         </TableCell>
@@ -1151,8 +1192,8 @@ export default function Tasks() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={10} className="text-center text-muted-foreground">
-                        No record found.
+                      <TableCell colSpan={7} className="text-center py-20 text-muted-foreground italic text-sm">
+                        No active tasks found in this view.
                       </TableCell>
                     </TableRow>
                   )}
@@ -1161,20 +1202,30 @@ export default function Tasks() {
               </div>
             </TabsContent>
 
-            <TabsContent value="kanban" className="m-0">
-              <div className="flex gap-3 overflow-x-auto pb-3 p-4">
+            <TabsContent value="kanban" className="m-0 bg-slate-50/30 dark:bg-slate-900/30">
+              <div className="flex gap-6 overflow-x-auto pb-8 p-6 snap-x no-scrollbar">
                 {columns.map((c) => (
-                  <div key={c.id} className="flex-shrink-0 w-[280px]">
-                    <Card className="h-full">
-                      <CardHeader className="p-3 pb-2">
-                        <div className="flex items-center justify-between">
-                          <div className="text-sm font-medium">{c.title}</div>
-                          <div className="text-xs text-muted-foreground">{kanbanGroups[c.id]?.length || 0}</div>
+                  <div key={c.id} className="flex-shrink-0 w-[320px] snap-start">
+                    <div className="flex flex-col h-[calc(100vh-340px)] min-h-[550px]">
+                      {/* Column Header */}
+                      <div className="flex items-center justify-between mb-4 px-2">
+                        <div className="flex items-center gap-2.5">
+                          <div className={cn("w-2.5 h-2.5 rounded-full shadow-sm", c.color.replace('bg-', 'bg-'))} />
+                          <h3 className="text-xs font-black uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">
+                            {c.title}
+                          </h3>
                         </div>
-                        <div className={`h-0.5 mt-2 rounded ${c.color}`} />
-                      </CardHeader>
-                      <CardContent
-                        className={`p-2 pt-0 space-y-2 min-h-[140px] ${dragOverStatus === c.id ? "bg-muted/30" : ""}`}
+                        <Badge variant="secondary" className="bg-white/90 dark:bg-slate-800 text-[10px] font-black px-2 py-0.5 h-5 shadow-sm border-none">
+                          {kanbanGroups[c.id]?.length || 0}
+                        </Badge>
+                      </div>
+
+                      {/* Column Body */}
+                      <Card 
+                        className={cn(
+                          "flex-1 border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] bg-white/40 dark:bg-slate-800/20 overflow-y-auto no-scrollbar rounded-[24px] transition-all duration-300",
+                          dragOverStatus === c.id && "bg-indigo-50/80 dark:bg-indigo-900/30 ring-2 ring-indigo-500/30 scale-[1.01]"
+                        )}
                         onDragOver={(e) => {
                           e.preventDefault();
                           setDragOverStatus(c.id);
@@ -1190,130 +1241,432 @@ export default function Tasks() {
                           draggingFromStatusRef.current = null;
                         }}
                       >
-                        {(kanbanGroups[c.id] || []).map((t) => (
-                          <div
-                            key={t._id}
-                            draggable
-                            onDragStart={(e) => {
-                              draggingTaskIdRef.current = t._id;
-                              draggingFromStatusRef.current = t.status || "todo";
-                              e.dataTransfer.setData("text/taskId", t._id);
-                              e.dataTransfer.effectAllowed = "move";
-                            }}
-                            onDragEnd={() => {
-                              draggingTaskIdRef.current = null;
-                              draggingFromStatusRef.current = null;
-                              setDragOverStatus(null);
-                            }}
-                            className="kanban-card cursor-grab active:cursor-grabbing"
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <button
-                                type="button"
-                                className="font-medium text-sm truncate text-left"
-                                onClick={() => openTaskInfoDialog(t)}
-                              >
-                                {t.taskNo ? `#${t.taskNo} ` : ""}{t.title || "-"}
-                              </button>
+                        <CardContent className="p-4 space-y-4">
+                          {(kanbanGroups[c.id] || []).map((t) => (
+                            <div
+                              key={t._id}
+                              draggable
+                              onDragStart={(e) => {
+                                draggingTaskIdRef.current = t._id;
+                                draggingFromStatusRef.current = t.status || "todo";
+                                e.dataTransfer.setData("text/taskId", t._id);
+                                e.dataTransfer.effectAllowed = "move";
+                              }}
+                              onDragEnd={() => {
+                                draggingTaskIdRef.current = null;
+                                draggingFromStatusRef.current = null;
+                                setDragOverStatus(null);
+                              }}
+                              className="group/card bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50 p-4 rounded-2xl shadow-sm hover:shadow-[0_10px_40px_rgba(0,0,0,0.08)] hover:border-indigo-500/20 hover:-translate-y-1 transition-all duration-300 cursor-grab active:cursor-grabbing relative overflow-hidden"
+                            >
+                              {/* Minimal Priority Bar */}
+                              <div className={cn(
+                                "absolute top-0 left-0 w-1.5 h-full opacity-80",
+                                (t.priority || "").toLowerCase() === 'urgent' ? "bg-rose-500" :
+                                (t.priority || "").toLowerCase() === 'high' ? "bg-amber-500" :
+                                (t.priority || "").toLowerCase() === 'medium' ? "bg-blue-500" : "bg-slate-200"
+                              )} />
 
-                              <div className="flex items-center gap-1">
-                                {canEditTask(t) && (
-                                  <>
-                                    <Button type="button" variant="ghost" size="icon-sm" onClick={(e) => { e.stopPropagation(); handleEdit(t); }} aria-label="Edit">
-                                      <Pencil className="w-4 h-4" />
+                              <div className="flex items-start justify-between gap-3 mb-3">
+                                <button
+                                  type="button"
+                                  className="font-bold text-sm text-slate-800 dark:text-white hover:text-indigo-600 transition-colors text-left leading-tight line-clamp-2"
+                                  onClick={() => openTaskInfoDialog(t)}
+                                >
+                                  {t.title || "-"}
+                                </button>
+                                
+                                <div className="flex gap-1 opacity-0 group-hover/card:opacity-100 transition-opacity shrink-0">
+                                  {canEditTask(t) && (
+                                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-xl hover:bg-indigo-50 hover:text-indigo-600" onClick={(e) => { e.stopPropagation(); handleEdit(t); }}>
+                                      <Pencil className="w-3.5 h-3.5" />
                                     </Button>
-                                    <Button type="button" variant="ghost" size="icon-sm" onClick={(e) => { e.stopPropagation(); setTaskToDelete(t._id); setConfirmDeleteOpen(true); }} aria-label="Delete">
-                                      <Trash2 className="w-4 h-4" />
-                                    </Button>
-                                  </>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-2 mb-4">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-100 dark:border-slate-800">
+                                  #{t.taskNo || String(t._id || "").slice(-4)}
+                                </span>
+                                {(t.priority || "").toLowerCase() === 'urgent' && (
+                                  <div className="flex items-center gap-1 bg-rose-50 dark:bg-rose-950/30 text-rose-600 text-[9px] font-black px-2 py-0.5 rounded-lg uppercase animate-pulse">
+                                    <Zap className="w-2.5 h-2.5 fill-current" /> Urgent
+                                  </div>
                                 )}
                               </div>
-                            </div>
 
-                            <div className="text-xs text-muted-foreground mt-2">
-                              Deadline: {fmt(t.deadline)}
-                            </div>
+                              <div className="flex items-center justify-between pt-4 border-t border-slate-50 dark:border-slate-700/30">
+                                <div className="flex items-center gap-2 text-slate-400">
+                                  <div className={cn(
+                                    "p-1.5 rounded-lg",
+                                    t.deadline && new Date(t.deadline) < new Date() && t.status !== 'done' ? "bg-rose-50 text-rose-500" : "bg-slate-50 dark:bg-slate-900"
+                                  )}>
+                                    <Clock className="w-3 h-3" />
+                                  </div>
+                                  <span className={cn(
+                                    "text-[10px] font-bold",
+                                    t.deadline && new Date(t.deadline) < new Date() && t.status !== 'done' ? "text-rose-600" : "text-slate-500"
+                                  )}>
+                                    {t.deadline ? new Date(t.deadline).toLocaleDateString([], { month: 'short', day: 'numeric' }) : "Open"}
+                                  </span>
+                                </div>
 
-                            <div className="flex items-center justify-between mt-3">
-                              <div className="text-xs text-muted-foreground truncate">
-                                {t.assignees?.[0]?.name || "-"}
+                                <div className="flex items-center gap-2">
+                                  {t.attachments && (
+                                    <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400">
+                                      <Paperclip className="w-3 h-3" />
+                                      {Array.isArray(t.attachments) ? t.attachments.length : t.attachments}
+                                    </div>
+                                  )}
+                                  <Avatar className="h-7 w-7 border-2 border-white dark:border-slate-800 shadow-sm ring-1 ring-slate-100 dark:ring-slate-700">
+                                    {(() => {
+                                      const name = t.assignees?.[0]?.name;
+                                      const emp = name ? employeeByName.get(String(name).trim()) : undefined;
+                                      const img = emp?.avatar || emp?.image;
+                                      return img ? <AvatarImage src={`${API_BASE}${img}`} /> : null;
+                                    })()}
+                                    <AvatarFallback className="text-[10px] bg-indigo-50 text-indigo-600 font-black">
+                                      {getInitials(t.assignees?.[0]?.name)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                </div>
                               </div>
-                              <Avatar className="h-6 w-6">
-                                {(() => {
-                                  const name = t.assignees?.[0]?.name;
-                                  const emp = name ? employeeByName.get(String(name).trim()) : undefined;
-                                  const img = emp?.avatar || emp?.image;
-                                  return img ? <AvatarImage src={`${API_BASE}${img}`} alt="avatar" /> : null;
-                                })()}
-                                <AvatarFallback className="text-[10px]">
-                                  {getInitials(t.assignees?.[0]?.name)}
-                                </AvatarFallback>
-                              </Avatar>
                             </div>
-                          </div>
-                        ))}
-                      </CardContent>
-                    </Card>
+                          ))}
+                          
+                          <Button 
+                            variant="ghost" 
+                            className="w-full h-12 border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-2xl text-slate-400 hover:text-indigo-600 hover:border-indigo-500/30 hover:bg-indigo-50/20 transition-all text-[11px] font-black uppercase tracking-widest"
+                            onClick={() => {
+                              setAddTaskForm(prev => ({ ...prev, status: c.id }));
+                              setEditingTaskId(null);
+                              setOpenAddTask(true);
+                            }}
+                          >
+                            <Plus className="w-4 h-4 mr-2" />
+                            Quick Add
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    </div>
                   </div>
                 ))}
               </div>
             </TabsContent>
 
             <TabsContent value="gantt" className="m-0">
-              <div className="p-4">
+              <div className="p-6">
                 {!ganttItems.length ? (
-                  <div className="p-6 text-sm text-muted-foreground">No tasks with start/deadline dates.</div>
-                ) : (
-                  <div className="overflow-auto border rounded-md">
-                    <div className="min-w-[900px]">
-                      <div className="grid" style={{ gridTemplateColumns: `320px repeat(${ganttDays.length}, 28px)` }}>
-                        <div className="sticky left-0 bg-card border-b px-3 py-2 text-xs font-medium">Task</div>
-                        {ganttDays.map((d) => (
-                          <div key={d.toISOString()} className="border-b text-[10px] text-muted-foreground flex items-center justify-center">
-                            {String(d.getDate()).padStart(2, "0")}
-                          </div>
-                        ))}
-                      </div>
-
-                      {ganttItems.map(({ task, start, end }) => {
-                        const minT = ganttRange!.min.getTime();
-                        const dayMs = 24 * 60 * 60 * 1000;
-                        const offsetDays = Math.max(0, Math.floor((start.getTime() - minT) / dayMs));
-                        const widthDays = Math.max(1, Math.floor((end.getTime() - start.getTime()) / dayMs) + 1);
-                        return (
-                          <div
-                            key={task._id}
-                            className="grid items-stretch"
-                            style={{ gridTemplateColumns: `320px repeat(${ganttDays.length}, 28px)` }}
-                          >
-                            <div className="sticky left-0 bg-card border-b px-3 py-2">
-                              <button
-                                type="button"
-                                className="text-sm text-left hover:underline"
-                                onClick={() => openTaskInfoDialog(task)}
-                              >
-                                <span className="text-xs text-muted-foreground mr-2">
-                                  {task.taskNo ? `#${task.taskNo}` : ""}
-                                </span>
-                                {task.title || "-"}
-                              </button>
-                              <div className="text-[11px] text-muted-foreground mt-1">
-                                {fmtCompact(task.start) || "-"} → {fmtCompact(task.deadline) || "-"}
-                              </div>
-                            </div>
-                            <div className="relative border-b" style={{ gridColumn: `2 / span ${ganttDays.length}` }}>
-                              <div
-                                className="absolute top-2 h-5 rounded bg-blue-600/80"
-                                style={{ left: `${offsetDays * 28}px`, width: `${widthDays * 28}px` }}
-                                title={`${task.title || ""} (${fmtCompact(task.start)} - ${fmtCompact(task.deadline)})`}
-                              />
-                            </div>
-                          </div>
-                        );
-                      })}
+                  <div className="flex flex-col items-center justify-center py-20 text-center space-y-4 bg-slate-50/50 rounded-[32px] border-2 border-dashed border-slate-200/60">
+                    <div className="p-5 bg-white rounded-3xl shadow-sm">
+                      <Calendar className="w-10 h-10 text-slate-300" />
                     </div>
+                    <p className="text-sm text-slate-500 font-bold uppercase tracking-widest">No tasks scheduled yet</p>
                   </div>
+                ) : (
+                  <Card className="border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] overflow-hidden rounded-[32px] bg-white dark:bg-slate-900">
+                    <div className="overflow-x-auto no-scrollbar">
+                      <div className="min-w-[1100px]">
+                        {/* Gantt Header */}
+                        <div className="flex border-b border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-800/40 backdrop-blur-md sticky top-0 z-10">
+                          <div className="w-[380px] shrink-0 px-8 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 border-r border-slate-100 dark:border-slate-800">Timeline Analysis</div>
+                          <div className="flex-1 flex overflow-hidden">
+                            {ganttDays.map((d, i) => {
+                              const isToday = d.toDateString() === new Date().toDateString();
+                              const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                              return (
+                                <div 
+                                  key={i} 
+                                  className={cn(
+                                    "w-12 shrink-0 border-r border-slate-100 dark:border-slate-800 py-4 text-center flex flex-col items-center justify-center gap-1.5 transition-all",
+                                    isToday ? "bg-indigo-50/50 dark:bg-indigo-900/10" : "",
+                                    isWeekend ? "bg-slate-50/20 dark:bg-slate-800/10" : ""
+                                  )}
+                                >
+                                  <span className={cn("text-[8px] font-black uppercase tracking-tighter", isToday ? "text-indigo-600" : "text-slate-400")}>
+                                    {d.toLocaleDateString([], { weekday: 'short' })}
+                                  </span>
+                                  <span className={cn(
+                                    "text-[11px] font-black w-7 h-7 flex items-center justify-center rounded-xl transition-all",
+                                    isToday ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/40 scale-110" : "text-slate-600 dark:text-slate-400"
+                                  )}>
+                                    {d.getDate()}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Gantt Rows */}
+                        <div className="divide-y divide-slate-50 dark:divide-slate-800/50">
+                          {ganttItems.map(({ task, start, end }) => {
+                            const minT = ganttRange!.min.getTime();
+                            const dayMs = 24 * 60 * 60 * 1000;
+                            const offsetDays = Math.max(0, Math.floor((start.getTime() - minT) / dayMs));
+                            const durationDays = Math.max(1, Math.floor((end.getTime() - start.getTime()) / dayMs) + 1);
+                            
+                            return (
+                              <div key={task._id} className="flex group/row hover:bg-slate-50/30 dark:hover:bg-slate-800/20 transition-all duration-300">
+                                <div className="w-[380px] shrink-0 px-8 py-5 border-r border-slate-100 dark:border-slate-800 flex flex-col justify-center">
+                                  <div className="flex items-center gap-3 mb-2">
+                                    <div className={cn(
+                                      "w-2 h-2 rounded-full",
+                                      task.status === 'done' ? "bg-emerald-500" :
+                                      task.status === 'in-progress' ? "bg-indigo-500" : "bg-slate-300"
+                                    )} />
+                                    <button
+                                      type="button"
+                                      className="text-sm font-black text-slate-800 dark:text-white hover:text-indigo-600 transition-colors text-left truncate tracking-tight"
+                                      onClick={() => openTaskInfoDialog(task)}
+                                    >
+                                      {task.title || "-"}
+                                    </button>
+                                  </div>
+                                  <div className="flex items-center gap-4 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                                    <span className="flex items-center gap-1.5"><Clock className="w-3 h-3" /> {durationDays} Days</span>
+                                    <div className="flex items-center gap-1.5">
+                                      <Avatar className="h-4 w-4 ring-1 ring-slate-100">
+                                        <AvatarFallback className="text-[6px] bg-slate-100 text-slate-600 font-black">
+                                          {getInitials(task.assignees?.[0]?.name)}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      <span>{task.assignees?.[0]?.name?.split(' ')[0] || "None"}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex-1 relative h-20 flex items-center overflow-hidden">
+                                  {/* Minimalist Grid background lines */}
+                                  <div className="absolute inset-0 flex pointer-events-none">
+                                    {ganttDays.map((_, i) => (
+                                      <div key={i} className="w-12 border-r border-slate-50 dark:border-slate-800/30 h-full" />
+                                    ))}
+                                  </div>
+                                  
+                                  {/* Modern Task Bar */}
+                                  <div
+                                    className={cn(
+                                      "absolute h-9 rounded-2xl shadow-xl shadow-indigo-500/5 flex items-center px-4 group/bar cursor-pointer transition-all duration-500 hover:scale-[1.02] hover:z-20 group-hover/row:brightness-105",
+                                      task.status === 'done' ? "bg-gradient-to-r from-emerald-400 via-teal-500 to-teal-600" :
+                                      task.status === 'in-progress' ? "bg-gradient-to-r from-indigo-500 via-blue-600 to-indigo-700" :
+                                      "bg-gradient-to-r from-slate-300 to-slate-400"
+                                    )}
+                                    style={{ 
+                                      left: `${offsetDays * 48}px`, 
+                                      width: `${durationDays * 48}px`,
+                                      minWidth: '32px'
+                                    }}
+                                    onClick={() => openTaskInfoDialog(task)}
+                                  >
+                                    <div className="flex items-center justify-between w-full">
+                                      <span className="text-[10px] font-black text-white/90 uppercase tracking-[0.1em] truncate">
+                                        {Math.round(task.progress || 0)}%
+                                      </span>
+                                      <div className="w-1.5 h-1.5 rounded-full bg-white/40 group-hover/bar:bg-white transition-colors" />
+                                    </div>
+                                    
+                                    {/* Tooltip on hover */}
+                                    <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[9px] font-black px-3 py-2 rounded-xl opacity-0 group-hover/bar:opacity-100 transition-all pointer-events-none whitespace-nowrap shadow-2xl z-30">
+                                      {fmtCompact(task.start)} — {fmtCompact(task.deadline)}
+                                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-900 rotate-45" />
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
                 )}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="dashboard" className="m-0">
+              <div className="p-6 space-y-6 bg-slate-50/50 dark:bg-slate-900/50 min-h-[600px]">
+                {/* Metrics Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                  <Card className="border-none shadow-sm bg-white dark:bg-slate-800 hover:shadow-md transition-shadow">
+                    <CardContent className="p-4 flex items-center gap-4">
+                      <div className="p-3 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600">
+                        <ListTodo className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Total Tasks</div>
+                        <div className="text-2xl font-bold">{dashboardMetrics.total}</div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  <Card className="border-none shadow-sm bg-white dark:bg-slate-800 hover:shadow-md transition-shadow">
+                    <CardContent className="p-4 flex items-center gap-4">
+                      <div className="p-3 rounded-xl bg-amber-100 dark:bg-amber-900/30 text-amber-600">
+                        <Clock className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider">To Do</div>
+                        <div className="text-2xl font-bold">{dashboardMetrics.todo}</div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-none shadow-sm bg-white dark:bg-slate-800 hover:shadow-md transition-shadow">
+                    <CardContent className="p-4 flex items-center gap-4">
+                      <div className="p-3 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600">
+                        <Activity className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider">In Progress</div>
+                        <div className="text-2xl font-bold">{dashboardMetrics.inProgress}</div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-none shadow-sm bg-white dark:bg-slate-800 hover:shadow-md transition-shadow">
+                    <CardContent className="p-4 flex items-center gap-4">
+                      <div className="p-3 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600">
+                        <CheckSquare className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Completed</div>
+                        <div className="text-2xl font-bold">{dashboardMetrics.completed}</div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-none shadow-sm bg-white dark:bg-slate-800 hover:shadow-md transition-shadow">
+                    <CardContent className="p-4 flex items-center gap-4">
+                      <div className="p-3 rounded-xl bg-rose-100 dark:bg-rose-900/30 text-rose-600">
+                        <Flag className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Critical</div>
+                        <div className="text-2xl font-bold">{dashboardMetrics.highPriority}</div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Activity Stream */}
+                  <Card className="lg:col-span-2 border-none shadow-sm bg-white dark:bg-slate-800">
+                    <CardHeader className="pb-2 border-b">
+                      <div className="flex items-center gap-2 font-semibold">
+                        <Activity className="w-5 h-5 text-primary" />
+                        Team Activity Stream
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <div className="max-h-[450px] overflow-y-auto">
+                        {dashboardMetrics.activities.length > 0 ? (
+                          <div className="divide-y">
+                            {dashboardMetrics.activities.map((a, idx) => (
+                              <div key={idx} className="p-4 hover:bg-muted/30 transition-colors flex gap-4">
+                                <Avatar className="h-8 w-8 mt-1">
+                                  <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
+                                    {getInitials(a.authorName)}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="space-y-1 flex-1 min-w-0">
+                                  <div className="text-sm">
+                                    <span className="font-bold text-slate-900 dark:text-slate-100">{a.authorName || "System"}</span>
+                                    <span className="text-muted-foreground mx-1.5">{a.message || a.type}</span>
+                                    {a.taskTitle && (
+                                      <button 
+                                        onClick={() => {
+                                          const t = items.find(x => x._id === a.taskId);
+                                          if (t) openTaskInfoDialog(t);
+                                        }}
+                                        className="text-primary font-medium hover:underline inline-flex items-center gap-1"
+                                      >
+                                        <Link2 className="w-3 h-3" />
+                                        {a.taskTitle}
+                                      </button>
+                                    )}
+                                  </div>
+                                  <div className="text-[11px] text-muted-foreground flex items-center gap-1">
+                                    <Clock className="w-3 h-3" />
+                                    {a.createdAt ? new Date(a.createdAt).toLocaleString() : "Just now"}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="py-20 text-center space-y-3">
+                            <Activity className="w-12 h-12 text-muted-foreground/30 mx-auto" />
+                            <p className="text-muted-foreground italic">No recent activity detected</p>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Task Distribution / Summary */}
+                  <div className="space-y-6">
+                    <Card className="border-none shadow-sm bg-white dark:bg-slate-800">
+                      <CardHeader className="pb-2 border-b">
+                        <div className="flex items-center gap-2 font-semibold">
+                          <Users className="w-5 h-5 text-indigo-600" />
+                          Team Workload
+                        </div>
+                      </CardHeader>
+                      <CardContent className="p-4">
+                        <div className="space-y-4">
+                          {employeeNames.slice(0, 5).map(name => {
+                            const taskCount = items.filter(t => t.assignees?.some(a => a.name === name)).length;
+                            if (taskCount === 0) return null;
+                            const percentage = Math.round((taskCount / (items.length || 1)) * 100);
+                            return (
+                              <div key={name} className="space-y-1.5">
+                                <div className="flex justify-between text-xs font-medium">
+                                  <span>{name}</span>
+                                  <span className="text-muted-foreground">{taskCount} tasks</span>
+                                </div>
+                                <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                                  <div 
+                                    className="h-full bg-indigo-500 rounded-full" 
+                                    style={{ width: `${Math.min(100, percentage)}%` }}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          }).filter(Boolean)}
+                          {!items.some(t => t.assignees?.length) && (
+                            <div className="text-center py-6 text-muted-foreground text-xs italic">
+                              No assignments found
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-none shadow-sm bg-gradient-to-br from-indigo-600 to-violet-700 text-white">
+                      <CardContent className="p-6 space-y-4">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm">
+                            <Zap className="w-5 h-5" />
+                          </div>
+                          <div className="font-bold tracking-tight">Productivity Tip</div>
+                        </div>
+                        <p className="text-sm text-indigo-100 leading-relaxed">
+                          Keep your team activity high by updating task statuses frequently. 
+                          High-priority tasks should be tackled first to avoid bottlenecks.
+                        </p>
+                        <Button 
+                          variant="secondary" 
+                          size="sm" 
+                          className="w-full bg-white text-indigo-600 hover:bg-indigo-50 border-none font-bold"
+                          onClick={() => setView("kanban")}
+                        >
+                          View Kanban Board
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
               </div>
             </TabsContent>
           </CardContent>

@@ -1,3 +1,4 @@
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Calendar, Filter, Plus, Search, Upload, Tags, Paperclip, MoreVertical, Eye, Pencil, Trash2, FolderKanban, TrendingUp, Users, Clock, DollarSign, Target, BarChart3, Activity, Briefcase, Sparkles, Zap, Star, Printer } from "lucide-react";
+import { Calendar, Filter, Plus, Search, Upload, Tags, Paperclip, MoreVertical, Eye, Pencil, Trash2, FolderKanban, TrendingUp, Users, Clock, DollarSign, Target, BarChart3, Activity, Briefcase, Sparkles, Zap, Star, Printer, AlertTriangle } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import { getAuthHeaders } from "@/lib/api/auth";
 import { API_BASE } from "@/lib/api/base";
@@ -355,8 +356,10 @@ export default function Overview() {
   const [developerQuery, setDeveloperQuery] = useState("");
   const [developerOpen, setDeveloperOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<"all" | "critical">("all");
   const [statusFilter, setStatusFilter] = useState("__all__");
   const [labelFilter, setLabelFilter] = useState("__all__");
+  const [showDueSoonOnly, setShowDueSoonOnly] = useState(false);
   const [startFrom, setStartFrom] = useState("");
   const [deadlineTo, setDeadlineTo] = useState("");
   const [labelOptions, setLabelOptions] = useState<string[]>([]);
@@ -385,12 +388,22 @@ export default function Overview() {
     const onHoldProjects = rows.filter(r => r.status === "Hold").length;
     const avgProgress = totalProjects > 0 ? Math.round(rows.reduce((acc, r) => acc + r.progress, 0) / totalProjects) : 0;
 
+    const now = new Date();
+    const in3Days = new Date();
+    in3Days.setDate(now.getDate() + 3);
+    const dueSoonCount = rows.filter(r => {
+      if (r.status === "Completed" || !r.due || r.due === "-") return false;
+      const due = new Date(r.due);
+      return due >= now && due <= in3Days;
+    }).length;
+
     return {
       totalProjects,
       completedProjects,
       activeProjects,
       onHoldProjects,
-      avgProgress
+      avgProgress,
+      dueSoonCount
     };
   }, [rows]);
 
@@ -773,8 +786,18 @@ export default function Overview() {
     if (labelFilter && labelFilter !== "__all__") out = out.filter(r => (r.labels || "").split(",").map(x => x.trim().toLowerCase()).includes(labelFilter.toLowerCase()));
     if (startFrom) out = out.filter(r => r.start && r.start !== "-" && r.start >= startFrom);
     if (deadlineTo) out = out.filter(r => r.due && r.due !== "-" && r.due <= deadlineTo);
+    if (showDueSoonOnly) {
+      const now = new Date();
+      const in3Days = new Date();
+      in3Days.setDate(now.getDate() + 3);
+      out = out.filter(r => {
+        if (r.status === "Completed" || !r.due || r.due === "-") return false;
+        const due = new Date(r.due);
+        return due >= now && due <= in3Days;
+      });
+    }
     return out;
-  }, [rows, query, statusFilter, labelFilter, startFrom, deadlineTo, clientIdFromQuery]);
+  }, [rows, query, statusFilter, labelFilter, startFrom, deadlineTo, clientIdFromQuery, showDueSoonOnly]);
 
   const manageLabels = () => {
     setOpenLabels(true);
@@ -807,6 +830,7 @@ export default function Overview() {
   const resetFilters = () => {
     setStatusFilter("__all__");
     setLabelFilter("__all__");
+    setShowDueSoonOnly(false);
     setStartFrom("");
     setDeadlineTo("");
     setQuery("");
@@ -929,6 +953,12 @@ export default function Overview() {
                   <TrendingUp className="w-3 h-3 mr-1" />
                   {analytics.avgProgress}% Avg Progress
                 </Badge>
+                {analytics.dueSoonCount > 0 && (
+                  <Badge className="bg-red-500 text-white border-red-400 hover:bg-red-600 animate-pulse flex items-center gap-1 shadow-[0_0_15px_rgba(239,68,68,0.5)]">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <span>Deliver in 3 Days: {analytics.dueSoonCount}</span>
+                  </Badge>
+                )}
               </div>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -998,95 +1028,42 @@ export default function Overview() {
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
                       <Label htmlFor="client" className="text-right">Client</Label>
-                      {clientOptions.length ? (
-                        <Select value={clientIdSel} onValueChange={(v) => {
-                          if (v === "__none__") {
-                            setClientIdSel("");
-                            setClient("");
-                            return;
-                          }
-                          setClientIdSel(v);
-                          const name = clientOptions.find((o) => o.id === v)?.name || "";
-                          setClient(name);
-                        }}>
-                          <SelectTrigger className="col-span-3">
-                            <SelectValue placeholder="Select client" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">No client</SelectItem>
-                            {clientOptions.map((c) => (
-                              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <Input
-                          id="client"
-                          value={client}
-                          onChange={(e) => setClient(e.target.value)}
-                          className="col-span-3"
-                          placeholder="Client name"
+                      <div className="col-span-3">
+                        <SearchableSelect
+                          options={[
+                            { value: "__none__", label: "No client" },
+                            ...clientOptions.map((c) => ({ value: c.id, label: c.name })),
+                          ]}
+                          value={clientIdSel || "__none__"}
+                          onValueChange={(v) => {
+                            if (v === "__none__") {
+                              setClientIdSel("");
+                              setClient("");
+                              return;
+                            }
+                            setClientIdSel(v);
+                            const name = clientOptions.find((o) => o.id === v)?.name || "";
+                            setClient(name);
+                          }}
+                          placeholder="Select client"
                         />
-                      )}
+                      </div>
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
                       <Label htmlFor="developer" className="text-right">Developer</Label>
-                      <Popover open={developerOpen} onOpenChange={setDeveloperOpen}>
-                        <PopoverTrigger asChild>
-                          <Button
-                            id="developer"
-                            variant="outline"
-                            role="combobox"
-                            aria-expanded={developerOpen}
-                            className="col-span-3 justify-between"
-                          >
-                            {selectedDeveloper
-                              ? `${selectedDeveloper.name || selectedDeveloper.email}`
-                              : "Select developer"}
-                            <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="col-span-3 p-0" align="start">
-                          <Command>
-                            <CommandInput
-                              placeholder="Type to search…"
-                              value={developerQuery}
-                              onValueChange={setDeveloperQuery}
-                            />
-                            <CommandList>
-                              <CommandEmpty>No developer found.</CommandEmpty>
-                              <CommandGroup>
-                                <CommandItem
-                                  value="__none__"
-                                  onSelect={() => {
-                                    setDeveloperId("");
-                                    setDeveloperQuery("");
-                                    setDeveloperOpen(false);
-                                  }}
-                                >
-                                  No developer
-                                </CommandItem>
-                                {filteredDeveloperOptions.map((d) => (
-                                  <CommandItem
-                                    key={d._id}
-                                    value={`${d.name} ${d.email}`}
-                                    onSelect={() => {
-                                      setDeveloperId(d._id);
-                                      setDeveloperQuery("");
-                                      setDeveloperOpen(false);
-                                    }}
-                                  >
-                                    <div className="flex flex-col">
-                                      <span className="text-sm font-medium">{d.name || d.email}</span>
-                                      {d.email ? <span className="text-xs text-muted-foreground">{d.email}</span> : null}
-                                    </div>
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
+                      <div className="col-span-3">
+                        <SearchableSelect
+                          options={[
+                            { value: "__none__", label: "No developer" },
+                            ...developerOptions.map((d) => ({ value: d._id, label: `${d.name} (${d.email})` })),
+                          ]}
+                          value={developerId || "__none__"}
+                          onValueChange={(v) => {
+                            setDeveloperId(v === "__none__" ? "" : v);
+                          }}
+                          placeholder="Select developer"
+                        />
+                      </div>
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
                       <Label htmlFor="desc" className="text-right">Description</Label>
@@ -1147,7 +1124,7 @@ export default function Overview() {
 
       <div className="px-6 py-8 sm:px-12 lg:px-16 space-y-8">
         {/* Analytics Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
           <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-600 text-white shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105">
             <div className="absolute inset-0 opacity-50" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.1'%3E%3Ccircle cx='30' cy='30' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")` }} />
             <CardHeader className="relative pb-2">
@@ -1211,6 +1188,30 @@ export default function Overview() {
               </div>
             </CardContent>
           </Card>
+
+          <Card 
+            className={cn(
+              "relative overflow-hidden border-0 text-white shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 cursor-pointer",
+              analytics.dueSoonCount > 0 
+                ? "bg-gradient-to-br from-red-600 via-red-700 to-orange-700 animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.4)]" 
+                : "bg-gradient-to-br from-slate-500 via-slate-600 to-slate-700"
+            )}
+            onClick={() => setShowDueSoonOnly(!showDueSoonOnly)}
+          >
+            <div className="absolute inset-0 opacity-50" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.1'%3E%3Ccircle cx='30' cy='30' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")` }} />
+            <CardHeader className="relative pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2 text-white/90">
+                <AlertTriangle className="w-5 h-5" /> Due in 3 Days
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="relative space-y-3">
+              <div className="text-3xl font-bold">{analytics.dueSoonCount}</div>
+              <div className="flex items-center gap-2 text-sm text-white/90">
+                <Clock className="w-4 h-4" />
+                Critical Alarm
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Filters */}
@@ -1260,6 +1261,19 @@ export default function Overview() {
                     <DatePicker value={deadlineTo} onChange={setDeadlineTo} placeholder="Deadline to" />
                   </div>
                 </div>
+
+                <Button 
+                  variant={showDueSoonOnly ? "destructive" : "outline"} 
+                  size="sm"
+                  onClick={() => setShowDueSoonOnly(!showDueSoonOnly)}
+                  className={cn(
+                    "flex items-center gap-2 transition-all duration-300",
+                    showDueSoonOnly && "animate-pulse"
+                  )}
+                >
+                  <AlertTriangle className="w-4 h-4" />
+                  Due in 3 Days ({analytics.dueSoonCount})
+                </Button>
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
@@ -1391,7 +1405,7 @@ export default function Overview() {
                           <DropdownMenuItem onClick={() => navigate(`/projects/overview/${r.id}`)}>
                             <Eye className="w-4 h-4 mr-2" /> View Details
                           </DropdownMenuItem>
-                          {isAdmin ? (
+                          {canCreate ? (
                             <>
                               <DropdownMenuItem onClick={() => openEdit(r)}>
                                 <Pencil className="w-4 h-4 mr-2"/> Edit Project
@@ -1509,134 +1523,114 @@ export default function Overview() {
               )}
             </div>
 
-            <div className="hidden md:block overflow-x-auto">
+            <div className="hidden md:block">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12">ID</TableHead>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Client</TableHead>
-                    {canViewPricing && <TableHead>Price</TableHead>}
-                    <TableHead>Start Date</TableHead>
-                    <TableHead>Deadline</TableHead>
-                    <TableHead>Progress</TableHead>
-                    <TableHead>Label</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-10"></TableHead>
+                  <TableRow className="bg-muted/30">
+                    <TableHead className="w-10 px-2 text-[10px] uppercase font-black tracking-widest opacity-50">ID</TableHead>
+                    <TableHead className="min-w-[150px] px-2 text-[10px] uppercase font-black tracking-widest opacity-50">Title</TableHead>
+                    <TableHead className="min-w-[120px] px-2 text-[10px] uppercase font-black tracking-widest opacity-50">Client</TableHead>
+                    {canViewPricing && <TableHead className="w-20 px-2 text-[10px] uppercase font-black tracking-widest opacity-50">Price</TableHead>}
+                    <TableHead className="w-24 px-2 text-[10px] uppercase font-black tracking-widest opacity-50">Deadline</TableHead>
+                    <TableHead className="w-28 px-2 text-[10px] uppercase font-black tracking-widest opacity-50 text-center">Progress</TableHead>
+                    <TableHead className="w-20 px-2 text-[10px] uppercase font-black tracking-widest opacity-50 text-center">Status</TableHead>
+                    <TableHead className="w-12 px-2"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filtered.map((r, idx) => (
-                    <TableRow key={r.id} className="hover:bg-muted/50">
-                      <TableCell className="font-medium">{idx + 1}</TableCell>
-                      <TableCell>
+                    <TableRow key={r.id} className="hover:bg-muted/20 transition-colors">
+                      <TableCell className="px-2 text-[10px] font-bold text-muted-foreground italic">{idx + 1}</TableCell>
+                      <TableCell className="px-2">
                         <Button
                           variant="link"
-                          className="p-0 h-auto font-medium text-primary"
+                          className="p-0 h-auto font-bold text-primary text-sm text-left truncate max-w-[200px] block"
                           onClick={() => navigate(`/projects/overview/${r.id}`)}
                         >
                           {r.title}
                         </Button>
+                        <p className="text-[9px] text-muted-foreground opacity-60">Start: {r.start}</p>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="px-2">
                         {r.clientId ? (
                           <Button
                             variant="link"
-                            className="p-0 h-auto text-primary"
+                            className="p-0 h-auto text-primary text-xs font-medium truncate max-w-[120px] block"
                             onClick={() => navigate(`/clients/${r.clientId}`)}
                           >
                             {r.client}
                           </Button>
                         ) : (
-                          r.client
+                          <span className="text-xs truncate max-w-[120px] block">{r.client}</span>
                         )}
                       </TableCell>
-                      {canViewPricing && <TableCell className="font-medium">{r.price}</TableCell>}
-                      <TableCell>{r.start}</TableCell>
+                      {canViewPricing && <TableCell className="px-2 font-bold text-xs">{r.price}</TableCell>}
                       <TableCell
-                        className={(() => {
-                          const dueTs = safeDateTs(r.due);
-                          const startTs = safeDateTs(r.start);
-                          if (!Number.isFinite(dueTs) || !Number.isFinite(startTs)) return "";
-                          return dueTs < startTs ? "text-destructive font-medium" : "";
-                        })()}
+                        className={cn(
+                          "px-2 text-xs font-medium",
+                          (() => {
+                            const dueTs = safeDateTs(r.due);
+                            const startTs = safeDateTs(r.start);
+                            if (!Number.isFinite(dueTs) || !Number.isFinite(startTs)) return "";
+                            return dueTs < startTs ? "text-rose-500" : "";
+                          })()
+                        )}
                       >
                         {r.due}
                       </TableCell>
-                      <TableCell className="min-w-[140px]">
+                      <TableCell className="px-2">
                         <button
                           className="w-full text-left hover:opacity-80 transition-opacity"
                           onClick={() => openProgressEditor(r)}
                           title="Click to update progress"
                         >
                           <div className="flex items-center gap-2">
-                            <Progress value={r.progress} className="flex-1 h-2" />
-                            <div className="text-xs text-muted-foreground w-10 text-right font-medium">
+                            <Progress value={r.progress} className="flex-1 h-1.5" />
+                            <div className="text-[10px] text-muted-foreground w-8 text-right font-black">
                               {r.progress}%
                             </div>
                           </div>
                         </button>
                       </TableCell>
-                      <TableCell>
-                        {(() => {
-                          const first = String(r.labels || "")
-                            .split(",")
-                            .map((x) => x.trim())
-                            .filter(Boolean)[0];
-                          return first ? <Badge className={getLabelClassName(first)}>{first}</Badge> : <span className="text-muted-foreground">-</span>;
-                        })()}
-                      </TableCell>
-                      <TableCell>
+                      <TableCell className="px-2 text-center">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm">
+                            <Button variant="outline" className="h-6 text-[9px] uppercase font-black px-2 py-0 border-slate-200">
                               {r.status}
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start">
-                            <DropdownMenuLabel>Update Status</DropdownMenuLabel>
+                          <DropdownMenuContent align="center">
+                            <DropdownMenuLabel className="text-[10px] font-black uppercase tracking-widest opacity-50">Update Status</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => updateProjectStatus(r.id, "Open")}>
-                              <Badge variant="outline" className="mr-2">Open</Badge>
-                              Mark as Open
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => updateProjectStatus(r.id, "In Progress")}>
-                              <Badge variant="outline" className="mr-2">In Progress</Badge>
-                              Mark as In Progress
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => updateProjectStatus(r.id, "Completed")}>
-                              <Badge variant="default" className="mr-2">Completed</Badge>
-                              Mark as Completed
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => updateProjectStatus(r.id, "Hold")}>
-                              <Badge variant="secondary" className="mr-2">Hold</Badge>
-                              Put on Hold
-                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => updateProjectStatus(r.id, "Open")} className="text-xs font-bold">Open</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => updateProjectStatus(r.id, "In Progress")} className="text-xs font-bold">In Progress</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => updateProjectStatus(r.id, "Completed")} className="text-xs font-bold">Completed</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => updateProjectStatus(r.id, "Hold")} className="text-xs font-bold">Hold</DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="px-2 text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="icon" aria-label="Actions">
-                              <MoreVertical className="w-4 h-4" />
+                            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full hover:bg-slate-100">
+                              <MoreVertical className="w-3.5 h-3.5" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => navigate(`/projects/overview/${r.id}`)}>
                               <Eye className="w-4 h-4 mr-2" /> View Details
                             </DropdownMenuItem>
-                            {isAdmin ? (
+                            {canCreate ? (
                               <>
                                 <DropdownMenuItem onClick={() => openEdit(r)}>
                                   <Pencil className="w-4 h-4 mr-2"/> Edit Project
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem 
-                                  onClick={() => deleteProject(r.id)} 
-                                  className="text-destructive"
+                                <DropdownMenuItem
+                                  onClick={() => deleteProject(r.id)}
+                                  className="text-destructive font-bold"
                                 >
-                                  <Trash2 className="w-4 h-4 mr-2"/> Delete Project
+                                  <Trash2 className="w-4 h-4 mr-2"/> Delete
                                 </DropdownMenuItem>
                               </>
                             ) : null}
@@ -1647,11 +1641,10 @@ export default function Overview() {
                   ))}
                   {filtered.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={10} className="text-center text-muted-foreground py-12">
+                      <TableCell colSpan={canViewPricing ? 8 : 7} className="text-center py-20 text-muted-foreground italic">
                         <div className="flex flex-col items-center gap-2">
                           <FolderKanban className="w-12 h-12 text-muted-foreground/50" />
                           <p className="text-lg font-medium">No projects found</p>
-                          <p className="text-sm">Try adjusting your filters or create a new project</p>
                         </div>
                       </TableCell>
                     </TableRow>

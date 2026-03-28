@@ -317,8 +317,21 @@ app.get("/HealthSpire%20logo.png", (req, res) => {
 // Move public static serving BEFORE authentication middleware
 app.use("/uploads", (req, res, next) => {
   const filename = path.basename(req.path);
-  if (filename.startsWith("logo_") || filename.startsWith("clientavatar_") || filename.startsWith("avatar_user_") || filename.startsWith("emp_") || filename.startsWith("pub_")) {
-    return express.static(UPLOAD_DIR)(req, res, next);
+  if (
+    filename.startsWith("logo_") || 
+    filename.startsWith("clientavatar_") || 
+    filename.startsWith("avatar_user_") || 
+    filename.startsWith("emp_") || 
+    filename.startsWith("pub_") ||
+    filename.startsWith("file_")
+  ) {
+    const filePath = path.join(UPLOAD_DIR, filename);
+    if (fs.existsSync(filePath)) {
+      return res.sendFile(filePath);
+    } else {
+      // For public-prefixed files that are missing, return 404 immediately
+      return res.status(404).json({ error: "Public file not found" });
+    }
   }
   next();
 });
